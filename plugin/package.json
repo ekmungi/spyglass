@@ -1,0 +1,22 @@
+{
+  "name": "spyglass-obsidian-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "description": "Obsidian shell for the Spyglass research dashboard",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.3",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "latest",
+    "tslib": "^2.8.0",
+    "typescript": "~5.8.0",
+    "vitest": "^4.1.8"
+  }
+}

@@ -1,0 +1,31 @@
+# Spyglass repo ignores: keep the tree clean and deterministic.
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/coverage/
+plugin/dist/
+*.tsbuildinfo
+
+# Local plan files are never committed (user rule)
+PLAN.md
+plan.md
+
+# Session and tooling artifacts
+.claude/
+.superpowers/
+.remember/
+.vault-cache/
+*.log
+.env

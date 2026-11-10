@@ -1,0 +1,39 @@
+# Builds the Obsidian plugin and publishes a GitHub release whose assets BRAT
+# installs. Trigger: push a tag equal to the manifest version (e.g. 0.1.0).
+name: Release plugin
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
+      - name: Build plugin bundle
+        working-directory: plugin
+        run: |
+          npm install
+          npm run build
+
+      - name: Publish release with plugin assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          # Idempotent: create the release if it does not exist, then (re)upload
+          # the assets BRAT needs. --clobber lets a manual first release coexist.
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --notes "Spyglass plugin $tag"
+          fi
+          gh release upload "$tag" manifest.json plugin/dist/main.js --clobber

@@ -1,0 +1,323 @@
+/* Spyglass theme tokens: 8-color vocabulary + user-adjustable font sizes.
+   Presets override these via [data-theme] blocks (generated in a later phase). */
+@import "tailwindcss";
+/* Inter ships with the bundle (self-contained; no network fonts at runtime). */
+@import "@fontsource-variable/inter";
+
+@theme {
+  /* Default light preset: v01 Anthropic coral classic. */
+  --color-canvas: #faf9f5;
+  --color-card: #ffffff;
+  --color-ink: #141413;
+  --color-body: #3d3d3a;
+  --color-muted: #8e8b82;
+  --color-border: #e6dfd8;
+  --color-accent: #cc785c;
+  --color-accent2: #e8a55a;
+  /* Derived chrome tokens: segmented-control inset + relevance status colors.
+     applyPreset recomputes these per preset; the literals match the light default. */
+  --color-surface: #f1efe8;
+  --color-ok: #3e7d52;
+  --color-out: #b04a3a;
+
+  /* Reduced-radius chrome: panels/cards 8px, buttons/segments/chips 6px. */
+  --radius-card: 8px;
+  --radius-control: 6px;
+
+  --font-sans: "Inter Variable", "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+:root {
+  /* User-locked default sizes; settings sliders override these at runtime. */
+  --font-size-headline: 19px;
+  --font-size-body: 15px;
+  --font-size-meta: 11.5px;
+  --font-size-actions: 12.5px;
+  --leading-body: 1.3;
+
+  /* Workspace layout (settings sliders): centered column width + pane split. */
+  --layout-max-width: 1180px;
+  --list-pane-width: 39%;
+
+  /* Subtle elevation for cards/rows (kept faint; dark themes barely show it). */
+  --shadow-card: 0 1px 2px rgb(20 20 19 / 0.05), 0 2px 6px rgb(20 20 19 / 0.04);
+  /* A touch deeper for the gentle hover lift on list rows. */
+  --shadow-card-hover: 0 2px 5px rgb(20 20 19 / 0.08), 0 5px 14px rgb(20 20 19 / 0.06);
+
+}
+
+/* Faint card elevation (list rows, reader pane, settings card). */
+.card-shadow {
+  box-shadow: var(--shadow-card);
+}
+
+/* List rows read as cards: a faint resting shadow on every row and a gentle
+   lift on hover. The active row composes its inset accent bar with the same elevation.
+   Reduced-motion users keep the elevation but lose the movement. */
+.card-row {
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+.card-row:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1px);
+}
+.card-row.is-active {
+  box-shadow: inset 2px 0 0 var(--color-accent), var(--shadow-card);
+}
+.card-row.is-active:hover {
+  box-shadow: inset 2px 0 0 var(--color-accent), var(--shadow-card-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-row { transition: none; }
+  .card-row:hover { transform: none; }
+}
+
+/* One-shot "pop" when a thumbs up/down is selected: scale up then settle
+   back while the active highlight stays. Applied only on the tap, then removed on
+   animation end, so it never replays on re-render or scroll-in. */
+@keyframes thumb-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.thumb-pop {
+  animation: thumb-pop 220ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumb-pop { animation: none; }
+}
+
+/* Row action drawer: the per-item toolbar is pinned to the row's right edge
+   (absolute in ListPane) so it never reserves the row's text width. The menu stays
+   mounted but collapsed to zero width; hovering or focusing the drawer slides it out
+   on a solid surface, and the chevron handle flips to point the other way. */
+.row-action-menu {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
+  transition: max-width 200ms ease, opacity 200ms ease, padding 200ms ease;
+}
+.row-action-drawer:hover .row-action-menu,
+.row-action-drawer:focus-within .row-action-menu {
+  max-width: 280px;
+  padding: 2px 4px;
+  opacity: 1;
+}
+.row-action-handle {
+  transition: transform 200ms ease;
+}
+.row-action-drawer:hover .row-action-handle,
+.row-action-drawer:focus-within .row-action-handle {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-action-menu,
+  .row-action-handle { transition: none; }
+}
+
+/* Brief narrative grip gutter. The grip button is a
+   full-height, full-gutter hit zone; the visible mark is a slim vertical rule that
+   sits coral-at-rest (so every bullet reads as grabbable), brightens to solid coral
+   on hover behind a whisper-faint wash over the gutter, and is solid coral with NO
+   wash when selected (the persistent rail is the selected signal). */
+.brief-bullet-grip {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.brief-bullet-grip-bar {
+  width: 4px;
+  border-radius: 2px;
+  /* Visible at rest: a soft coral rail (color-mix keeps it accent-relative per theme). */
+  background: color-mix(in srgb, var(--color-accent) 50%, transparent);
+  transition: background 150ms ease;
+}
+.brief-bullet-gutter {
+  border-radius: 4px;
+  transition: background 150ms ease;
+}
+/* Hover: rail goes solid coral behind a whisper-faint wash over the 28px gutter. */
+.brief-bullet-gutter:hover { background: color-mix(in srgb, var(--color-accent) 4%, transparent); }
+.brief-bullet-gutter:hover .brief-bullet-grip-bar { background: var(--color-accent); }
+/* Selected: solid coral rail, no wash. */
+.brief-bullet-grip.is-selected .brief-bullet-grip-bar { background: var(--color-accent); }
+@media (prefers-reduced-motion: reduce) {
+  .brief-bullet-grip-bar,
+  .brief-bullet-gutter { transition: none; }
+}
+
+/* App shell owns exactly the visible viewport height, so the window itself never
+   scrolls; each tab owns its own inner scroll instead. This generalises the
+   per-pane-scroll pattern to every tab and removes the fragile
+   measured-header pane-height math. CSS `zoom` scales layout but not vh, so the
+   shell height is multiplied by --app-zoom-inv (published by useZoom.applyZoom) to
+   stay pinned to the visible viewport at any zoom. */
+.app-shell {
+  height: calc(100vh * var(--app-zoom-inv, 1));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Every scrollbar takes the theme's colours instead of the light system default
+   (scrollbar-color is inherited, so this reaches each scroll region and the modal). */
+html {
+  scrollbar-color: var(--color-border) transparent;
+}
+
+/* Simple tabs (brief, inbox, feeds, activity, archive, settings) scroll inside this
+   region; the fixed app header stays put above it. The negative margin and equal padding
+   move the scrollbar out into the shell's side padding, leaving a gap between it and the
+   content (cards and buttons sat flush against it) without changing the content width. */
+.tab-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 2.5rem;
+  margin-right: -1rem;
+  padding-right: 1rem;
+}
+
+/* Card list column: fills its pane and owns its scrollbar at every width; the page
+   itself stays put, so the window-scroll coordinate math that broke virtualization
+   under zoom is gone. */
+.list-column {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Workspace panes, stacked (narrow mode): the pane row scrolls as a whole, and its
+   scrollbar moves out into the shell's side padding as in .tab-scroll. */
+.workspace-panes {
+  margin-right: -1rem;
+  padding-right: 1rem;
+}
+
+/* Reader column (wide mode): fills the pane-row height with its own scroll, so a
+   click deep in the list shows the article beside it without moving the page. In wide
+   mode each column owns its scrollbar instead: the list pads its right side to keep the
+   cards clear of it (the reader sits beside it, so its scrollbar cannot move out into a
+   margin), and the reader, the rightmost column, moves its scrollbar into the side
+   padding as in .tab-scroll. */
+@media (min-width: 768px) {
+  .workspace-panes {
+    margin-right: 0;
+    padding-right: 0;
+  }
+  .list-column {
+    padding-right: 1rem;
+  }
+  .reader-column {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin-right: -1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Default dark preset: v41 Anthropic warm dark. */
+[data-theme="warm-dark-classic"] {
+  --color-canvas: #181715;
+  --color-card: #252320;
+  --color-ink: #faf9f5;
+  --color-body: #a09d96;
+  --color-muted: #7d7a73;
+  --color-border: #3a3733;
+  --color-accent: #cc785c;
+  --color-accent2: #e8a55a;
+  --color-surface: #1f1d1b;
+  --color-ok: #7bbf90;
+  --color-out: #d9806f;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  /* Match the mockup's rendering so Inter reads identically. */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Reader article typography: the Tailwind preflight strips paragraph margins,
+   heading sizes, and list bullets; restore them for rendered markdown so the
+   reading pane matches the mockup's .rdbody (readable spacing, ink headings). */
+.reader-markdown p {
+  margin: 0 0 12px;
+  color: var(--color-body);
+}
+.reader-markdown h1,
+.reader-markdown h2,
+.reader-markdown h3,
+.reader-markdown h4 {
+  color: var(--color-ink);
+  font-weight: 600;
+  margin: 18px 0 8px;
+  line-height: 1.3;
+}
+.reader-markdown h1 { font-size: 18px; }
+.reader-markdown h2 { font-size: 17px; }
+.reader-markdown h3 { font-size: 16px; }
+.reader-markdown h4 { font-size: 15px; }
+.reader-markdown ul,
+.reader-markdown ol {
+  margin: 0 0 12px;
+  padding-left: 1.4em;
+}
+.reader-markdown ul { list-style: disc; }
+.reader-markdown ol { list-style: decimal; }
+.reader-markdown li { margin-bottom: 4px; }
+.reader-markdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.reader-markdown code {
+  background: var(--color-surface);
+  border-radius: 3px;
+  padding: 0 3px;
+  font-size: 0.9em;
+}
+.reader-markdown pre {
+  background: var(--color-surface);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+}
+.reader-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+.reader-markdown blockquote {
+  border-left: 2px solid var(--color-border);
+  color: var(--color-muted);
+  margin: 0 0 12px;
+  padding-left: 12px;
+}
+.reader-markdown img {
+  max-width: 100%;
+  border-radius: var(--radius-control);
+}
+.reader-markdown hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: 16px 0;
+}

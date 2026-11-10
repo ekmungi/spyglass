@@ -1,0 +1,78 @@
+# Spyglass service: project metadata, dependencies, and tool configuration.
+[project]
+name = "spyglass-service"
+version = "0.1.0"
+description = "Local research-dashboard service: collectors, Claude curation, vault write-back"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "reader>=3.15",
+    "httpx>=0.28",
+    "hishel>=0.1",
+    "sqlmodel>=0.0.22",
+    "apscheduler>=3.10,<4",
+    "platformdirs>=4.3",
+    "python-frontmatter>=1.1",
+    "pydantic-settings>=2.7",
+    "fastmcp>=2.10",
+    "pypdf>=5.1",
+    "trafilatura>=2.1.0",
+    "youtube-transcript-api>=1.2.4",
+    "fastembed>=0.4",
+    "numpy>=1.26",
+    "defusedxml>=0.7",
+    "beautifulsoup4>=4.12",
+    "puremagic>=2.2.0",
+    "curl-cffi>=0.15.0",
+    "patchright>=1.61.2",
+    "pymupdf>=1.28.0",
+    "readability-lxml>=0.8.4.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.9",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]  # 1.27 is the first to read the license-files field
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spyglass_service"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=spyglass_service --cov-report=term-missing"
+asyncio_mode = "auto"
+markers = [
+    # Opt in to a live background fetch worker. Off by default (tests/conftest.py)
+    # so a POST /fulltext can never silently run the real ladder over the network.
+    "live_fetch_worker: test needs the real fetch worker thread running",
+]
+filterwarnings = [
+    "error",
+    # Starlette's TestClient suggests migrating httpx -> httpx2; revisit when
+    # bumping starlette/httpx instead of pulling a new package mid-phase.
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
+    # The `reader` library leaves its internal sqlite connections to be closed at GC;
+    # under `error` that late ResourceWarning surfaces as a flaky PytestUnraisableException
+    # attributed to whatever test GC ran during. Our own engines close deterministically
+    # (tests/conftest.py forces NullPool); this scoped ignore only covers third-party
+    # sqlite3.Connection late-GC noise, not unraisable exceptions in general.
+    "ignore:.*sqlite3.Connection:pytest.PytestUnraisableExceptionWarning",
+]
+
+[tool.coverage.report]
+# Project rule: 80 percent minimum coverage, enforced in CI/test runs.
+fail_under = 80
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]

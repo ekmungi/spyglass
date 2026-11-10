@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Discovery Test Feed</title>
+    <link>https://example.test/</link>
+    <description>Fixture feed for feed_discovery tests</description>
+    <item>
+      <guid>https://example.test/discovery/1</guid>
+      <title>Discovery item one</title>
+      <link>https://example.test/discovery/1</link>
+      <description>First discovery test item.</description>
+      <pubDate>Mon, 01 Jan 2024 08:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

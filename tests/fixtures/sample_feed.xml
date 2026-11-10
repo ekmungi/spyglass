@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample Research Feed</title>
+    <link>https://example.test/feed</link>
+    <description>Fixture feed for collector tests</description>
+    <item>
+      <guid>https://example.test/posts/1</guid>
+      <title>Tool-use reliability in long-horizon agents</title>
+      <link>https://example.test/posts/1</link>
+      <description>Checkpointing beats retry loops across twelve frameworks.</description>
+      <pubDate>Tue, 09 Jun 2026 08:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <guid>https://example.test/posts/2</guid>
+      <title>EU AI Act implementation timeline moves</title>
+      <link>https://example.test/posts/2</link>
+      <description>Enforcement dates shifted for high-risk medical systems.</description>
+      <pubDate>Wed, 10 Jun 2026 09:30:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

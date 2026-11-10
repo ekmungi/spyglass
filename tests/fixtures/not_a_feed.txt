@@ -1,0 +1,2 @@
+This is a plain text file. It is not a valid RSS or Atom feed.
+No XML, no channel element, just ordinary prose.
