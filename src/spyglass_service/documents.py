@@ -28,6 +28,7 @@ from .fetch_acquire import AcquireResult, acquire
 from .fetch_cache import domain_of, get_cached_tier, record_winning_tier
 from .fetch_failure import compose_failure_fields, finish
 from .fetch_rungs import build_rungs
+from .radar import netguard
 
 # arXiv abstract pages have a matching PDF; prefer the PDF for real content.
 _ARXIV_ABS = re.compile(r"^(https?://arxiv\.org)/abs/(.+)$")
@@ -78,8 +79,12 @@ def __getattr__(name: str) -> object:
 
 
 def build_client() -> httpx.Client:
-    """An httpx client tuned for document fetching: browser UA + follow redirects."""
-    return httpx.Client(timeout=60, follow_redirects=True, headers={"User-Agent": _USER_AGENT})
+    """An httpx client tuned for document fetching: browser UA + follow redirects, guarded.
+
+    Guarded means public addresses only on every redirect hop, reads only, no cookies (netguard).
+    """
+    client = httpx.Client(timeout=60, follow_redirects=True, headers={"User-Agent": _USER_AGENT})
+    return netguard.guard_client(client)
 
 
 def normalize_url(url: str) -> str:

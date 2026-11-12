@@ -34,6 +34,16 @@ def _no_real_fastembed(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_real_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer every host-name lookup of the address guard with a fixed public address.
+
+    The older fetch paths now pass the guard, which looks a name up before each request; this
+    keeps every test off DNS. A test that needs a private answer patches `netguard.resolve`.
+    """
+    monkeypatch.setattr("spyglass_service.radar.netguard.resolve", lambda host: ["93.184.216.34"])
+
+
+@pytest.fixture(autouse=True)
 def _nullpool_engines(monkeypatch: pytest.MonkeyPatch) -> None:
     """Force every test-created engine onto NullPool so DB connections close on return.
 
@@ -230,3 +240,43 @@ def engine_with_item(tmp_path):
         session.add(item)
         session.commit()
     return engine
+
+
+@pytest.fixture()
+def fixtures_web_url(monkeypatch: pytest.MonkeyPatch) -> str:
+    """Serve `tests/fixtures` from a web server on this computer and return its base address.
+
+    Feeds are read from the web only, so tests that need a real, parseable feed fetch it from here.
+    The address guard refuses addresses on this computer in use; for the test its address decision
+    is replaced (the guard's own behaviour is tested in tests/radar/test_legacy_guard.py).
+    """
+    import functools
+    import http.server
+    import threading
+
+    from spyglass_service.radar import netguard
+
+    handler = functools.partial(_QuietHandler, directory=str(Path(__file__).parent / "fixtures"))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setattr(netguard, "check_url", lambda url, resolver=None: netguard.Reach.PUBLIC)
+    monkeypatch.setattr(netguard, "checked_addresses", lambda host: [host])
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _make_quiet_handler():
+    """A static-file handler that logs nothing (the pytest output stays clean)."""
+    import http.server
+
+    class _Quiet(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+    return _Quiet
+
+
+_QuietHandler = _make_quiet_handler()

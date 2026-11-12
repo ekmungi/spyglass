@@ -1,7 +1,7 @@
 {
   "id": "spyglass",
   "name": "Spyglass",
-  "version": "0.32.2",
+  "version": "0.40.0",
   "minAppVersion": "1.5.0",
   "description": "Research dashboard: opens the Spyglass service in a chromeless browser app window and manages its lifecycle.",
   "author": "ekmungi",

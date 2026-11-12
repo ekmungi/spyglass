@@ -1,0 +1,13 @@
+/* The quiet usage line under an answer: hidden until the answer is hovered or holds focus. */
+.r-usage {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  color: var(--faint);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-enter);
+}
+.r-msg--answer:hover .r-usage,
+.r-msg--answer:focus-within .r-usage {
+  opacity: 1;
+}

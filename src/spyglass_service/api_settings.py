@@ -12,6 +12,9 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field, field_validator
 
 from spyglass_service.config import Settings, save_overlay
+from spyglass_service.radar.filing_config import (
+    BACKGROUND_UNAVAILABLE, background_unlocked, effective_mode,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -49,6 +52,66 @@ class SettingsPatch(BaseModel):
     job_model_file: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._\[\]-]+$")
     obsidian_probe_url: str | None = Field(
         default=None, pattern=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?(/.*)?$")
+    # Radar: when the daily brief is composed (local HH:MM), in which time zone ("" = this
+    # machine's), how often collection runs, and the vault folder for saved notes.
+    radar_brief_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    radar_timezone: str | None = Field(default=None, max_length=64)
+    radar_collect_hours: float | None = Field(default=None, ge=0.25, le=24)
+    # Radar models (OpenRouter ids) for judging, digesting and short writing jobs.
+    radar_triage_model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._:/\[\]-]+$")
+    radar_digest_model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._:/\[\]-]+$")
+    radar_writer_model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._:/\[\]-]+$")
+    # Privacy switches: taste examples sent to the judging model, images fetched through the
+    # service, and the outside page-rendering service for sites that block direct reading.
+    privacy_send_examples: bool | None = None
+    privacy_proxy_images: bool | None = None
+    privacy_allow_bot_checks: bool | None = None
+    jina_enabled: bool | None = None
+    # Fallback order for bulk judging, capture check interval, and how long unread text is kept.
+    radar_llm_fallback: str | None = Field(default=None, pattern=r"^[a-z_, ]{0,80}$")
+    radar_capture_poll_seconds: int | None = Field(default=None, ge=15, le=3600)
+    radar_retention_days: int | None = Field(default=None, ge=0, le=3650)
+    # FDA device decisions for the watch list: on or off, plus optional product codes and keywords
+    # (comma-separated; letters, digits, spaces and a few marks only, so they stay plain search text).
+    radar_fda_enabled: bool | None = None
+    radar_fda_product_codes: str | None = Field(default=None, max_length=200,
+                                                pattern=r"^[A-Za-z0-9, ]*$")
+    radar_fda_keywords: str | None = Field(default=None, max_length=400,
+                                           pattern=r"^[A-Za-z0-9 ,.'/&()-]*$")
+    # Who does the bulk judging, and the models used on the Claude Code route.
+    radar_llm_provider: Literal["openrouter", "claude_code", "gemini", "antigravity"] | None = None
+    radar_antigravity_model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._\[\]-]{0,80}$")
+    radar_claude_triage_model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._\[\]-]+$")
+    radar_claude_digest_model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._\[\]-]+$")
+    radar_claude_writer_model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._\[\]-]+$")
+    # Where the reader's own links arrive from: the Gmail address and labels, the Slack channel.
+    gmail_address: str | None = Field(default=None, max_length=254)
+    gmail_newsletter_label: str | None = Field(default=None, min_length=1, max_length=100)
+    gmail_capture_label: str | None = Field(default=None, min_length=1, max_length=100)
+    slack_capture_channel: str | None = Field(default=None, max_length=40)
+    # The assistant's default engine and model; "" picks the first available.
+    assist_default_engine: str | None = Field(default=None, max_length=80)
+    assist_default_model: str | None = Field(default=None, max_length=120)
+    # Background filing: the mode, the quiet period before a run, the daily safety time and the
+    # model the hidden Claude Code session uses (an alias such as "sonnet" or a full name).
+    radar_filing_mode: Literal["off", "auto", "plan_first"] | None = None
+    radar_filing_quiet_minutes: int | None = Field(default=None, ge=2, le=240)
+    radar_filing_daily_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    radar_filing_model: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._\[\]-]{0,79}$")
+
+    @field_validator("radar_timezone")
+    @classmethod
+    def _known_time_zone(cls, value: str | None) -> str | None:
+        """An IANA zone name the machine knows, or empty for the machine's own zone."""
+        if not value:
+            return value
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("use a time zone name like Europe/Amsterdam") from exc
+        return value
 
     @field_validator("detail_notes_subdir")
     @classmethod
@@ -61,6 +124,14 @@ class SettingsPatch(BaseModel):
         if not clean or absolute or ".." in PurePosixPath(clean).parts:
             raise ValueError("use a folder inside the vault, like 03 RESOURCES/Spyglass/Brief notes")
         return clean
+
+    @field_validator("radar_filing_mode")
+    @classmethod
+    def _background_is_locked(cls, value: str | None) -> str | None:
+        """Only "off" can be stored while background filing is locked in this version."""
+        if value not in (None, "off") and not background_unlocked():
+            raise ValueError(BACKGROUND_UNAVAILABLE)
+        return value
 
 
 def _display_path(value: Path | None, vault: Path | None) -> str | None:
@@ -98,6 +169,37 @@ def _serialize(settings: Settings) -> dict:
         "job_model_prepare": settings.job_model_prepare,
         "job_model_file": settings.job_model_file,
         "engine": settings.engine,
+        "radar_brief_time": settings.radar_brief_time,
+        "radar_timezone": settings.radar_timezone,
+        "radar_collect_hours": settings.radar_collect_hours,
+        "radar_triage_model": settings.radar_triage_model,
+        "radar_digest_model": settings.radar_digest_model,
+        "radar_writer_model": settings.radar_writer_model,
+        "gmail_address": settings.gmail_address,
+        "gmail_newsletter_label": settings.gmail_newsletter_label,
+        "gmail_capture_label": settings.gmail_capture_label,
+        "slack_capture_channel": settings.slack_capture_channel,
+        "assist_default_engine": settings.assist_default_engine,
+        "assist_default_model": settings.assist_default_model,
+        "privacy_send_examples": settings.privacy_send_examples,
+        "privacy_proxy_images": settings.privacy_proxy_images,
+        "privacy_allow_bot_checks": settings.privacy_allow_bot_checks,
+        "jina_enabled": settings.jina_enabled,
+        "radar_llm_provider": settings.radar_llm_provider,
+        "radar_antigravity_model": settings.radar_antigravity_model,
+        "radar_llm_fallback": settings.radar_llm_fallback,
+        "radar_capture_poll_seconds": settings.radar_capture_poll_seconds,
+        "radar_retention_days": settings.radar_retention_days,
+        "radar_fda_enabled": settings.radar_fda_enabled,
+        "radar_fda_product_codes": settings.radar_fda_product_codes,
+        "radar_fda_keywords": settings.radar_fda_keywords,
+        "radar_claude_triage_model": settings.radar_claude_triage_model,
+        "radar_claude_digest_model": settings.radar_claude_digest_model,
+        "radar_claude_writer_model": settings.radar_claude_writer_model,
+        "radar_filing_mode": effective_mode(settings),
+        "radar_filing_quiet_minutes": settings.radar_filing_quiet_minutes,
+        "radar_filing_daily_time": settings.radar_filing_daily_time,
+        "radar_filing_model": settings.radar_filing_model,
     }
 
 

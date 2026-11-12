@@ -28,7 +28,7 @@ from spyglass_service.api_link import router as link_router
 from spyglass_service.api_pages import router as pages_router
 from spyglass_service.api_settings import router as settings_router
 from spyglass_service.api_taxonomy import router as taxonomy_router
-from spyglass_service.backup import backup_db
+from spyglass_service.backup import BackupSkipped, backup_db
 from spyglass_service.brief import compose_due_briefs
 from spyglass_service.cards import materialize_cards
 from spyglass_service.categories import migrate_categories_once, migrate_group_label_to_category
@@ -68,6 +68,7 @@ from spyglass_service.rebucket import (
 )
 from spyglass_service.recategorize import is_recategorize_running, run_recategorize
 from spyglass_service.refresh import is_stale, run_refresh
+from spyglass_service.security_headers import SecurityHeaders
 from spyglass_service.single_writer import SingleWriter
 
 
@@ -117,6 +118,7 @@ def create_app(
     skip_fetch_worker: bool = False,
     claude_worker: ClaudeJobWorker | None = None,
     skip_claude_worker: bool = False,
+    radar: bool = False,
 ) -> FastAPI:
     """Build the Spyglass FastAPI app.
 
@@ -178,6 +180,10 @@ def create_app(
     # stamping, a concurrent pass could pick the same day -- the gate makes the second a skip.
     _compose_gate = SingleWriter()
 
+    # True when this process runs the redesigned pipeline (the real service entry point).
+    # Tests that build the app directly keep the older behaviour unless they ask for radar.
+    radar_owns_pipeline = radar and settings.radar_replaces_legacy
+
     def _compose_due_briefs_guarded() -> None:
         """Compose every due publish-day brief, at most one pass at a time.
 
@@ -194,6 +200,10 @@ def create_app(
         guard so freshly-collected cards are judged promptly."""
         def _work() -> None:
             embed_pending_all(engine, state.ensure_index())  # keeps blurb coverage
+            if radar_owns_pipeline:
+                # The radar scheduler judges items and composes the brief; running the older
+                # enrichment and composer as well would pay for every item twice.
+                return
             # Enrichment cascade: guarded to <= once/day at startup, forced on a
             # refresh that brought in new items. No Claude session.
             run_scheduled_enrich(engine, state.ensure_index(), settings, force=force_enrich)
@@ -213,6 +223,8 @@ def create_app(
         any newly-due day now rather than waiting for a restart or the next stale refresh.
         Idempotent + single-writer gated: a no-op (no LLM) when nothing is due, a skip when
         a compose is already running."""
+        if radar_owns_pipeline:
+            return
         task = asyncio.create_task(run_in_threadpool(_compose_due_briefs_guarded))
         _embed_tasks.add(task)
         task.add_done_callback(_embed_tasks.discard)
@@ -248,17 +260,45 @@ def create_app(
                 backups_dir=settings.backups_dir,
                 keep=settings.backup_keep,
             )
-        except Exception as exc:
+        except Exception as exc:  # a skipped snapshot (BackupSkipped) is logged, not an error
+            skipped = isinstance(exc, BackupSkipped)
             with Session(engine) as session:
                 session.add(
                     RunLog(
                         source="backup",
-                        status="error",
+                        status="skipped" if skipped else "error",
                         detail=str(exc),
                         finished_at=datetime.now(UTC),
                     )
                 )
                 session.commit()
+
+    def _keep_sent_files() -> None:
+        """Move the reader's own pictures and PDFs out of the caches into their store; never raises."""
+        from spyglass_service.radar import from_you_store  # noqa: PLC0415
+
+        try:
+            moved = from_you_store.move_from_caches(engine, settings.data_dir)
+        except Exception:  # noqa: BLE001 -- start-up goes on; the weekly upkeep tries again
+            logger.exception("could not move the files you sent in out of the caches")
+            return
+        if moved["images"] or moved["pdfs"]:
+            logger.info("Moved files you sent in to their own store: %s", moved)
+
+    def _start_radar_scheduler() -> object | None:
+        """Start the radar scheduler (collect, assess, compose); None when it cannot start.
+
+        A failure here is logged and never stops the service: the dashboard still opens and
+        a collection can be started by hand."""
+        try:
+            from spyglass_service.radar.scheduler import RadarScheduler
+
+            scheduler = RadarScheduler(engine, settings, state.ensure_index)
+            scheduler.start()
+            return scheduler
+        except Exception:
+            logger.exception("The radar scheduler could not start")
+            return None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -281,6 +321,9 @@ def create_app(
                 _set_rebucket_marker(engine)
             # Snapshot the just-initialized DB before anything mutates it this run.
             await _run_backup()
+            # Pictures and PDFs the reader sent in that are still in a trimmed cache move to their
+            # own store before any fetch can push them out. Repeating it is harmless.
+            await run_in_threadpool(_keep_sent_files)
             # Backfill Item.feed_url for RSS items collected before 0.13.0.
             # reader.db holds the authoritative entry→feed mapping; this is a no-op on
             # a fresh install or when reader.db does not yet exist.
@@ -308,6 +351,8 @@ def create_app(
                 job_worker.start()
             if not skip_fetch_worker:
                 fetch_worker.start()
+            if radar and settings.radar_scheduler:
+                app.state.radar_scheduler = _start_radar_scheduler()
         else:
             logger.warning(
                 "DB integrity check failed for %s; serving in degraded mode -- restore from a "
@@ -330,6 +375,9 @@ def create_app(
         async with mcp_app.lifespan(app):
             yield
         # Stop the worker before disposing the engine -- it holds sessions against it.
+        radar_scheduler = getattr(app.state, "radar_scheduler", None)
+        if radar_scheduler is not None:
+            radar_scheduler.stop()
         fetch_worker.stop()
         job_worker.stop()
         engine.dispose()
@@ -351,7 +399,10 @@ def create_app(
     # A page that points its own domain at 127.0.0.1 could otherwise read every reply; its requests
     # still carry that domain in the Host header. Added after the guard above, so it runs first.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
+    # Added last, so outermost: security headers go on every response, refusals included.
+    app.add_middleware(SecurityHeaders)
     app.state.settings = settings
+    app.state.radar_scheduler = None
     app.state.engine = engine
     app.state.service_state = state
     # The manual /briefs/generate endpoint (a separate router) composes
@@ -376,6 +427,10 @@ def create_app(
     app.include_router(pages_router)
     app.include_router(settings_router)
     app.include_router(taxonomy_router)
+    # The redesigned product layer; each feature module mounts itself under /api/radar.
+    from spyglass_service.radar.api import build_router as build_radar_router
+
+    app.include_router(build_radar_router())
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
@@ -420,7 +475,18 @@ def create_app(
             _schedule_compose()
             return {"refreshed": False, "sources": 0}
         collectors = build_collectors(settings, engine)
-        new_count = await run_in_threadpool(run_refresh, engine, collectors)
+        if radar_owns_pipeline:
+            # The radar's own collection path: a newly added feed's archive is cut to recent
+            # items and switched-off feeds add nothing. The plain collectors would store a whole
+            # archive as new, and the pipeline would then pay to judge all of it.
+            from spyglass_service.radar.sources import legacy
+
+            new_count = await run_in_threadpool(legacy.run_legacy_collection, engine, settings)
+            radar_scheduler = getattr(app.state, "radar_scheduler", None)
+            if new_count and radar_scheduler is not None:
+                radar_scheduler.kick_assessment()  # judge the new items now, not next cycle
+        else:
+            new_count = await run_in_threadpool(run_refresh, engine, collectors)
         with Session(engine) as session:
             session.add(
                 RunLog(

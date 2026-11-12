@@ -160,3 +160,58 @@ def test_refresh_then_embeddings_exist(tmp_path: Path) -> None:
                 break
             time.sleep(0.05)
     assert rows, "expected a background-embedded row after refresh"
+
+
+def test_startup_backup_skipped_on_a_full_disk_is_logged_as_skipped(tmp_path: Path, monkeypatch) -> None:
+    """A refused snapshot (too little free space) is a skipped run-log row, and startup goes on."""
+    from sqlmodel import Session, select
+
+    from spyglass_service import backup as backup_mod
+    from spyglass_service.models import RunLog
+
+    _no_background_embed(monkeypatch)
+    settings = make_settings(tmp_path)
+    settings.backups_dir.mkdir(parents=True, exist_ok=True)
+    (settings.backups_dir / "spyglass-20260101-030000.db").write_bytes(b"x" * 100)
+    monkeypatch.setattr(backup_mod, "_free_bytes", lambda _folder: 1)
+    app = create_app(settings)
+    with TestClient(app):
+        pass
+    with Session(app.state.engine) as session:
+        rows = session.exec(select(RunLog).where(RunLog.source == "backup")).all()
+    assert [r.status for r in rows] == ["skipped"]
+    assert "disk" in (rows[0].detail or "").lower()
+
+
+def test_startup_moves_files_you_sent_in_out_of_the_caches(tmp_path: Path, monkeypatch) -> None:
+    """A picture sent in that is still in the image cache is safe in its own store after start-up."""
+    from sqlmodel import Session
+
+    from spyglass_service.db import create_db_engine, init_db
+    from spyglass_service.models import Item
+    from spyglass_service.radar import from_you_store, media_proxy
+    from spyglass_service.radar.import_image import image_fields
+    from spyglass_service.radar.models import ItemState, ReaderDoc
+
+    _no_background_embed(monkeypatch)
+    settings = make_settings(tmp_path)
+    url = "https://team.slack.com/files/U1/F200/chart.png"
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+    seed = create_db_engine(settings.db_path)
+    init_db(seed)
+    with Session(seed) as session:
+        item = Item(source="capture", external_id=url, title="chart", url=url)
+        session.add(item)
+        session.commit()
+        session.add(ReaderDoc(item_id=item.id, html=image_fields(url, "chart", None)["html"],
+                              lead_image=url, source_url=url))
+        session.add(ItemState(item_id=item.id, from_user=True, captured_via="slack"))
+        session.commit()
+        item_id = item.id
+    seed.dispose()
+    media_proxy.cache_put(settings.data_dir / "img_cache", url, png, "image/png")
+
+    with TestClient(create_app(settings)):
+        pass
+
+    assert from_you_store.find(settings.data_dir, item_id)[0].read_bytes() == png

@@ -47,6 +47,15 @@ _ADDED_COLUMNS = [
     ("claudejob", "model", "VARCHAR"),
     ("claudejob", "usage_five_hour", "FLOAT"),
     ("claudejob", "usage_week", "FLOAT"),
+    # Radar: attempt counters and the last error, so a bad reply is retried a few times and
+    # then left alone instead of being retried every cycle.
+    ("assessment", "triage_attempts", "INTEGER NOT NULL DEFAULT 0"),
+    ("assessment", "digest_attempts", "INTEGER NOT NULL DEFAULT 0"),
+    ("assessment", "error", "VARCHAR"),
+    # Radar: when the reader last sent an item in (drives the brief's "From you" window).
+    ("itemstate", "captured_at", "DATETIME"),
+    # Radar: a brief's last regeneration, kept apart from its first composition time.
+    ("radarbrief", "regenerated_at", "DATETIME"),
 ]
 
 
@@ -74,6 +83,11 @@ def create_db_engine(db_path: Path) -> Engine:
 
 def init_db(engine: Engine) -> None:
     """Create missing tables, add later columns, and the full-text search index."""
+    # Importing the radar models registers their tables on the shared metadata.
+    import spyglass_service.radar.filing_queue  # noqa: F401
+    import spyglass_service.radar.models  # noqa: F401
+    import spyglass_service.radar.usage  # noqa: F401
+
     SQLModel.metadata.create_all(engine)
     _apply_column_migrations(engine)
     _create_fts(engine)

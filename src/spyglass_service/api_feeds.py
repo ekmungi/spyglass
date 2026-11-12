@@ -249,7 +249,7 @@ def delete_feed_endpoint(request: Request, feed_id: int) -> dict:
         from reader import make_reader  # noqa: PLC0415
 
         reader_db = str(settings.data_dir / "reader.db")
-        with make_reader(reader_db, feed_root="") as reader_instance:
+        with make_reader(reader_db) as reader_instance:
             reader_instance.delete_feed(feed_url)
     except Exception:  # noqa: BLE001
         # FeedNotFoundError or any IO error: reader didn't know this feed, safe to ignore.

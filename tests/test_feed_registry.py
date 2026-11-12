@@ -37,15 +37,15 @@ def session(tmp_path: Path) -> Session:
 
 
 @pytest.fixture()
-def feed_url() -> str:
-    """Local file:// URL pointing at the RSS fixture; reader can parse it directly."""
-    return str(FEED_FIXTURE)
+def feed_url(fixtures_web_url: str) -> str:
+    """Web address (a local test server) of the RSS fixture; the reader can parse it."""
+    return f"{fixtures_web_url}/{FEED_FIXTURE.name}"
 
 
 @pytest.fixture()
-def non_feed_url() -> str:
-    """Local file:// URL pointing at a plain-text file that is NOT a valid feed."""
-    return str(NON_FEED_FIXTURE)
+def non_feed_url(fixtures_web_url: str) -> str:
+    """Web address (a local test server) of a plain-text file that is NOT a valid feed."""
+    return f"{fixtures_web_url}/{NON_FEED_FIXTURE.name}"
 
 
 # ---------------------------------------------------------------------------

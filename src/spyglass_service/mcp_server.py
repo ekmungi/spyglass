@@ -13,6 +13,7 @@ from spyglass_service import documents
 from spyglass_service.linked_session import LinkGuard, LinkState
 from spyglass_service.mcp_items import ItemResources, register_item_tools
 from spyglass_service.mcp_jobs import register_job_tools
+from spyglass_service.radar.mcp_tools import register_radar_tools
 from spyglass_service.claude_link import HandoffStore
 from spyglass_service.autocategorize import confirm_category, needs_review
 from spyglass_service.categories import CategoryResult, apply_categories, list_categories
@@ -93,6 +94,7 @@ def build_mcp(state: ServiceState) -> FastMCP:
     mcp.add_middleware(ItemResources(state))
     register_item_tools(mcp, state)
     register_job_tools(mcp, state)
+    register_radar_tools(mcp, state)
 
     @mcp.tool
     def get_pending_items(

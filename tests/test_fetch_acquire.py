@@ -17,6 +17,8 @@ from spyglass_service.fetch_acquire import (
     _is_blocked,
     acquire,
 )
+from spyglass_service.fetch_rungs import make_jina_rung
+from spyglass_service.radar.netguard import UNREACHABLE, UnresolvedAddress
 
 
 def client_for(handler) -> httpx.Client:
@@ -914,3 +916,104 @@ def test_acquire_empty_rungs_t0_only_block_has_one_attempt() -> None:
         result = acquire("https://example.test/a", client=client, rungs=[])
 
     assert result.attempts == (("T0", 429, "HTTP 429"),)
+
+
+# -- an unresolvable name is final, and a cached outside tier does not skip the address check --
+
+
+def test_acquire_unresolved_host_is_final_and_never_escalates() -> None:
+    """A first-step lookup failure (UnresolvedAddress) stops the ladder like a refused address."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise UnresolvedAddress(UNREACHABLE, request=request)
+
+    calls: list[str] = []
+
+    def fake_rung(url: str) -> AcquireResult:
+        calls.append(url)
+        return _ok_curl_result(url)
+
+    with client_for(handler) as client:
+        result = acquire("http://corp-wiki/page?token=secret", client=client, rungs=[fake_rung])
+
+    assert calls == []
+    assert result.ok is False
+    assert result.error == UNREACHABLE
+    assert [attempt[0] for attempt in result.attempts] == ["T0"]
+
+
+def test_acquire_plain_transport_error_still_escalates() -> None:
+    """Only a failed name lookup is final: any other connection error still escalates."""
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection reset")
+
+    with client_for(handler) as client:
+        result = acquire("https://example.test/a", client=client, rungs=[lambda u: _ok_curl_result(u)])
+
+    assert result.ok is True
+    assert result.tier == "T1"
+
+
+def test_acquire_unresolved_host_never_reaches_the_outside_rendering_step(monkeypatch) -> None:
+    """With the real outside rung in the ladder, an unresolvable name is not sent anywhere."""
+    monkeypatch.setattr("spyglass_service.radar.netguard.resolve", lambda host: [])
+    sent: list[httpx.Request] = []
+
+    def fetcher(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, text="rendered")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise UnresolvedAddress(UNREACHABLE, request=request)
+
+    with client_for(handler) as client:
+        result = acquire(
+            "http://corp-wiki/page?token=secret", client=client, rungs=[make_jina_rung(fetcher=fetcher)]
+        )
+
+    assert sent == []
+    assert result.ok is False
+
+
+def test_acquire_cached_outside_tier_still_refuses_an_unapproved_address(monkeypatch) -> None:
+    """start_tier T2 skips the plain fetch, yet the outside step refuses an address the guard rejects."""
+    monkeypatch.setattr("spyglass_service.radar.netguard.resolve", lambda host: [])
+    sent: list[httpx.Request] = []
+
+    def fetcher(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, text="rendered")
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the plain fetch must be skipped for start_tier T2")
+
+    with client_for(handler) as client:
+        result = acquire(
+            "http://corp-wiki/page?token=secret", client=client,
+            rungs=[make_jina_rung(fetcher=fetcher)], start_tier="T2",
+        )
+
+    assert sent == []
+    assert result.ok is False
+    assert result.tier == "T2"
+
+
+def test_acquire_cached_outside_tier_still_works_for_a_public_address() -> None:
+    """start_tier T2 with a public address still reaches the outside step and succeeds."""
+    sent: list[httpx.Request] = []
+
+    def fetcher(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, text="rendered")
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the plain fetch must be skipped for start_tier T2")
+
+    with client_for(handler) as client:
+        result = acquire(
+            "https://example.test/a", client=client,
+            rungs=[make_jina_rung(fetcher=fetcher)], start_tier="T2",
+        )
+
+    assert len(sent) == 1
+    assert result.ok is True
+    assert result.tier == "T2"

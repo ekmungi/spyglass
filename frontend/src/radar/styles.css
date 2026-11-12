@@ -1,0 +1,45 @@
+/* Radar style entry: Tailwind (reset + utilities), the bundled fonts, tokens and base styles.
+   Component styles are imported next to their components. */
+@import "tailwindcss";
+/* Fonts ship with the bundle (no network fonts at runtime). Newsreader's optical-size axis gives
+   display-cut headlines and text-cut reading from one family. */
+@import "./appearance/fonts/fira-sans.css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/newsreader/opsz.css";
+@import "@fontsource-variable/newsreader/opsz-italic.css";
+@import "./ui/tokens.css";
+@import "./ui/base.css";
+@import "./ui/primitives.css";
+@import "./ui/overlays.css";
+
+/* Tailwind utilities mapped onto the radar tokens, e.g. text-muted, bg-surface, border-rule. */
+@theme inline {
+  --color-paper: var(--paper);
+  --color-raised: var(--paper-raised);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+}
+
+@theme {
+  --font-sans: "Inter Variable", "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-serif: "Newsreader Variable", "Newsreader", Georgia, "Times New Roman", serif;
+}
+
+/* Tailwind's reset removes list markers; reading text and answers need them back. */
+.r-prose ul,
+.r-md ul {
+  list-style: disc;
+}
+.r-prose ol,
+.r-md ol {
+  list-style: decimal;
+}

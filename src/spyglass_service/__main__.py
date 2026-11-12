@@ -25,7 +25,9 @@ def main() -> None:
         if server is not None:
             server.should_exit = True
 
-    app = create_app(settings, spa_dir=_SPA_DIST, shutdown_handler=request_stop)
+    # radar=True: this is the real service, so the built-in scheduler collects, judges and
+    # composes on its own; nothing else needs to be open.
+    app = create_app(settings, spa_dir=_SPA_DIST, shutdown_handler=request_stop, radar=True)
     config = uvicorn.Config(app, host=settings.host, port=settings.port, log_level="info",
                             timeout_graceful_shutdown=STOP_WAIT_S)
     server = uvicorn.Server(config)

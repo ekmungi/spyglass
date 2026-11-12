@@ -24,10 +24,12 @@ reason) and is re-exported below so every existing import is unaffected.
 
 from collections.abc import Callable, Sequence
 from dataclasses import replace
+from urllib.parse import urljoin
 
 import httpx
 
 from .fetch_types import AcquireResult
+from .radar.netguard import UNREACHABLE
 
 __all__ = ["AcquireResult", "acquire"]
 
@@ -173,7 +175,10 @@ def _acquire_httpx(
         )
 
 
-def _acquire_curl_cffi(url: str, *, max_bytes: int = _MAX_DOWNLOAD_BYTES) -> AcquireResult:
+def _acquire_curl_cffi(
+    url: str, *, max_bytes: int = _MAX_DOWNLOAD_BYTES, follow_redirects: bool = True,
+    resolve: list[str] | None = None,
+) -> AcquireResult:
     """T1 rung: fetch via curl_cffi, impersonating a real Chrome TLS/JA3 fingerprint.
 
     Many bot-walls key off the TLS handshake shape (JA3), not just headers -- httpx's
@@ -199,11 +204,20 @@ def _acquire_curl_cffi(url: str, *, max_bytes: int = _MAX_DOWNLOAD_BYTES) -> Acq
     pipeline (extraction, storage) and gives the same legible failure shape as T0 --
     it just can't prevent curl_cffi's own memory use during the fetch itself. T1 only
     runs when T0 was blocked (see `acquire()`), so this path is rare in practice.
+    `follow_redirects=False` leaves redirects to the caller (the radar reader checks every
+    hop's address): a 3xx answer returns as a failed result whose `final_url` is the `Location`.
+    `resolve` (curl's `host:port:address` entries) makes curl connect to addresses that were
+    already checked instead of looking the name up again.
     """
     try:
         from curl_cffi import requests as curl_requests
 
-        response = curl_requests.get(url, impersonate="chrome", timeout=60)
+        extra: dict = {} if follow_redirects else {"allow_redirects": False}
+        if resolve:
+            from curl_cffi import CurlOpt
+
+            extra["curl_options"] = {CurlOpt.RESOLVE: list(resolve)}
+        response = curl_requests.get(url, impersonate="chrome", timeout=60, **extra)
     except Exception as error:  # curl_cffi raises its own error hierarchy; a rung
         # failure must be data (like the T0 path), never a crash that takes down acquire().
         return AcquireResult(
@@ -219,6 +233,12 @@ def _acquire_curl_cffi(url: str, *, max_bytes: int = _MAX_DOWNLOAD_BYTES) -> Acq
                 tier="T1", http_status=response.status_code,
                 error=_download_cap_error(max_bytes), ok=False,
             )
+
+    location = response.headers.get("location")
+    if not follow_redirects and 300 <= response.status_code < 400 and location:
+        return AcquireResult(
+            payload=b"", kind="bytes", final_url=urljoin(url, location), content_type="",
+            tier="T1", http_status=response.status_code, error="redirect", ok=False)
 
     if response.status_code != 200:
         return AcquireResult(
@@ -256,15 +276,10 @@ def _acquire_curl_cffi(url: str, *, max_bytes: int = _MAX_DOWNLOAD_BYTES) -> Acq
 # rung factories in fetch_rungs.py set the same attribute on the closures they return.
 _acquire_curl_cffi.tier = "T1"
 
-# The production escalation ladder used when `acquire()` is called without an explicit
-# `rungs` override. Appending a rung here (patchright, ...) is the only change later
-# tasks need to make in this module -- `acquire()`'s loop and every existing
-# caller/test that pins its own `rungs` list are unaffected. Note: this tuple is the
-# curl-only fallback used when the caller has no Settings at all (see
-# documents.fetch_fulltext's rung-precedence rule); the Settings-aware ladder is
-# `build_rungs` (fetch_rungs.py), which also conditionally includes the Jina/browser
-# rungs.
-_DEFAULT_RUNGS: tuple[Callable[[str], AcquireResult], ...] = (_acquire_curl_cffi,)
+# Without an explicit `rungs`, `acquire()` uses the guarded curl rung alone (the fallback when the
+# caller has no Settings); the Settings-aware ladder is `build_rungs` (fetch_rungs.py), which also
+# conditionally includes the Jina/browser rungs. The unguarded `_acquire_curl_cffi` is never used
+# directly in production: it follows redirects itself.
 
 # Ordinal position of each tier on the "T0".."T3" scale, used only to compare a
 # `start_tier` against an attempt's position in the sequence (T0 is always the httpx
@@ -335,7 +350,11 @@ def acquire(
     see `AcquireResult.attempts` -- so the returned result never loses an earlier
     tier's info even though only one AcquireResult object comes back.
     """
-    active_rungs = _DEFAULT_RUNGS if rungs is None else rungs
+    if rungs is None:
+        from .fetch_rungs import make_guarded_curl_rung  # here: fetch_rungs imports this module
+
+        rungs = (make_guarded_curl_rung(),)
+    active_rungs = rungs
     start_ordinal = _tier_ordinal(start_tier) if start_tier else 0
 
     # One (tier, http_status, error) entry per attempt actually made -- see AcquireResult.attempts.
@@ -345,7 +364,9 @@ def acquire(
     if start_ordinal <= _tier_ordinal("T0"):
         result = _acquire_httpx(url, client=client)
         attempts.append((result.tier, result.http_status, result.error))
-        if not _is_blocked(result):
+        # A refused or unresolvable address is final: no other rung may try it either.
+        refused = getattr(client, "blocked", False) or result.error == UNREACHABLE
+        if refused or not _is_blocked(result):
             return _with_attempts(result, attempts)
 
     # Prefer each rung's DECLARED tier (set by the rung factory) to compute its
@@ -363,13 +384,9 @@ def acquire(
             return _with_attempts(result, attempts)
 
     if result is None:
-        # start_tier skipped T0 AND every rung's declared tier is below it too (e.g.
-        # start_tier="T3" with only a T1 rung available, or a partial ladder that
-        # omits the rung at/above start_tier entirely) -- nothing was ever attempted.
-        # Fall back to running T0 anyway rather than returning None, so acquire()
-        # always returns an AcquireResult; this is the defensive edge for a cached
-        # tier whose rung a Settings change (e.g. disabling Jina) has since removed
-        # from the ladder.
+        # start_tier skipped T0 AND every rung's declared tier is below it (e.g. start_tier="T3"
+        # with only a T1 rung, or a cached tier whose rung a Settings change has since removed):
+        # nothing was attempted. Run T0 anyway so acquire() always returns an AcquireResult.
         result = _acquire_httpx(url, client=client)
         attempts.append((result.tier, result.http_status, result.error))
 

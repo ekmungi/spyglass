@@ -122,11 +122,28 @@ def test_brief_horizon_days_overlay_round_trip(tmp_path: Path) -> None:
     assert reloaded.brief_horizon_days == 30
 
 
-def test_jina_enabled_defaults_to_true() -> None:
-    """The T2 Jina Reader rung is ON by default -- no opt-in required to get the
-    bot-wall-clearing benefit."""
+def test_an_overlay_that_still_holds_the_removed_vault_folder_key_loads(tmp_path: Path) -> None:
+    """The direct-save folder setting is gone; an overlay written by an older version that still
+    names it is read without error, the key is ignored and the other values are kept."""
+    settings = Settings(_env_file=None, data_dir=tmp_path / "data")
+    save_overlay(settings, {"radar_vault_subdir": "Old/Folder", "brief_horizon_days": 21})
+    reloaded = apply_overlay(settings)
+    assert reloaded.brief_horizon_days == 21
+    assert not hasattr(reloaded, "radar_vault_subdir")
+    assert "radar_vault_subdir" not in OVERLAY_KEYS
+
+
+def test_jina_enabled_defaults_to_false() -> None:
+    """The T2 Jina Reader rung is OFF by default, for privacy: the outside rendering service
+    learns which pages are read. The reader can switch it on."""
     settings = Settings(_env_file=None)
-    assert settings.jina_enabled is True
+    assert settings.jina_enabled is False
+
+
+def test_jina_enabled_env_override_on(monkeypatch) -> None:
+    """SPYGLASS_JINA_ENABLED=true switches the outside rendering service on."""
+    monkeypatch.setenv("SPYGLASS_JINA_ENABLED", "true")
+    assert Settings(_env_file=None).jina_enabled is True
 
 
 def test_jina_api_key_defaults_to_none() -> None:

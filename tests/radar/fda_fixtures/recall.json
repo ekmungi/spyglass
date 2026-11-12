@@ -1,0 +1,19 @@
+{
+  "meta": {"results": {"skip": 0, "limit": 100, "total": 3}},
+  "results": [
+    {"res_event_number": "27549", "product_res_number": "Z-0001-26", "cfres_id": "30043",
+     "recalling_firm": "Intuitive Surgical, Inc.", "event_date_posted": "2026-10-29",
+     "event_date_initiated": "2026-10-20", "recall_status": "Open, Classified",
+     "product_code": "NAY--", "product_description": "da Vinci Xi Stapler 45; instrument for surgery",
+     "reason_for_recall": "Staple line may not form correctly.", "root_cause_description": "Other"},
+    {"res_event_number": "27549", "product_res_number": "Z-0002-26", "cfres_id": "30044",
+     "recalling_firm": "Intuitive Surgical, Inc.", "event_date_posted": "2026-10-29",
+     "event_date_initiated": "2026-10-20", "recall_status": "Open, Classified",
+     "product_code": "NAY--", "product_description": "da Vinci Xi Stapler 60",
+     "reason_for_recall": "Staple line may not form correctly.", "root_cause_description": "Other"},
+    {"res_event_number": "27600", "product_res_number": "Z-0003-26", "cfres_id": "30100",
+     "recalling_firm": "Intuitive Surgical Operations, Inc.", "event_date_posted": "2026-10-10",
+     "product_code": "OXY--", "product_description": "Camera head",
+     "reason_for_recall": "Image may freeze.", "recall_status": "Terminated"}
+  ]
+}

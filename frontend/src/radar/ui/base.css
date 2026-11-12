@@ -1,0 +1,126 @@
+/* Radar base styles: document defaults, focus, selection and the shared page/text classes
+   that the README documents (r-page, r-page-title, r-rows, r-serif, r-meta …). */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-ui);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+/* The focus ring fades and draws in over --dur-fast instead of jumping. Zero specificity, so any
+   component with its own transition list wins (the primitives list box-shadow in theirs). */
+:where(a, button, input, select, textarea, summary, [tabindex]) {
+  transition: box-shadow var(--dur-fast) var(--ease-enter);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Page column used by every routed page. */
+.r-page {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-8) var(--space-16);
+}
+
+.r-page--wide {
+  max-width: 960px;
+}
+
+.r-page-title {
+  font-family: var(--font-serif);
+  font-size: var(--text-h1);
+  font-weight: max(450, var(--heading-min, 0));
+  line-height: var(--leading-tight);
+  letter-spacing: -0.012em;
+  margin: 0 0 var(--space-2);
+  color: var(--ink);
+}
+
+.r-page-meta {
+  margin: 0 0 var(--space-8);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.r-serif {
+  font-family: var(--font-serif);
+}
+
+.r-meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  line-height: var(--leading-ui);
+}
+
+.r-headline {
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+  font-weight: max(500, var(--heading-min, 0));
+  line-height: var(--leading-snug);
+  color: var(--ink);
+}
+
+.r-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.r-rows > li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.r-sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.r-error-text {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 720px) {
+  .r-page {
+    padding: var(--space-8) var(--space-5) var(--space-12);
+  }
+}

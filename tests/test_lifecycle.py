@@ -180,6 +180,25 @@ def test_delete_cards_removes_all_local_rows_and_tombstones(tmp_path: Path) -> N
         assert remaining == 0
 
 
+def test_deleting_an_item_removes_the_file_you_sent_in_with_it(tmp_path: Path) -> None:
+    """A stored picture or PDF leaves the durable store only when its item is deleted."""
+    from spyglass_service.radar import from_you_store
+
+    engine = make_engine(tmp_path)
+    settings = make_settings(tmp_path)
+    mine, other = add_card(engine, "rss", "mine"), add_card(engine, "rss", "other")
+    with Session(engine) as session:
+        mine_item, other_item = session.get(Card, mine).item_id, session.get(Card, other).item_id
+    from_you_store.put(settings.data_dir, mine_item, b"%PDF-1.4 mine")
+    from_you_store.put(settings.data_dir, other_item, b"%PDF-1.4 other")
+
+    delete_cards(engine, settings, [mine])
+
+    assert from_you_store.find(settings.data_dir, mine_item) is None
+    assert from_you_store.find(settings.data_dir, other_item) is not None
+    engine.dispose()
+
+
 def test_delete_cards_skips_unknown_ids(tmp_path: Path) -> None:
     """delete_cards silently skips card ids that do not exist; count reflects real deletes."""
     engine = make_engine(tmp_path)

@@ -52,6 +52,19 @@ def server():
     srv.server_close()
 
 
+@pytest.fixture(autouse=True)
+def _loopback_servers_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests talk to a server on this computer, which the address guard refuses in use.
+
+    The guard's own behaviour is tested in tests/radar/test_legacy_guard.py; here its address
+    decision is replaced so the wire-level behaviour of the feed fetching can be checked.
+    """
+    from spyglass_service.radar import netguard
+
+    monkeypatch.setattr(netguard, "check_url", lambda url, resolver=None: netguard.Reach.PUBLIC)
+    monkeypatch.setattr(netguard, "checked_addresses", lambda host: [host])
+
+
 def test_reader_sends_the_browser_user_agent_on_the_wire(server, tmp_path: Path) -> None:
     Handler.seen.clear()
     with make_reader(str(tmp_path / "r.db"), feed_root="") as reader:

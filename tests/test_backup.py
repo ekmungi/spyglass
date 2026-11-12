@@ -5,7 +5,10 @@ from pathlib import Path
 
 from sqlmodel import Session, select
 
-from spyglass_service.backup import backup_db, list_backups
+import pytest
+
+from spyglass_service import backup as backup_mod
+from spyglass_service.backup import BackupSkipped, backup_db, list_backups
 from spyglass_service.db import create_db_engine, init_db
 from spyglass_service.models import Item
 
@@ -102,21 +105,118 @@ def test_negative_keep_retains_all_backups(tmp_path: Path) -> None:
     assert len(list_backups(backups_dir)) == 3
 
 
-def test_rotation_keeps_only_the_newest_n(tmp_path: Path) -> None:
-    """Rotation retains the most recent `keep` backups and deletes older ones."""
+def test_same_day_rotation_keeps_only_the_newest_two(tmp_path: Path) -> None:
+    """Snapshots from one day never fill more than two slots, so older days can survive."""
     db = tmp_path / "spyglass.db"
     _seed_db(db)
     backups_dir = tmp_path / "b"
-    timestamps = [datetime(2026, 6, 28, 0, 0, second) for second in range(5)]
 
-    for ts in timestamps:
-        backup_db(db, backups_dir=backups_dir, keep=3, timestamp=ts)
+    for second in range(5):
+        backup_db(db, backups_dir=backups_dir, keep=7,
+                  timestamp=datetime(2026, 6, 28, 0, 0, second))
 
-    remaining = list_backups(backups_dir)
-    assert len(remaining) == 3
-    # The three newest timestamps survive; the two oldest are gone.
-    assert [p.name for p in remaining] == [
-        "spyglass-20260628-000002.db",
+    assert [p.name for p in list_backups(backups_dir)] == [
         "spyglass-20260628-000003.db",
         "spyglass-20260628-000004.db",
     ]
+
+
+def _seed_days(backups_dir: Path) -> None:
+    """Three snapshots a day (08:00, 12:00, 20:00) for the ten days before 28 June 2026."""
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    for day in range(18, 28):
+        for hour in (8, 12, 20):
+            (backups_dir / f"spyglass-202606{day}-{hour:02d}0000.db").write_bytes(b"x")
+
+
+def test_rotation_keeps_the_newest_two_and_one_per_previous_five_days(tmp_path: Path) -> None:
+    """Older days keep their last snapshot for five days; everything else is removed."""
+    db = tmp_path / "spyglass.db"
+    _seed_db(db)
+    backups_dir = tmp_path / "b"
+    _seed_days(backups_dir)
+
+    backup_db(db, backups_dir=backups_dir, keep=7, timestamp=datetime(2026, 6, 28, 10, 0, 0))
+
+    assert [p.name for p in list_backups(backups_dir)] == [
+        "spyglass-20260623-200000.db",
+        "spyglass-20260624-200000.db",
+        "spyglass-20260625-200000.db",
+        "spyglass-20260626-200000.db",
+        "spyglass-20260627-200000.db",
+        "spyglass-20260628-100000.db",
+    ]
+
+
+def test_rotation_keeps_the_two_newest_even_when_both_are_from_today(tmp_path: Path) -> None:
+    """Two snapshots from today are both kept, plus the last one of each earlier day."""
+    db = tmp_path / "spyglass.db"
+    _seed_db(db)
+    backups_dir = tmp_path / "b"
+    _seed_days(backups_dir)
+
+    backup_db(db, backups_dir=backups_dir, keep=7, timestamp=datetime(2026, 6, 28, 9, 0, 0))
+    backup_db(db, backups_dir=backups_dir, keep=7, timestamp=datetime(2026, 6, 28, 10, 0, 0))
+
+    names = [p.name for p in list_backups(backups_dir)]
+    assert names[-2:] == ["spyglass-20260628-090000.db", "spyglass-20260628-100000.db"]
+    assert len(names) == 7
+    assert "spyglass-20260627-200000.db" in names and "spyglass-20260623-200000.db" in names
+
+
+def test_keep_bounds_the_total(tmp_path: Path) -> None:
+    """When the rule would keep more than `keep`, the oldest are dropped first."""
+    db = tmp_path / "spyglass.db"
+    _seed_db(db)
+    backups_dir = tmp_path / "b"
+    _seed_days(backups_dir)
+
+    backup_db(db, backups_dir=backups_dir, keep=3, timestamp=datetime(2026, 6, 28, 10, 0, 0))
+
+    assert [p.name for p in list_backups(backups_dir)] == [
+        "spyglass-20260626-200000.db",
+        "spyglass-20260627-200000.db",
+        "spyglass-20260628-100000.db",
+    ]
+
+
+def test_default_keep_covers_the_rule() -> None:
+    """The default bound is the rule's own maximum: two newest plus five earlier days."""
+    assert backup_mod.DEFAULT_KEEP == 7
+
+
+def test_low_disk_skips_the_snapshot_with_a_plain_reason(tmp_path: Path, monkeypatch) -> None:
+    """Less than twice the newest snapshot's size free means no snapshot, and no failure."""
+    db = tmp_path / "spyglass.db"
+    _seed_db(db)
+    backups_dir = tmp_path / "b"
+    backups_dir.mkdir()
+    (backups_dir / "spyglass-20260627-200000.db").write_bytes(b"x" * 100)
+    monkeypatch.setattr(backup_mod, "_free_bytes", lambda _folder: 199)
+
+    with pytest.raises(BackupSkipped) as caught:
+        backup_db(db, backups_dir=backups_dir, timestamp=datetime(2026, 6, 28, 10, 0, 0))
+
+    assert "disk" in str(caught.value).lower()
+    assert [p.name for p in list_backups(backups_dir)] == ["spyglass-20260627-200000.db"]
+
+
+def test_enough_disk_takes_the_snapshot(tmp_path: Path, monkeypatch) -> None:
+    """Exactly twice the newest snapshot's size free is enough."""
+    db = tmp_path / "spyglass.db"
+    _seed_db(db)
+    backups_dir = tmp_path / "b"
+    backups_dir.mkdir()
+    (backups_dir / "spyglass-20260627-200000.db").write_bytes(b"x" * 100)
+    monkeypatch.setattr(backup_mod, "_free_bytes", lambda _folder: 200)
+
+    assert backup_db(db, backups_dir=backups_dir, timestamp=datetime(2026, 6, 28, 10, 0, 0))
+
+
+def test_first_snapshot_needs_no_disk_check(tmp_path: Path, monkeypatch) -> None:
+    """With no earlier snapshot there is nothing to size against, so the check is not made."""
+    db = tmp_path / "spyglass.db"
+    _seed_db(db)
+    monkeypatch.setattr(backup_mod, "_free_bytes", lambda _folder: 0)
+
+    assert backup_db(db, backups_dir=tmp_path / "b") is not None

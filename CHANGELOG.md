@@ -5,6 +5,169 @@ All notable changes to the Spyglass plugin are recorded here. Versions match the
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/); this project uses
 0.x minor bumps per notable release.
 
+## [Unreleased]
+
+## [0.40.0] - 2026-11-12
+
+A redesign of the product layer. Spyglass is now a personal research radar that runs by itself and
+is used in a browser: a short daily brief, a reader with an assistant, a watch list, a paper finder
+and a profile that you write. The collection, storage, fetching and embedding engine is unchanged.
+No note-taking application is needed any more.
+
+### Added
+- **Today.** A finite daily brief composed each morning: top stories, watched organisations, items
+  worth knowing, papers, everything you sent in, and a skim list, ending with "You are caught up".
+  One event appears once, with all of its sources.
+- **Feed.** Every collected item, with filters for section, kind, saved and sent by you, and search.
+- **Reader and assistant.** A clean reader with a summary on top and an assistant beside it that
+  answers about the whole item or a selected passage, with quick actions for explaining, relevance
+  and drafting a message, a LinkedIn post or a blog outline. The engine is chosen from a list.
+- **AI engines.** OpenRouter, Anthropic, OpenAI, the Google Gemini API, local servers (Ollama, LM
+  Studio, any OpenAI-compatible address) and, off by default and for personal use, your own
+  installed Claude Code or Codex command with its tools switched off. Keys are kept in the
+  operating system's credential store, and the address of an engine that holds a key cannot be
+  changed from the page.
+- **Profile-based judging in two passes.** A cheap first pass reads title and snippet, and a second
+  pass reads the full text of what passed. Items you send in are always read.
+- **Watch, followed topics and Find papers.** A register of organisations checked daily with
+  suggestions that wait for your yes, topics you follow from an article or a link, and a paper
+  finder that says how each paper relates to your field.
+- **Sources.** Hacker News and the community paper list as signals, news searches on your topics,
+  Slack (a private channel of links), Gmail (labelled newsletters and links mailed to yourself) and
+  an Add link button.
+- **Near-instant Slack capture.** With a Slack app-level token, a new message in the capture
+  channel is captured within a second or two over Socket Mode instead of at the next check, and the
+  channel history is read again after any gap. It shares one position marker with the timer-based
+  check, so no message is handled twice. Not yet run against a real workspace.
+- **Provider fallback.** `SPYGLASS_RADAR_LLM_FALLBACK` names the engines to try, in order, when the
+  first cannot be used for the background judging (out of credit, usage limit, not signed in). A
+  provider that failed is left alone for ten minutes. Gemini can be one of them.
+- **Weekly upkeep.** The stored text and reader copy of items older than
+  `SPYGLASS_RADAR_RETENTION_DAYS` (120) that you never opened, saved, voted on, sent in or asked
+  about are removed, along with old learning signals, run logs, briefs and empty assistant
+  threads. The caches are trimmed to a size limit. The items and their judgements are kept.
+- **Appearance settings.** Theme, reading font, interface font, text size and text width.
+- **Starting with Windows.** `scripts/install_autostart.ps1` registers (or, with `-Uninstall`,
+  removes) a per-user task that starts the service hidden at sign-in, and `scripts/spyglass.cmd`
+  opens it in an app-style window.
+- **Documentation.** A rewritten README and a plain-language user guide in `docs/user-guide.md`.
+- **A To file queue.** **File in vault** on an item adds it to a queue with one click: nothing
+  opens and nothing is written to the vault. **File as…** (the arrow beside the button) sets the
+  kind of note, a project and a one-line note; a queued item reads "Waiting to be filed" and can be
+  removed or changed. The Feed has a **To file** filter with a bar: **File now** opens ONE Claude
+  Code session in your vault with a short fixed request (a count, no titles and no article text),
+  and **See the request** shows it first. The bundled `spyglass-file` skill reads the queue through
+  the new `radar_filing_queue` tool, shows one table of where each item goes, and after your single
+  yes files the items through your own vault skills; `radar_mark_filed` takes each one out of the
+  queue. The assistant's "File this item in vault" queues the item in the same way, and its
+  questions and answers travel with it.
+- **Filing queue.** Background filing is not available in this version; the code for it is present
+  but locked, and filing runs only through File now. The whole filing function stays hidden until
+  you name your own Claude Code filing plugin and skills in the settings file
+  (`SPYGLASS_RADAR_FILING_PLUGIN`, `SPYGLASS_RADAR_FILING_INGEST_SKILL` and
+  `SPYGLASS_RADAR_FILING_MANAGE_SKILL`).
+- **FDA device decisions.** Once a day, for each active company on the watch list, Spyglass reads
+  the public openFDA service (`api.fda.gov`, no key) for 510(k) clearances, De Novo grants, PMA
+  approvals and recalls of the last 30 days. A firm matches only by its exact name or by starting
+  with it as whole words. Each decision is one item from the regulator ("FDA clears ... from ...
+  (510(k) K...)"), linked to the official record and to the company on **Watch**, and stored once
+  per record number. At most one request a second and 120 a run (a long watch list continues the
+  next day). A switch and two optional lists (product codes, device keywords) are in **FDA device
+  decisions** on **Sources**; `SPYGLASS_RADAR_FDA_ENABLED`, `..._FDA_PRODUCT_CODES` and
+  `..._FDA_KEYWORDS` set them from `.env`.
+- **A daily database backup.** At 03:00 (`SPYGLASS_RADAR_BACKUP_TIME`), under the lock a collection
+  uses, so it never runs during one. A computer that was asleep takes the backup shortly after it
+  wakes when the newest is over 26 hours old. The weekly upkeep also trims old usage records when
+  the usage module is present.
+- **Files and pictures from Slack.** A PDF, PNG, JPEG, WebP, plain text or Markdown file (at most
+  20 MB) posted in the capture channel becomes an item under **From you**, analysed at once, with
+  the message as its note; a picture is shown in the item's document. A larger file or another type
+  becomes an item with its name and the reason. The Slack app needs the `files:read` permission,
+  and the bot token is sent only to `files.slack.com` for the download. Not yet confirmed against Slack itself.
+- **AI usage.** Every model call is recorded (job, engine, model, tokens read fresh, written to and
+  read from the provider's cache, tokens written, the provider's cost figure, time). Settings has a
+  Usage table for the last 7 days, an answer shows "Read 12,400 tokens, 91% from cache · wrote 380"
+  on hover, and `GET /api/radar/usage` returns the report. The weekly upkeep can remove records older than 180 days with
+  `prune_usage`.
+- **"Automatic" model choice** for engines with a known cheaper and stronger model: the cheaper one
+  for Explain and short questions, the stronger one for drafts and long questions. Never the default.
+- **Date headings in the Feed.** Newest first, the list is split by day with a quiet heading
+  ("Today", "Yesterday", then "Tuesday 10 November") that carries the number of items that day holds,
+  by your local day of the date the list is ordered by. The heading of the day on screen stays under
+  the filter bar. The headings are left out of lists ordered by something other than time ("Related",
+  the items an assistant answer cited, Missed), and j / k step over them.
+- **Missed.** A quick filter beside To file for coming back after days away: top and notable items
+  of the last 7 days that you have never opened, saved, filed or queued, and did not send in
+  yourself, ordered by score then date, with the count on the chip. `GET /api/radar/feed?missed=true`
+  returns it as one page. An item you open from it stays in the list, shown as read, until you open
+  the list again.
+- **From a Watch group to its items.** The "N items this week" on a group's heading is now a link to
+  the Feed filtered to that group (`watch_group=<name>`, under a "Watch: <group>" chip with Clear).
+  The list uses the register's own week query, so its rows are exactly the number on the heading; an
+  unknown group gives an empty list.
+
+### Changed
+- **Less usage per call.** Claude Code calls no longer load memory notes and instruction files, which
+  saves several thousand tokens per call. Judging and answering calls keep their instructions, the reader's
+  profile and the article in the system prompt, where the provider's cache is read back by the next
+  call, and send only what changes (the batch, the question) as the prompt. Anthropic models called
+  through the Anthropic API or OpenRouter are told what to cache. The text of an item
+  conversation no longer depends on the question or the selected passage.
+- **Long articles** keep their beginning and, for the first question of a conversation, the passages
+  from the rest that are closest to the question, instead of the first 70% and last 30%.
+- **Long conversations** are condensed into a short summary (made by the engine's cheaper model)
+  instead of silently dropping the oldest messages, with the line "Earlier messages were condensed
+  to save usage."
+- The older feed collector, feed discovery, the card and page fetchers and the default fetch ladder
+  now pass the same address guard as the rest: public addresses only on every redirect hop, with
+  connections pinned to the checked address. A feed on a private or local address is refused with
+  a plain reason and does not stop collection. A refused address is no longer passed on to the
+  outside page renderer. One test fails if an older module builds an unguarded connection.
+  Adding a YouTube channel by its `@name` no longer sends the consent cookie, so it may fail for
+  readers in regions where YouTube asks for consent first; use the channel's feed address then.
+- Spyglass no longer writes notes into the vault itself. The "Save to vault" button, its endpoint
+  and the setting for its folder are gone (a settings file that still holds the old key loads
+  without error). "Open in Claude Code" now offers only discussing an item or your own request;
+  filing goes through the queue.
+- The README describes the redesigned app. The Obsidian plugin and the bundled Claude skills are
+  marked optional and legacy; they still work but are no longer required.
+
+### Fixed
+- Descriptions that no longer matched the code: the capture check runs every
+  `SPYGLASS_RADAR_CAPTURE_POLL_SECONDS` (60 seconds), not every five minutes; the allowance for
+  automated browser checks is on by default; the news search runs in every collection, not once a
+  day; the user guide called the brief's watch section "Competitor watch", where the app says "On
+  your watch list".
+- A `.env` file that still holds the removed `SPYGLASS_RADAR_VAULT_SUBDIR` no longer stops the
+  service at start: the key is ignored with one line in the log.
+- Pictures and PDFs you send in (through Slack or **Add file**) are kept in their own folder,
+  `media/from_you`, that the weekly cache trimming never touches, and are removed only when their
+  item is deleted. Ones still in the caches are moved over at start-up and in the weekly upkeep,
+  the store's size is part of the upkeep report, and an item whose picture is missing shows a
+  sentence instead of a broken image.
+- Backups keep the two newest copies plus the last copy of each of the previous five days (at most
+  seven, the new default of `SPYGLASS_BACKUP_KEEP`), so several copies in one day no longer push
+  every older day out. A copy is skipped, with a reason in the run log, when the disk has less free
+  space than twice the newest copy.
+- A feed address must be a web address: a file path, a `file:` address or a `..` path is refused
+  with "Spyglass reads feeds from the web only", the feed library no longer opens local feeds, and
+  a stored feed that is a path is skipped with one log line.
+- A recall item without a record number now links to the FDA recall search page instead of using
+  the recall event number, which is a different number from the record's own.
+- On the sample data (`?mock=1`) the Sources page's FDA group now shows a last run.
+- A conversation about the whole feed that Claude Code resumed never received the items retrieved
+  for the new question; they are now sent with every question.
+- **Open in Claude Code** and **File now** are unavailable, with the reason, when the vault's
+  `.mcp.json` names another Spyglass; each request names the Spyglass that sent it and tells the
+  session to stop rather than search for its files, `radar_get_item` carries your earlier
+  conversation, and the new `radar_about` tool shows which Spyglass a session reached.
+
+### Not verified
+- Slack files and pictures, and the FDA record page links for De Novo grants and recalls, were not
+  checked against the real services (FDA's record pages refuse scripted requests).
+- The Slack and Gmail sources, and the Gemini engine, were tested against fakes only. None has been
+  run against the real service.
+
 ## [0.32.2] - 2026-11-10
 
 First public release: AGPL-3.0 licence, example settings and documentation for new users, and

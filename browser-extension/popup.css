@@ -1,0 +1,24 @@
+/* popup.css - the look of the toolbar popup: calm, plain, one dark-blue accent. */
+:root { color-scheme: light dark; --ink: #1c2530; --muted: #5d6877; --paper: #fbfaf7; --rule: #d9d6cd; --accent: #23406b; --ok: #1f6b45; --danger: #a3361f; }
+@media (prefers-color-scheme: dark) {
+  :root { --ink: #e8e6e0; --muted: #a3a9b3; --paper: #1b1f26; --rule: #3a404a; --accent: #8fb0e6; --ok: #6fc79a; --danger: #f08a73; }
+}
+body { margin: 0; width: 340px; background: var(--paper); color: var(--ink); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+main { padding: 14px 16px 12px; }
+.site { margin: 0; color: var(--muted); font-size: 12px; }
+.title { margin: 2px 0 12px; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.note { display: block; margin-bottom: 12px; }
+.note span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 3px; }
+.note input { box-sizing: border-box; width: 100%; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+.buttons { display: flex; gap: 8px; }
+button { flex: 1; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { button.primary { color: #10151c; } }
+button:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.status { min-height: 1.4em; margin: 10px 0 0; font-weight: 600; }
+.status.ok { color: var(--ok); }
+.status.error { color: var(--danger); }
+.hint { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+.footer { display: flex; justify-content: space-between; margin-top: 8px; }
+button.link { flex: none; border: none; padding: 2px 0; color: var(--accent); text-decoration: underline; }

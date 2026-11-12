@@ -1,0 +1,203 @@
+/* Watch page: hairline rows, small-caps category headings, no boxes. Tokens only. */
+.rw-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.rw-head__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+.rw-status {
+  min-height: 20px; /* reserved so the status line never shifts the buttons below it */
+  margin-bottom: var(--space-2);
+}
+.rw-pane-lead {
+  margin: 0 0 var(--space-4);
+}
+.rw-choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.rw-choices li + li {
+  border-top: 1px solid var(--rule);
+}
+.rw-choice {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-3) 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+  font: inherit;
+}
+.rw-choice:hover .rw-choice__title,
+.rw-choice:focus-visible .rw-choice__title {
+  color: var(--accent);
+}
+.rw-choice:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+.rw-choice__title {
+  transition: color var(--dur-fast) var(--ease-enter);
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+}
+.rw-choice__body {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.rw-group-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* The week's count links to those items in the Feed; it stays quiet until pointed at. */
+.rw-group-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 3px;
+  transition: color var(--dur-fast) var(--ease-enter), text-decoration-color var(--dur-fast) var(--ease-enter);
+}
+.rw-group-link:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+.rw-paused .rw-name,
+.rw-paused .rw-why {
+  color: var(--muted);
+}
+.rw-review {
+  display: grid;
+  gap: var(--space-3);
+}
+.rw-review__summary {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--text-base);
+}
+.rw-review__body {
+  max-height: 50vh;
+  overflow: auto;
+  display: grid;
+  gap: var(--space-4);
+}
+.rw-review__count {
+  margin-right: auto;
+}
+.rw-check-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.rw-check-group legend {
+  padding: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.rw-check {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.rw-check input {
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+.rw-check__name {
+  font-weight: 500;
+  color: var(--ink);
+}
+.r-dialog:has(.rw-review) {
+  width: min(620px, calc(100vw - 32px));
+}
+.rw-section {
+  margin-bottom: var(--space-10);
+}
+.rw-skeleton,
+.rw-error {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+.rw-error {
+  justify-items: start;
+}
+.rw-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+}
+.rw-main {
+  min-width: 0;
+  flex: 1;
+}
+.rw-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+.rw-hit {
+  font-size: var(--text-xs);
+  color: var(--accent);
+}
+.rw-why {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.rw-recent {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: var(--text-sm);
+}
+.rw-recent a {
+  color: var(--ink-2);
+  text-decoration-color: var(--rule-strong);
+  transition: color var(--dur-fast) var(--ease-enter);
+}
+.rw-recent a:hover {
+  color: var(--accent);
+}
+.rw-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+}
+.rw-muted > summary {
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.rw-muted .rw-name,
+.rw-muted .rw-why {
+  color: var(--muted);
+}

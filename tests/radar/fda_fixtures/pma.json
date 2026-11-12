@@ -1,0 +1,18 @@
+{
+  "meta": {"results": {"skip": 0, "limit": 100, "total": 3}},
+  "results": [
+    {"pma_number": "P040024", "supplement_number": "", "applicant": "Medtronic, Inc.",
+     "trade_name": "EXAMPLE VALVE", "generic_name": "Valve, heart, transcatheter",
+     "decision_date": "2026-10-27", "decision_code": "APPR", "supplement_type": "",
+     "product_code": "NPT", "advisory_committee_description": "Cardiovascular",
+     "ao_statement": "APPROVAL FOR THE EXAMPLE VALVE."},
+    {"pma_number": "P040024", "supplement_number": "S018", "applicant": "Medtronic, Inc.",
+     "trade_name": "EXAMPLE VALVE", "generic_name": "Valve, heart, transcatheter",
+     "decision_date": "2026-10-26", "decision_code": "APPR", "supplement_type": "30-Day Notice",
+     "product_code": "NPT", "ao_statement": "CHANGE IN TEST METHOD."},
+    {"pma_number": "P040024", "supplement_number": "S020", "applicant": "Medtronic, Inc.",
+     "trade_name": "EXAMPLE VALVE", "generic_name": "Valve, heart, transcatheter",
+     "decision_date": "2026-10-25", "decision_code": "APPR", "supplement_type": "Panel Track",
+     "product_code": "NPT", "ao_statement": "APPROVAL FOR A NEW INDICATION."}
+  ]
+}

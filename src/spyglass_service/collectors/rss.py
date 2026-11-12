@@ -11,8 +11,9 @@ from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from spyglass_service.collectors.base import CollectedItem
-from spyglass_service.feed_http import use_browser_user_agent
+from spyglass_service.feed_http import is_web_feed_address, use_browser_user_agent
 from spyglass_service.models import Feed
+from spyglass_service.radar import netguard
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,9 @@ _YT_HANDLE = re.compile(r"^https?://(?:www\.)?youtube\.com/@[\w.-]+/?$")
 # (channel_id=UC...); pages vary, so try both.
 _YT_CHANNEL_ID = re.compile(r'(?:"channelId"\s*:\s*"|channel_id=)(UC[\w-]+)')
 _YT_FEED = "https://www.youtube.com/feeds/videos.xml?channel_id={}"
-# SOCS=CAI skips the EU consent interstitial that otherwise replaces the page
-# (sent as a raw header: httpx deprecated per-request cookies on clients).
-_YT_HEADERS = {"Accept-Language": "en", "Cookie": "SOCS=CAI"}
+# The guarded client sends no cookies, so the consent cookie that skips YouTube's EU interstitial
+# is no longer sent; where that page replaces the channel page the handle cannot be resolved.
+_YT_HEADERS = {"Accept-Language": "en"}
 
 
 def resolve_feed_url(url: str, client: httpx.Client | None = None) -> str:
@@ -47,7 +48,7 @@ def resolve_feed_url(url: str, client: httpx.Client | None = None) -> str:
         return _YT_FEED.format(channel.group(1))
     if _YT_HANDLE.match(url):
         owns_client = client is None
-        client = client or httpx.Client(timeout=20, follow_redirects=True)
+        client = client or netguard.page_client(timeout=20)
         try:
             response = client.get(url, headers=_YT_HEADERS)
             if response.status_code == 200:
@@ -74,7 +75,8 @@ class RssCollector:
 
     reader handles fetching, parsing, and conditional requests; this class only
     subscribes the configured URLs and maps entries to CollectedItem.
-    feed_root="" permits absolute local file paths, which the tests rely on.
+    Only web addresses are read: the reader is made without a feed root (which switches local
+    feeds off), and a stored address that is a file path is skipped with a log line.
     """
 
     name = "rss"
@@ -90,9 +92,12 @@ class RssCollector:
         raise here: a broken feed must not block the rest of the morning.
         """
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        with make_reader(str(self._db_path), feed_root="") as reader:
+        with make_reader(str(self._db_path)) as reader:
             use_browser_user_agent(reader)  # for sites that block unknown clients
             for url in self._feed_urls:
+                if not is_web_feed_address(url):
+                    logger.warning("feed skipped: %r is not a web address", url[:200])
+                    continue
                 try:
                     reader.add_feed(resolve_feed_url(url))
                 except FeedExistsError:
@@ -142,7 +147,7 @@ def write_feed_health(engine: Engine, reader_db_path: Path) -> None:
                          will create an empty one, yielding zero feeds — harmless).
     """
     now = datetime.now(UTC)
-    with make_reader(str(reader_db_path), feed_root="") as reader:
+    with make_reader(str(reader_db_path)) as reader:
         reader_feeds = list(reader.get_feeds())
 
     for rf in reader_feeds:

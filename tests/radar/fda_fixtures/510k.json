@@ -1,0 +1,31 @@
+{
+  "meta": {"last_updated": "2026-11-02", "results": {"skip": 0, "limit": 100, "total": 5}},
+  "results": [
+    {"k_number": "K263592", "applicant": "Intuitive Surgical, Inc.", "contact": "A. Person",
+     "device_name": "da Vinci Xi Surgical System (IS4000);da Vinci X Surgical System (IS4200)",
+     "decision_date": "2026-10-30", "date_received": "2026-09-30", "decision_code": "SESE",
+     "decision_description": "Substantially Equivalent", "clearance_type": "Special",
+     "product_code": "NAY", "advisory_committee": "GU",
+     "advisory_committee_description": "Gastroenterology, Urology", "state": "CA",
+     "openfda": {"device_name": "System, Surgical, Computer Controlled Instrument",
+                 "regulation_number": "876.1500", "device_class": "2"}},
+    {"k_number": "DEN250054", "applicant": "Intuitive Surgical Operations, Inc.",
+     "device_name": "Virtuoso Endoscopy System", "decision_date": "2026-10-28",
+     "decision_code": "DENG", "decision_description": "Unknown", "clearance_type": "Direct",
+     "product_code": "SJS", "advisory_committee": "", "advisory_committee_description": "Unknown",
+     "openfda": {"device_name": "Endoscopic robotic system"}},
+    {"k_number": "K263000", "applicant": "Intuitive Surgical, Inc.", "device_name": "Old tool",
+     "decision_date": "2026-10-20", "decision_code": "SN",
+     "decision_description": "Substantially Equivalent - Not", "clearance_type": "Traditional",
+     "product_code": "NAY", "advisory_committee_description": "Gastroenterology, Urology"},
+    {"k_number": "K263111", "applicant": "Intuitive Machines, Inc.", "device_name": "Not a match",
+     "decision_date": "2026-10-21", "decision_code": "SESE",
+     "decision_description": "Substantially Equivalent", "product_code": "ZZZ"},
+    {"k_number": "K263222", "applicant": "Olympus Medical Systems Corp.",
+     "device_name": "EVIS X1\n​Colonoscope", "decision_date": "2026-10-15",
+     "decision_code": "SESE", "decision_description": "Substantially Equivalent",
+     "clearance_type": "Traditional", "product_code": "FDF",
+     "advisory_committee_description": "Gastroenterology, Urology",
+     "openfda": {"device_name": "Colonoscope, Flexible"}}
+  ]
+}

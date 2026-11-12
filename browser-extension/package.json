@@ -1,0 +1,5 @@
+{
+  "name": "send-to-spyglass-extension",
+  "private": true,
+  "type": "module"
+}

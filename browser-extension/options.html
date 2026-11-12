@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- options.html - the settings page: where Spyglass is, and the key that lets this browser send to it. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Send to Spyglass: settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Send to Spyglass</h1>
+      <p class="lede">
+        Paste the key from Spyglass (Settings, then &ldquo;Browser extension&rdquo;), then press Test connection.
+        The extension talks only to Spyglass on this computer.
+      </p>
+      <form id="form" autocomplete="off">
+        <label for="address">Spyglass address</label>
+        <input id="address" type="text" spellcheck="false" />
+        <label for="key">Key</label>
+        <div class="row">
+          <input id="key" type="password" spellcheck="false" autocomplete="off" />
+          <button id="reveal" type="button" aria-pressed="false">Show</button>
+        </div>
+        <div class="actions">
+          <button id="test" type="button" class="primary">Test connection</button>
+          <button id="save" type="submit">Save</button>
+        </div>
+        <p id="status" class="status" role="status"></p>
+      </form>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

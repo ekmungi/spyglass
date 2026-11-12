@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 from collections.abc import Callable
+from urllib.parse import urlsplit
 
 # The resolved yt-transcribe command, set once at startup by app wiring (explicit setting or
 # auto-discovery). None until set; falls back to the env var, then the bare name.
@@ -45,6 +46,11 @@ def _fetch_transcript_via_cli(
     on a known failure, writing no vault file. Returns None on any failure (binary missing,
     non-JSON, error payload, blank text) so the caller can fall back to the in-process caption API.
     """
+    from spyglass_service.radar.netguard import is_internal_host
+
+    parts = urlsplit(url or "")
+    if parts.scheme not in ("http", "https") or is_internal_host(parts.hostname or "localhost"):
+        return None  # the tool fetches whatever it is given: never an address on this computer
     run = runner or _default_cli_runner
     try:
         proc = run([command or _yt_transcribe_cmd(), "video", url, "--no-save"])

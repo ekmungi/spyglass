@@ -1,0 +1,249 @@
+/* App shell: rail, main column with page and reader layers, assistant column. */
+
+.r-app {
+  display: grid;
+  grid-template-columns: var(--rail-width) minmax(0, 1fr) auto;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.r-skip {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 100;
+  padding: 8px 12px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-md);
+}
+.r-skip:focus {
+  left: 8px;
+}
+
+/* Rail */
+.r-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-3) var(--space-4);
+  border-right: 1px solid var(--rule);
+  /* No overflow clipping: the collapsed rail's tooltips extend to the right of it. */
+  min-height: 0;
+}
+.r-rail__brand {
+  display: block;
+  padding: 0 var(--space-3) var(--space-4);
+  color: var(--ink);
+  text-decoration: none;
+}
+.r-rail__wordmark {
+  font-family: var(--font-serif);
+  font-size: calc(23px * var(--type-scale, 1));
+  font-weight: 560;
+  letter-spacing: -0.015em;
+}
+.r-rail__monogram {
+  display: none;
+  font-family: var(--font-serif);
+  font-size: calc(24px * var(--type-scale, 1));
+  font-weight: 600;
+}
+.r-rail__group {
+  display: grid;
+  gap: 2px;
+}
+.r-rail__group .r-tip {
+  display: flex;
+}
+.r-rail__spacer {
+  flex: 1;
+}
+.r-rail__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: 34px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-enter),
+    background-color var(--dur-fast) var(--ease-enter),
+    box-shadow var(--dur-fast) var(--ease-enter),
+    translate var(--dur-fast) var(--ease-enter);
+}
+.r-rail__link:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+.r-rail__link:active {
+  translate: 0 1px;
+}
+.r-rail__link[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+/* The active marker: a real element (not ::before) so a page-change view transition can carry it
+   from the old entry to the new one. */
+.r-rail__marker {
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.r-rail__add {
+  color: var(--accent);
+}
+/* Tooltips on rail links only matter when the labels are hidden. */
+@media (min-width: 1100px) {
+  .r-rail .r-tip__bubble {
+    display: none;
+  }
+}
+@media (max-width: 1099px) {
+  .r-app {
+    grid-template-columns: var(--rail-width-collapsed) minmax(0, 1fr) auto;
+  }
+  .r-rail {
+    padding-inline: var(--space-2);
+    align-items: center;
+  }
+  .r-rail__brand {
+    padding: 0 0 var(--space-4);
+  }
+  .r-rail__wordmark,
+  .r-rail__label {
+    display: none;
+  }
+  .r-rail__monogram {
+    display: block;
+  }
+  .r-rail__link {
+    justify-content: center;
+    width: 40px;
+    padding: 0;
+  }
+  .r-rail__marker {
+    left: -10px;
+  }
+}
+
+/* Main column and its layers */
+.r-main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+.r-layer {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.r-layer--page[data-hidden="true"] {
+  visibility: hidden;
+}
+/* The reader settles in over the page. Where view transitions run, the page change below does this
+   instead, so the entrance is switched off during one. It is a transition from @starting-style,
+   not keyframes, so switching it back on afterwards does not replay it. */
+.r-layer--reader {
+  background: var(--paper);
+  transition: opacity var(--dur-slow) var(--ease-enter), transform var(--dur-slow) var(--ease-enter);
+}
+@starting-style {
+  .r-layer--reader {
+    opacity: 0;
+    transform: translateY(var(--shift));
+  }
+}
+
+/* Page changes (shell/useShownRoute.ts sets data-page-transition for one view transition): only the
+   main column and the rail marker take part. The rest of the shell is left out (the root's own
+   name is removed), so the rail and the assistant stay live and still. The outgoing page fades
+   quickly; the incoming one fades in and rises --shift into place. The column's box is not
+   morphed, so a page that opens or closes the assistant does not stretch its snapshot. */
+:root[data-page-transition] {
+  view-transition-name: none;
+}
+:root[data-page-transition] .r-main {
+  view-transition-name: r-main;
+}
+:root[data-page-transition] .r-rail__marker {
+  view-transition-name: r-rail-marker;
+}
+:root[data-page-transition] .r-layer--reader {
+  transition: none;
+}
+/* Clicks pass through the transition's overlay to the live page and rail. */
+::view-transition {
+  pointer-events: none;
+}
+::view-transition-group(r-main) {
+  animation: none;
+}
+::view-transition-old(r-main),
+::view-transition-new(r-main) {
+  block-size: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+::view-transition-old(r-main) {
+  animation: r-page-out var(--dur-fast) var(--ease-exit) both;
+}
+::view-transition-new(r-main) {
+  animation: r-page-in var(--dur-slow) var(--ease-enter) both;
+}
+::view-transition-group(r-rail-marker) {
+  animation-duration: var(--dur-slow);
+  animation-timing-function: var(--ease-enter);
+}
+@keyframes r-page-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes r-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--shift));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* Assistant column: an overlay sheet on narrow screens (the store keeps it closed there until asked for). */
+@media (max-width: 999px) {
+  .r-assist {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(100vw, 420px) !important;
+    z-index: 60;
+    border-left: 1px solid var(--rule-strong);
+  }
+}
+
+/* The skip link moves focus here; the whole column does not need a ring. */
+.r-main:focus-visible {
+  box-shadow: none;
+}

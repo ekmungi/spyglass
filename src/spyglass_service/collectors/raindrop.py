@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 import httpx
 
 from spyglass_service.collectors.base import CollectedItem
+from spyglass_service.radar.egress import api_client, assert_secret_destination
 
 # Collection 0 means "all bookmarks"; newest first so polling sees recent saves.
 _API_URL = "https://api.raindrop.io/rest/v1/raindrops/0"
@@ -24,9 +25,19 @@ class RaindropError(Exception):
     """Raised when the Raindrop API rejects the request or returns a bad payload."""
 
 
-def _bearer_headers(token: str) -> dict:
-    """Return an Authorization header dict for the given Bearer token."""
+def _bearer_headers(token: str, url: str) -> dict:
+    """Return an Authorization header dict for the given Bearer token, bound for `url`.
+
+    Raises SecretDestinationError (before any request) when `url` is not Raindrop's API, so the
+    token cannot be sent elsewhere even through a caller-supplied client.
+    """
+    assert_secret_destination("raindrop_token", url)
     return {"Authorization": f"Bearer {token}"}
+
+
+def _client() -> httpx.Client:
+    """The default client: every request it sends is checked against the token's binding."""
+    return api_client("raindrop_token", timeout=20)
 
 
 def resolve_processed_collection(
@@ -38,8 +49,8 @@ def resolve_processed_collection(
     (case-insensitive). If none is found, POSTs to create it. Returns the collection
     _id as an int. Raises RaindropError on any non-200 response.
     """
-    http = client or httpx.Client(timeout=20)
-    response = http.get(_COLLECTIONS_URL, headers=_bearer_headers(token))
+    http = client or _client()
+    response = http.get(_COLLECTIONS_URL, headers=_bearer_headers(token, _COLLECTIONS_URL))
     if response.status_code != 200:
         raise RaindropError(f"Raindrop API returned {response.status_code}")
     items = response.json().get("items", [])
@@ -50,7 +61,7 @@ def resolve_processed_collection(
     create_response = http.post(
         _COLLECTION_URL,
         json={"title": PROCESSED_COLLECTION},
-        headers=_bearer_headers(token),
+        headers=_bearer_headers(token, _COLLECTION_URL),
     )
     if create_response.status_code != 200:
         raise RaindropError(f"Raindrop API returned {create_response.status_code}")
@@ -69,11 +80,12 @@ def move_bookmark_to_collection(
     and a Bearer token. Raises RaindropError on any non-200 response so the caller can
     capture the failure per item without aborting the batch.
     """
-    http = client or httpx.Client(timeout=20)
+    http = client or _client()
+    url = f"{_RAINDROP_URL}/{external_id}"
     response = http.put(
-        f"{_RAINDROP_URL}/{external_id}",
+        url,
         json={"collection": {"$id": collection_id}},
-        headers=_bearer_headers(token),
+        headers=_bearer_headers(token, url),
     )
     if response.status_code != 200:
         raise RaindropError(f"Raindrop API returned {response.status_code}")
@@ -86,7 +98,7 @@ class RaindropCollector:
 
     def __init__(self, token: str, client: httpx.Client | None = None) -> None:
         self._token = token
-        self._client = client or httpx.Client(timeout=20)
+        self._client = client or _client()
 
     def collect(self) -> list[CollectedItem]:
         """Return all bookmarks, newest first, paging until a short page.
@@ -99,7 +111,7 @@ class RaindropCollector:
             response = self._client.get(
                 _API_URL,
                 params={"sort": "-created", "perpage": _PER_PAGE, "page": page},
-                headers={"Authorization": f"Bearer {self._token}"},
+                headers=_bearer_headers(self._token, _API_URL),
             )
             if response.status_code != 200:
                 raise RaindropError(f"Raindrop API returned {response.status_code}")

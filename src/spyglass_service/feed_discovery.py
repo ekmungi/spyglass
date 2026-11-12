@@ -26,6 +26,7 @@ import httpx
 from spyglass_service.collectors.rss import resolve_feed_url
 from spyglass_service.feed_discovery_html import parse_declared_feeds, parse_section_links
 from spyglass_service.feed_registry import NotAFeedError, _validate_feed
+from spyglass_service.radar import netguard
 
 logger = logging.getLogger(__name__)
 
@@ -163,11 +164,9 @@ def discover(
 
     owns_client = client is None
     if owns_client:
-        client = httpx.Client(
-            timeout=httpx.Timeout(connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=5.0, pool=5.0),
-            follow_redirects=True,
-            headers={"User-Agent": _USER_AGENT},
-        )
+        # Public addresses only, on every redirect hop; reads only, no cookies.
+        client = netguard.page_client(
+            timeout=httpx.Timeout(connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=5.0, pool=5.0))
 
     try:
         result = _run_discovery(url, depth, registry_urls=registry_urls, client=client)

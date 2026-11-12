@@ -1,0 +1,126 @@
+/* Profile page: a long form set out as hairline-separated groups. Tokens only. */
+.rpr-section {
+  margin-bottom: var(--space-10);
+}
+.rpr-skeleton,
+.rpr-error {
+  display: grid;
+  gap: var(--space-4);
+}
+.rpr-error {
+  justify-items: start;
+}
+.rpr-restored {
+  margin: 0 0 var(--space-6);
+}
+.rpr-row {
+  padding: var(--space-3) 0;
+}
+.rpr-row--stack {
+  padding: var(--space-4) 0 0;
+}
+.rpr-grid {
+  display: grid;
+  gap: 0 var(--space-4);
+}
+.rpr-topic {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: start;
+  gap: var(--space-3);
+}
+.rpr-topic--avoid {
+  grid-template-columns: 1fr auto;
+}
+.rpr-topic__name {
+  display: grid;
+  gap: 4px;
+}
+.rpr-add {
+  padding-top: var(--space-4);
+}
+.rpr-add > .r-error-text {
+  display: block;
+  margin-top: var(--space-2);
+}
+.rpr-empty {
+  margin: var(--space-3) 0;
+}
+.rpr-lede {
+  margin: 0 0 var(--space-4);
+  max-width: 60ch;
+}
+.rpr-learned {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-8);
+}
+.rpr-learned__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.rpr-learned__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+  font-family: var(--font-serif);
+  font-size: var(--text-base);
+  color: var(--ink-2);
+}
+/* Your projects: the name (read-only), then the one line the AI may see, then Remove when the project is gone. */
+.rpr-project {
+  display: grid;
+  grid-template-columns: minmax(120px, 200px) 1fr auto;
+  align-items: start;
+  gap: var(--space-3);
+}
+.rpr-project__name {
+  padding-top: 7px;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.rpr-project__line {
+  display: grid;
+  gap: 4px;
+}
+.rpr-projects-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+}
+.rpr-savebar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  background: var(--paper);
+  border-top: 1px solid var(--rule-strong);
+}
+.rpr-savebar__text {
+  flex: 1;
+  min-height: 20px;
+  font-size: var(--text-xs);
+}
+.rpr-saved {
+  color: var(--ok);
+}
+@media (max-width: 720px) {
+  .rpr-learned {
+    grid-template-columns: 1fr;
+  }
+  .rpr-topic,
+  .rpr-project {
+    grid-template-columns: 1fr;
+  }
+}

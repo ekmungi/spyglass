@@ -1,0 +1,52 @@
+/* "Open in Claude Code" dialog: two radio rows and the text that will be sent. Tokens only. */
+.rcc-lede {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-base);
+  color: var(--ink-2);
+  max-width: 52ch;
+}
+.rcc-choices {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: 0;
+}
+.rcc-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+}
+.rcc-choice input {
+  margin-top: 4px;
+  accent-color: var(--accent);
+}
+.rcc-choice__name {
+  display: block;
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+.rcc-choice__hint {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.rcc-sent__text {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--ink-2);
+  background: var(--surface);
+  resize: vertical;
+  transition: opacity var(--dur-fast) var(--ease-enter), box-shadow var(--dur-fast) var(--ease-enter);
+}
+.rcc-sent__text[data-stale='true'] {
+  opacity: 0.55;
+}
+.rcc-problem {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--danger);
+}

@@ -171,8 +171,10 @@ def test_build_rungs_always_includes_curl() -> None:
     """curl_cffi (T1) is always in the ladder, regardless of the Jina toggle."""
     from spyglass_service.fetch_acquire import _acquire_curl_cffi
 
-    rungs = build_rungs(_settings(jina_enabled=False, browser_enabled=False))
+    rungs = build_rungs(_settings(jina_enabled=False, browser_enabled=False), guarded=False)
     assert _acquire_curl_cffi in rungs
+    guarded = build_rungs(_settings(jina_enabled=False, browser_enabled=False))
+    assert len(guarded) == 1 and guarded[0].tier == "T1"  # by default the redirect-checking rung
 
 
 def test_build_rungs_includes_jina_when_enabled() -> None:
@@ -260,3 +262,74 @@ def test_build_rungs_browser_rung_identity_excluded_from_pdf_ladder() -> None:
     # The html ladder's extra rung (the browser one) must not appear anywhere in pdf's.
     browser_rung = html_rungs[-1]
     assert browser_rung not in pdf_rungs
+
+
+# -- make_jina_rung: the address is only sent after the outbound guard approves it -----
+
+_PRIVATE_URLS = (
+    "http://corp-wiki.intranet/page?token=secret",  # an internal name
+    "http://10.1.2.3/page?token=secret",  # a private address literal
+    "http://user:pw" "@example.test/page",  # user info
+    "ftp://example.test/file",  # not http(s)
+)
+
+
+def _spy_fetcher(captured: list[httpx.Request]):
+    """A fetcher that records every request and would answer 200 if it were ever reached."""
+    def fetcher(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, text="should never be fetched")
+
+    return fetcher
+
+
+def test_jina_rung_refuses_addresses_the_guard_does_not_approve() -> None:
+    """A non-public address never reaches the transport and fails without echoing the address."""
+    captured: list[httpx.Request] = []
+    rung = make_jina_rung(api_key="sk-jina-abc", fetcher=_spy_fetcher(captured))
+
+    for url in _PRIVATE_URLS:
+        result = rung(url)
+        assert result.ok is False
+        assert result.tier == "T2"
+        assert result.http_status is None
+        assert "token=secret" not in (result.error or "")
+        assert "secret" not in repr(result.attempts)
+
+    assert captured == []
+
+
+def test_jina_rung_refuses_a_host_name_that_cannot_be_resolved(monkeypatch) -> None:
+    """A name that resolves only on a private network (no public answer) is never sent out."""
+    monkeypatch.setattr("spyglass_service.radar.netguard.resolve", lambda host: [])
+    captured: list[httpx.Request] = []
+    rung = make_jina_rung(fetcher=_spy_fetcher(captured))
+
+    result = rung("http://corp-wiki/page?token=secret")
+
+    assert result.ok is False
+    assert result.tier == "T2"
+    assert "token=secret" not in (result.error or "")
+    assert captured == []
+
+
+def test_jina_rung_refuses_a_name_that_resolves_to_a_private_address(monkeypatch) -> None:
+    """A public-looking name with a private answer is refused too."""
+    monkeypatch.setattr("spyglass_service.radar.netguard.resolve", lambda host: ["10.0.0.7"])
+    captured: list[httpx.Request] = []
+    rung = make_jina_rung(fetcher=_spy_fetcher(captured))
+
+    assert rung("https://wiki.example.test/page").ok is False
+    assert captured == []
+
+
+def test_jina_rung_still_fetches_a_public_address() -> None:
+    """A public address passes the guard and is sent to the rendering service as before."""
+    captured: list[httpx.Request] = []
+    rung = make_jina_rung(fetcher=_spy_fetcher(captured))
+
+    result = rung("https://example.test/public?q=1")
+
+    assert result.ok is True
+    assert len(captured) == 1
+    assert "example.test/public?q=1" in str(captured[0].url)

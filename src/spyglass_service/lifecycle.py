@@ -26,6 +26,7 @@ from spyglass_service.content_store import delete_content
 from spyglass_service.embeddings import EmbeddingIndex
 from spyglass_service.highlights import delete_for_card
 from spyglass_service.models import Card, CardState, Embedding, InboxEntry, Item, Tombstone
+from spyglass_service.radar import from_you_store
 
 
 def add_tombstone(engine: Engine, source: str, external_id: str) -> None:
@@ -157,6 +158,8 @@ def delete_cards(
             if item is not None:
                 session.delete(item)
                 session.commit()
+        # A picture or PDF the reader sent in is kept in its own store until its item is deleted.
+        from_you_store.remove(settings.data_dir, item_id)
         deleted += 1
 
     # No Raindrop items in this batch -- nothing to cascade.

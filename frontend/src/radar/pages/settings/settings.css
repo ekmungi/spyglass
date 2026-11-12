@@ -1,0 +1,343 @@
+/* Settings page: grouped forms on hairlines, one save per group. Tokens only. */
+.rst-section {
+  margin-bottom: var(--space-10);
+}
+.rst-skeleton,
+.rst-error {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+.rst-error {
+  justify-items: start;
+}
+.rst-defaults {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-3) 0 var(--space-5);
+}
+.rst-engines {
+  margin-bottom: var(--space-4);
+}
+.rst-engine {
+  padding: var(--space-4) 0;
+}
+.rst-engine__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+.rst-name {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--ink);
+}
+.rst-ok {
+  font-size: var(--text-xs);
+  color: var(--ok);
+}
+.rst-reason {
+  margin: var(--space-1) 0 0;
+}
+.rst-sub {
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+.rst-switch-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.rst-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.rst-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.rst-field-row .r-field {
+  flex: 1 1 260px;
+  margin-bottom: 0;
+}
+.rst-custom {
+  max-width: 420px;
+  padding-top: var(--space-3);
+}
+.rst-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0 var(--space-4);
+}
+.rst-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.rst-note {
+  display: inline-block;
+  min-height: 20px;
+  font-size: var(--text-xs);
+}
+/* "Saved", "Saving…" or a problem fades in beside its button (the reserved height keeps it from
+   shifting anything). */
+.rst-note > * {
+  transition: opacity var(--dur) var(--ease-enter);
+}
+@starting-style {
+  .rst-note > * {
+    opacity: 0;
+  }
+}
+.rst-theme {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  border: 0;
+}
+.rst-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+.rst-radio input {
+  accent-color: var(--accent);
+}
+
+/* AI for the daily judging: a block under the engines list. */
+.rst-judging {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--rule);
+}
+.rst-subhead {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--ink);
+}
+.rst-judging .rst-defaults {
+  padding-bottom: var(--space-3);
+}
+.rst-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+.rst-chain__label {
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+.rst-chain__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rst-chain__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 4px 2px var(--space-3);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+/* Privacy: three sentences, four switches with their line, two disclosures. */
+.rst-privacy-lede {
+  margin: 0 0 var(--space-4);
+  max-width: 60ch;
+  font-size: var(--text-base);
+  color: var(--ink-2);
+  line-height: var(--leading-snug);
+}
+.rst-privacy-note {
+  margin: var(--space-5) 0 0;
+}
+.rst-switches {
+  margin-bottom: var(--space-2);
+}
+.rst-switch-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+.rst-switch-line__text {
+  flex: 1;
+  font-size: var(--text-base);
+  color: var(--ink);
+  line-height: var(--leading-snug);
+}
+.rst-disclosure {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--rule);
+}
+.rst-disclosure > summary {
+  cursor: pointer;
+  font-size: var(--text-base);
+  color: var(--accent);
+}
+.rst-disclosure[open] > summary {
+  margin-bottom: var(--space-3);
+}
+.rst-sent {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--ink-2);
+  background: var(--surface);
+  resize: vertical;
+}
+.rst-examples {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+}
+.rst-minihead {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+}
+.rst-titles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+  font-family: var(--font-serif);
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+.rst-destination {
+  padding: var(--space-3) 0;
+}
+.rst-destination[data-enabled='false'] {
+  opacity: 0.55;
+}
+.rst-destination__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+.rst-destination p {
+  margin: 2px 0 0;
+}
+.rst-key {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+@media (max-width: 720px) {
+  .rst-examples {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Settings keeps its own fixed column instead of following the Text width setting, so changing the
+   width never moves the slider (or any other control) out from under the reader's hand. 680px is the
+   designed default width. */
+.r-page.rst-page {
+  max-width: 680px;
+}
+.rst-steps {
+  margin: var(--space-3) 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+}
+.rst-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+.rst-key__value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* Usage table: numbers align right, the job names stay on the left. */
+.rst-usage {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  margin: var(--space-3) 0;
+}
+.rst-usage th,
+.rst-usage td {
+  padding: var(--space-2) var(--space-3);
+  text-align: right;
+  border-bottom: 1px solid var(--rule);
+  font-weight: 400;
+}
+.rst-usage thead th {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.rst-usage th:first-child {
+  text-align: left;
+  padding-left: 0;
+}
+.rst-usage tfoot th,
+.rst-usage tfoot td {
+  font-weight: 600;
+  border-bottom: 0;
+}
+
+/* Filing: the three modes, each with its own sentence under the label. */
+.rst-filing-modes {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 var(--space-4);
+}
+.rst-filing-mode {
+  align-items: flex-start;
+}
+.rst-filing-mode input {
+  margin-top: 3px;
+}
+.rst-filing-mode__label {
+  display: block;
+  color: var(--ink);
+}
+.rst-filing-mode__sentence {
+  display: block;
+  max-width: 60ch;
+}
+.rst-filing-note {
+  max-width: 64ch;
+  margin: var(--space-3) 0;
+}

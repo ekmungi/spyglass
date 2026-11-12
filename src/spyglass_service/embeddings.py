@@ -52,6 +52,12 @@ class EmbeddingIndex:
         """Embed a query string to a normalized float32 vector (in-memory, not stored)."""
         return _normalize(self._embed_fn([text])[0].astype(np.float32))
 
+    def embed_many(self, texts: list[str]) -> np.ndarray:
+        """Embed several strings to normalized float32 vectors, one row each (in memory, not stored)."""
+        if not texts:
+            return np.empty((0, self.dim), dtype=np.float32)
+        return np.vstack([_normalize(row.astype(np.float32)) for row in self._embed_fn(texts)])
+
     def has(self, item_id: int) -> bool:
         """Check if item_id is in the index."""
         return item_id in self._ids
@@ -92,6 +98,19 @@ class EmbeddingIndex:
                 if len(out) >= k:
                     break
             return out
+
+    def nearest(self, vector: np.ndarray, k: int = 50) -> list[tuple[int, float]]:
+        """The k stored item_ids closest to a normalized query vector, highest cosine first.
+
+        Read-only counterpart of `similar` for a vector that is not an indexed item (for
+        example an embedded question). An empty index gives [].
+        """
+        with self._lock:
+            if not self._ids:
+                return []
+            scores = self._matrix @ vector.astype(np.float32)
+            order = np.argsort(-scores)[:k]
+            return [(self._ids[i], float(scores[i])) for i in order]
 
     def matrix_for(self, item_ids: list[int]) -> tuple[list[int], np.ndarray]:
         """Stacked vectors for the subset of item_ids present, in requested order.

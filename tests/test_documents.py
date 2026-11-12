@@ -646,7 +646,7 @@ def test_fetch_fulltext_pdf_url_ladder_excludes_browser_rung() -> None:
     def blocked_pdf_handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(403)
 
-    def blocked_curl_stub(url: str):
+    def blocked_curl_stub(url: str, **_options):  # the guarded rung passes redirect/pin options
         from spyglass_service.fetch_acquire import AcquireResult
 
         return AcquireResult(
@@ -685,7 +685,7 @@ def _spy_rung(name: str, calls: list[str], result_factory):
     `calls` whenever invoked -- lets a test assert both WHICH rungs fired and in
     what order, and (just as importantly) which rungs were never called at all."""
 
-    def rung(url: str):
+    def rung(url: str, **_options):  # the guarded T1 rung passes redirect and pinning options
         calls.append(name)
         return result_factory(url)
 

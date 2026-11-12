@@ -30,6 +30,10 @@ dependencies = [
     "patchright>=1.61.2",
     "pymupdf>=1.28.0",
     "readability-lxml>=0.8.4.1",
+    "nh3>=0.3.7",
+    "feedparser>=6.0.12",
+    "googlenewsdecoder>=0.2.2",
+    "keyring>=25.7.0",
 ]
 
 [dependency-groups]

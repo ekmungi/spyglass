@@ -1,0 +1,143 @@
+/* Radar design tokens: colour roles, type scale, spacing, radii and measure.
+   Light is the default; dark follows prefers-color-scheme unless [data-theme] forces one. */
+
+:root {
+  /* Colour roles (light). Paper is a cool near-white; the single accent is an ink blue. */
+  --paper: #fbfbf9;          /* page background */
+  --paper-raised: #ffffff;   /* menus, dialogs, the assistant composer */
+  --surface: #f2f2ef;        /* hover wash, user bubbles, inset controls */
+  --ink: #1b1d21;            /* headlines and primary text */
+  --ink-2: #353840;          /* reading text */
+  --muted: #676b73;          /* meta lines, secondary labels (AA on paper) */
+  --faint: #8f939a;          /* placeholders, disabled text (never for body copy) */
+  --rule: #e4e4e0;           /* hairline rules */
+  --rule-strong: #cfcfca;    /* control outlines, focused rules */
+  --accent: #2a4bb3;         /* the one accent: links, active state, watch-list rule */
+  --accent-ink: #ffffff;     /* text on a filled accent button */
+  --accent-soft: #e8ecf8;    /* selection wash, quote chips, active chip fill */
+  --danger: #a33a2c;         /* inline errors only, never decoration */
+  --ok: #2f6b45;             /* confirmations */
+  --overlay: rgb(20 22 26 / 0.32);
+  --read-dim: 0.58;          /* opacity of a story the reader already opened */
+
+  /* Type families. Newsreader carries headlines and reading; Inter carries interface. */
+  --font-serif: "Fira Sans", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Fira Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Fira Code Variable", "Fira Code", ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+
+  /* Type scale (px). Interface sizes step gently; editorial sizes jump. */
+  --text-2xs: calc(11.5px * var(--type-scale, 1));
+  --text-xs: calc(12.5px * var(--type-scale, 1));   /* meta lines */
+  --text-sm: calc(13.5px * var(--type-scale, 1));   /* buttons, chips, rail */
+  --text-base: calc(15px * var(--type-scale, 1));   /* interface body */
+  --text-read: calc(18.5px * var(--type-scale, 1)); /* reading text in the serif */
+  --text-lede: calc(21px * var(--type-scale, 1));   /* the brief's opening, summary lead */
+  --text-h3: calc(18px * var(--type-scale, 1));     /* compact row headline */
+  --text-h2: calc(23px * var(--type-scale, 1));     /* top-story headline */
+  --text-h1: calc(34px * var(--type-scale, 1));     /* reader title */
+  --text-display: clamp(calc(40px * var(--type-scale, 1)), 4.6vw, calc(58px * var(--type-scale, 1))); /* the date on Today */
+
+  --leading-tight: 1.18;
+  --leading-snug: 1.35;
+  --leading-ui: 1.45;
+  --leading-read: 1.62;
+
+  /* Spacing on a 4px base. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radii: controls are softly rounded; content never sits in boxes. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* Measure and layout. */
+  --measure: 680px;          /* main column on Today and Feed */
+  --measure-read: 700px;     /* reader column incl. padding: about 75 characters of 18.5px serif */
+  --rail-width: 212px;
+  --rail-width-collapsed: 60px;
+  --assist-width: 380px;     /* default; the panel is resizable and remembers its width */
+
+  /* Motion: three durations, two easings and one distance; zero under prefers-reduced-motion.
+     Only opacity, transform (and the individual scale/translate properties) and colour animate.
+     An exit takes the next shorter duration than its entrance and the exit easing. */
+  --dur-fast: 120ms;   /* state changes: hover, press, focus ring, selected colour */
+  --dur: 200ms;        /* small overlays: menu, tooltip, toast; also the exit of a large surface */
+  --dur-slow: 280ms;   /* large surfaces: dialog, reader, page change */
+  --ease-enter: cubic-bezier(0.2, 0.7, 0.2, 1); /* decelerating: things arrive and settle */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);      /* accelerating: things leave without lingering */
+  --ease: var(--ease-enter);                    /* older name, still used by page styles */
+  --shift: 6px;        /* the one small translation: a dialog rising, a toast arriving, a page settling */
+
+  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
+  /* Skeleton shimmer: a faint lighter band over --surface. */
+  --skel-sheen: rgb(255 255 255 / 0.55);
+
+  color-scheme: light;
+}
+
+/* Dark roles, used when the system prefers dark and no manual choice forces light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #15171a;
+    --paper-raised: #1c1f23;
+    --surface: #202328;
+    --ink: #eceae4;
+    --ink-2: #d0cec7;
+    --muted: #9a9ea5;
+    --faint: #6d7178;
+    --rule: #2b2e33;
+    --rule-strong: #3d4148;
+    --accent: #9fb3f3;
+    --accent-ink: #12141a;
+    --accent-soft: #232c47;
+    --danger: #e58b7d;
+    --ok: #8fc7a0;
+    --overlay: rgb(0 0 0 / 0.5);
+    --read-dim: 0.55;
+    --skel-sheen: rgb(255 255 255 / 0.045);
+    color-scheme: dark;
+  }
+}
+
+/* The same dark roles, forced by the manual toggle. */
+:root[data-theme="dark"] {
+  --paper: #15171a;
+  --paper-raised: #1c1f23;
+  --surface: #202328;
+  --ink: #eceae4;
+  --ink-2: #d0cec7;
+  --muted: #9a9ea5;
+  --faint: #6d7178;
+  --rule: #2b2e33;
+  --rule-strong: #3d4148;
+  --accent: #9fb3f3;
+  --accent-ink: #12141a;
+  --accent-soft: #232c47;
+  --danger: #e58b7d;
+  --ok: #8fc7a0;
+  --overlay: rgb(0 0 0 / 0.5);
+  --read-dim: 0.55;
+  --skel-sheen: rgb(255 255 255 / 0.045);
+  color-scheme: dark;
+}
+
+/* Reduced motion: every duration is zero and nothing travels. Rules that loop (skeleton shimmer,
+   progress bars) switch their animation off in their own reduced-motion blocks. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+    --shift: 0px;
+  }
+}

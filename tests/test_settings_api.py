@@ -23,6 +23,15 @@ def test_get_settings_returns_editable_subset(tmp_path: Path) -> None:
     assert body["vault_path"] is None
 
 
+def test_the_removed_vault_folder_setting_is_not_served_or_accepted(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        assert "radar_vault_subdir" not in client.get("/api/settings").json()
+        client.patch("/api/settings", json={"radar_vault_subdir": "Anywhere"})
+        assert "radar_vault_subdir" not in client.get("/api/settings").json()
+    overlay = tmp_path / "data" / "settings.json"
+    assert not overlay.is_file() or "radar_vault_subdir" not in overlay.read_text(encoding="utf-8")
+
+
 def test_get_settings_includes_yt_transcribe_cmd(tmp_path: Path) -> None:
     """The yt-transcribe CLI path is part of the editable settings."""
     with make_client(tmp_path) as client:

@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- popup.html - the small window that opens when the toolbar button is clicked. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Send to Spyglass</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <p id="site" class="site"></p>
+      <p id="title" class="title"></p>
+      <label class="note">
+        <span>Note (optional)</span>
+        <input id="note" type="text" maxlength="500" autocomplete="off" placeholder="Why this matters, or which project it is for" />
+      </label>
+      <div class="buttons">
+        <button id="send-page" type="button" class="primary" disabled>Send this page</button>
+        <button id="send-selection" type="button" disabled>Send selected text</button>
+      </div>
+      <p id="status" class="status" role="status"></p>
+      <p id="hint" class="hint"></p>
+      <div class="footer">
+        <button id="open" type="button" class="link" hidden>Open in Spyglass</button>
+        <button id="settings" type="button" class="link">Settings</button>
+      </div>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

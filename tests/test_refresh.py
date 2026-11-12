@@ -100,10 +100,10 @@ def test_old_successful_run_is_stale_and_failed_runs_do_not_count(tmp_path: Path
     assert is_stale(engine, max_age=timedelta(hours=6)) is True
 
 
-def test_run_refresh_writes_feed_health_for_rss_collector(tmp_path: Path) -> None:
+def test_run_refresh_writes_feed_health_for_rss_collector(tmp_path: Path, fixtures_web_url: str) -> None:
     """run_refresh wires health write-back: Feed row gets last_fetch_status after refresh."""
     engine = make_engine(tmp_path)
-    fixture_url = str(FIXTURE)
+    fixture_url = f"{fixtures_web_url}/{FIXTURE.name}"
     with Session(engine) as session:
         session.add(Feed(feed_url=fixture_url, name="Sample", kind="rss", added_via="manual"))
         session.commit()

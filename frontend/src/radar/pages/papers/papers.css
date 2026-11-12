@@ -1,0 +1,98 @@
+/* Find papers page: one large question, then a ranked list of hairline-separated rows. Tokens only. */
+.rpp-search {
+  margin-bottom: var(--space-4);
+}
+.rpp-search__label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+  color: var(--ink);
+}
+.rpp-search__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+.rpp-search__input {
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+  padding: var(--space-3) var(--space-4);
+}
+.rpp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.rpp-status {
+  min-height: 22px; /* reserved so the waiting line never pushes the results down */
+  margin-bottom: var(--space-4);
+}
+/* The service's one quiet sentence about a degraded search. */
+.rpp-notice {
+  margin: 0 0 var(--space-4);
+}
+.rpp-skeleton {
+  display: grid;
+  gap: var(--space-4);
+}
+.rpp-error {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+.rpp-list {
+  margin: 0;
+  padding: 0;
+}
+.rpp-row {
+  padding: var(--space-5) 0;
+}
+.rpp-title {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-serif);
+  font-size: var(--text-h3);
+  font-weight: max(500, var(--heading-min, 0));
+  line-height: var(--leading-snug);
+  color: var(--ink);
+}
+.rpp-why {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.rpp-label {
+  display: block;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.rpp-abstract {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+.rpp-abstract summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.rpp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.rpp-actions a {
+  text-decoration: none;
+}
+@media (max-width: 720px) {
+  .rpp-search__row {
+    grid-template-columns: 1fr;
+  }
+}

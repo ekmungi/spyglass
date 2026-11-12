@@ -1,0 +1,468 @@
+/* Reader: top bar, title, summary block and the typographic container for the document. */
+
+.r-layer--reader:focus-visible {
+  box-shadow: none;
+}
+
+/* Sticky top bar */
+.r-readerbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-5);
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+}
+.r-readerbar__left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.r-readerbar__meta {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.r-readerbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+@media (max-width: 760px) {
+  .r-readerbar__actions .r-btn--quiet:not([aria-haspopup]) {
+    display: none;
+  }
+}
+
+/* Article column */
+.r-reader {
+  max-width: var(--measure-read);
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-8) var(--space-16);
+}
+.r-reader__head {
+  margin-bottom: var(--space-6);
+}
+.r-reader__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--text-h1);
+  font-weight: max(450, var(--heading-min, 0));
+  line-height: var(--leading-tight);
+  letter-spacing: -0.014em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.r-reader__byline {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+/* Summary block: key points, then why it matters, set off by hairlines rather than a box. */
+.r-summary {
+  margin: 0 0 var(--space-10);
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule);
+}
+.r-summary__points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+}
+.r-summary__points li {
+  position: relative;
+  padding-left: var(--space-5);
+  font-family: var(--font-serif);
+  font-size: calc(17.5px * var(--type-scale, 1));
+  line-height: 1.5;
+  color: var(--ink);
+}
+.r-summary__points li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.72em;
+  width: 8px;
+  height: 1.5px;
+  background: var(--accent);
+}
+.r-summary__note {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--accent);
+  font-family: var(--font-serif);
+  font-size: calc(17.5px * var(--type-scale, 1));
+  line-height: 1.5;
+  color: var(--ink);
+}
+.r-summary__note-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+}
+/* Where the reader's Claude Code session filed this item: one calm line, the path small beneath it. */
+.r-summary__filed {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+.r-summary__filed-path {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+/* The quiet "Open in Claude Code…" under the reader's note; it lines up with the note's text. */
+.r-summary__action {
+  margin: calc(var(--space-2) * -1) 0 var(--space-4) calc(var(--space-3) - var(--space-2));
+}
+.r-summary__snippet {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: calc(17.5px * var(--type-scale, 1));
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.r-summary__why {
+  margin-top: var(--space-5);
+}
+.r-summary__why-label {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+}
+.r-summary__why p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: calc(17px * var(--type-scale, 1));
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* The document */
+.r-prose {
+  font-family: var(--font-serif);
+  font-size: var(--text-read);
+  line-height: var(--leading-read);
+  color: var(--ink-2);
+  overflow-wrap: break-word;
+  hanging-punctuation: first;
+  /* Page content is untrusted: nothing inside may paint outside this box or cover the app.
+     `contain: paint` clips descendants to the box and makes it the containing block for any
+     fixed or absolute descendant, so a stray `position: fixed` cannot reach the viewport. */
+  position: relative;
+  contain: paint;
+  overflow-x: clip;
+  isolation: isolate;
+}
+.r-prose > :first-child {
+  margin-top: 0;
+}
+.r-prose p,
+.r-prose ul,
+.r-prose ol,
+.r-prose dl {
+  margin: 0 0 1.05em;
+}
+.r-prose h1,
+.r-prose h2,
+.r-prose h3,
+.r-prose h4 {
+  font-family: var(--font-serif);
+  color: var(--ink);
+  line-height: 1.25;
+  letter-spacing: -0.008em;
+  text-wrap: balance;
+}
+.r-prose h1,
+.r-prose h2 {
+  font-size: 1.42em;
+  font-weight: 500;
+  margin: 1.9em 0 0.6em;
+}
+.r-prose h3 {
+  font-size: 1.17em;
+  font-weight: 600;
+  margin: 1.6em 0 0.5em;
+}
+.r-prose h4,
+.r-prose h5,
+.r-prose h6 {
+  font-family: var(--font-sans);
+  font-size: 0.82em;
+  font-weight: 600;
+  margin: 1.5em 0 0.4em;
+  color: var(--ink);
+}
+.r-prose a {
+  color: var(--accent);
+}
+.r-prose strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+.r-prose ul,
+.r-prose ol {
+  padding-left: 1.4em;
+}
+.r-prose li {
+  margin: 0.3em 0;
+}
+.r-prose li::marker {
+  color: var(--muted);
+}
+.r-prose blockquote {
+  margin: 1.5em 0;
+  padding: 0 0 0 1.1em;
+  border-left: 2px solid var(--accent);
+  color: var(--ink);
+  font-style: italic;
+}
+.r-prose blockquote p:last-child {
+  margin-bottom: 0;
+}
+.r-prose hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2em 0;
+}
+.r-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.r-prose pre {
+  margin: 1.4em 0;
+  padding: var(--space-4) var(--space-5);
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: 0.8em;
+  line-height: 1.55;
+}
+.r-prose pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+.r-prose img,
+.r-prose video,
+.r-prose svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.4em auto;
+  border-radius: var(--radius-sm);
+}
+.r-prose figure {
+  margin: 1.8em 0;
+}
+.r-prose figure img {
+  margin: 0 auto;
+}
+.r-prose figcaption {
+  margin-top: var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: var(--leading-ui);
+  color: var(--muted);
+}
+.r-table-wrap {
+  margin: 1.6em 0;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.r-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.r-prose th,
+.r-prose td {
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--rule);
+}
+.r-prose th {
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.r-prose tr:last-child td {
+  border-bottom: 0;
+}
+.r-prose math {
+  font-size: 1.05em;
+}
+/* Equations from LaTeX conversions arrive inside tables; they take the body size and serif, not the
+   smaller sans of data tables. */
+.r-prose table:has(math[display="block"]),
+.r-prose .ltx_equation,
+.r-prose .ltx_equationgroup,
+.r-prose .ltx_eqn_table {
+  font-family: var(--font-serif);
+  font-size: var(--text-read);
+}
+.r-prose math[display="block"] {
+  font-size: var(--text-read);
+  display: block;
+  margin: 1.2em 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+/* PDF and video */
+.r-pdf {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 140px);
+  min-height: 520px;
+  margin-top: var(--space-6);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.r-video {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin: 0 0 var(--space-8);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #111;
+}
+.r-video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* Pending and failed states */
+.r-reader-pending {
+  display: grid;
+  gap: var(--space-5);
+}
+.r-reader-unavailable {
+  padding: var(--space-6) 0;
+}
+.r-reader-unavailable__title {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-serif);
+  font-size: calc(21px * var(--type-scale, 1));
+  color: var(--ink);
+}
+.r-reader-unavailable__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+/* Related */
+.r-related {
+  margin-top: var(--space-16);
+}
+.r-related__link {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3) 0;
+  color: inherit;
+  text-decoration: none;
+}
+/* The underline is always there in a transparent colour, so hovering fades it in instead of
+   snapping it on (as on the Feed's rows). */
+.r-related__link .r-headline {
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+  transition: text-decoration-color var(--dur-fast) var(--ease-enter);
+}
+.r-related__link:hover .r-headline {
+  text-decoration-color: var(--rule-strong);
+}
+
+/* Floating selection toolbar */
+.r-seltool {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  /* Anchored by its bottom edge so it sits above the selected line whatever its height. */
+  transform: translate(-50%, -100%);
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  /* A small overlay: it fades in and settles half a --shift away from the selected text, using the
+     `translate` property so the anchoring `transform` above is untouched. */
+  animation: r-seltool-in var(--dur) var(--ease-enter);
+}
+.r-seltool--below {
+  transform: translate(-50%, 0);
+  animation-name: r-seltool-in-below;
+}
+@keyframes r-seltool-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--shift) / 2);
+  }
+}
+@keyframes r-seltool-in-below {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--shift) / -2);
+  }
+}
+.r-seltool button {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--paper);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease-enter);
+}
+.r-seltool button:hover,
+.r-seltool button:focus-visible {
+  background: color-mix(in srgb, var(--paper) 16%, transparent);
+  box-shadow: none;
+}
+
+@media (max-width: 720px) {
+  .r-reader {
+    padding: var(--space-6) var(--space-5) var(--space-12);
+  }
+  .r-reader__title {
+    font-size: calc(28px * var(--type-scale, 1));
+  }
+}

@@ -214,6 +214,18 @@ def test_post_feed_not_a_feed_returns_422(tmp_path: Path) -> None:
     assert "url" in detail
 
 
+def test_post_feed_local_address_is_refused_with_a_plain_reason(tmp_path: Path) -> None:
+    """A file path, a file: address and a .. path are each refused, and nothing is stored."""
+    with make_client(tmp_path) as client:
+        for address in ("/etc/passwd", "file:///etc/passwd", "../feed.xml"):
+            resp = client.post("/api/feeds", json={"url": address})
+            assert resp.status_code == 422
+            detail = resp.json()["detail"]
+            assert detail["kind"] == "local_file"
+            assert detail["reason"] == "Spyglass reads feeds from the web only."
+        assert client.get("/api/feeds").json() == []
+
+
 def test_post_feed_blocked_says_why(tmp_path: Path) -> None:
     """A site that refuses Spyglass is reported as blocked, with a plain reason."""
     from spyglass_service.feed_registry import NotAFeedError  # noqa: PLC0415

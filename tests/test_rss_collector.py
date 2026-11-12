@@ -14,37 +14,37 @@ from spyglass_service.models import Feed
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_feed.xml"
 
 
-def make_collector(tmp_path: Path) -> RssCollector:
-    """Collector subscribed to the local fixture feed, storing reader state in tmp."""
-    return RssCollector(feed_urls=[str(FIXTURE)], reader_db_path=tmp_path / "reader.db")
+def make_collector(tmp_path: Path, web: str) -> RssCollector:
+    """Collector subscribed to the fixture feed served at `web`, storing reader state in tmp."""
+    return RssCollector(feed_urls=[f"{web}/{FIXTURE.name}"], reader_db_path=tmp_path / "reader.db")
 
 
-def test_collects_entries_from_a_feed(tmp_path: Path) -> None:
+def test_collects_entries_from_a_feed(tmp_path: Path, fixtures_web_url: str) -> None:
     """Both fixture entries come back as collected items with source 'rss'."""
-    items = make_collector(tmp_path).collect()
+    items = make_collector(tmp_path, fixtures_web_url).collect()
     assert len(items) == 2
     assert {i.source for i in items} == {"rss"}
     titles = {i.title for i in items}
     assert "EU AI Act implementation timeline moves" in titles
 
 
-def test_entries_carry_stable_external_ids_and_urls(tmp_path: Path) -> None:
+def test_entries_carry_stable_external_ids_and_urls(tmp_path: Path, fixtures_web_url: str) -> None:
     """External ids come from the feed guid so re-fetches dedupe correctly."""
-    items = make_collector(tmp_path).collect()
+    items = make_collector(tmp_path, fixtures_web_url).collect()
     by_id = {i.external_id: i for i in items}
     assert "https://example.test/posts/1" in by_id
     assert by_id["https://example.test/posts/1"].url == "https://example.test/posts/1"
 
 
-def test_entries_carry_the_feed_title_as_origin(tmp_path: Path) -> None:
+def test_entries_carry_the_feed_title_as_origin(tmp_path: Path, fixtures_web_url: str) -> None:
     """Each item records WHICH feed it came from, not just the collector name."""
-    items = make_collector(tmp_path).collect()
+    items = make_collector(tmp_path, fixtures_web_url).collect()
     assert {i.origin for i in items} == {"Sample Research Feed"}
 
 
-def test_recollect_is_idempotent(tmp_path: Path) -> None:
+def test_recollect_is_idempotent(tmp_path: Path, fixtures_web_url: str) -> None:
     """Collecting twice from an unchanged feed yields the same item set, no errors."""
-    collector = make_collector(tmp_path)
+    collector = make_collector(tmp_path, fixtures_web_url)
     first = collector.collect()
     second = collector.collect()
     assert {i.external_id for i in first} == {i.external_id for i in second}
@@ -100,22 +100,22 @@ def test_unreachable_feed_does_not_raise(tmp_path: Path) -> None:
     assert collector.collect() == []
 
 
-def test_collected_items_carry_the_feed_url(tmp_path: Path) -> None:
+def test_collected_items_carry_the_feed_url(tmp_path: Path, fixtures_web_url: str) -> None:
     """Each RSS item carries feed_url equal to the resolved feed key.
 
     feed_url on CollectedItem is Point 2 of the 3-point threading chain;
     this test verifies the RssCollector sets it correctly from entry.feed.url.
     """
-    items = make_collector(tmp_path).collect()
+    items = make_collector(tmp_path, fixtures_web_url).collect()
     assert len(items) > 0
-    fixture_url = str(FIXTURE)
+    fixture_url = f"{fixtures_web_url}/{FIXTURE.name}"
     for item in items:
         assert item.feed_url == fixture_url, (
             f"Expected feed_url={fixture_url!r}, got {item.feed_url!r}"
         )
 
 
-def test_feed_url_stored_in_db_via_ingest(tmp_path: Path) -> None:
+def test_feed_url_stored_in_db_via_ingest(tmp_path: Path, fixtures_web_url: str) -> None:
     """RSS item's feed_url survives the collect -> ingest -> db round-trip (Point 3).
 
     This integration test verifies all 3 points together: CollectedItem.feed_url
@@ -134,7 +134,7 @@ def test_feed_url_stored_in_db_via_ingest(tmp_path: Path) -> None:
     SQLModel.metadata.create_all(engine)
 
     # Collect from the fixture feed.
-    rss_items = make_collector(tmp_path).collect()
+    rss_items = make_collector(tmp_path, fixtures_web_url).collect()
 
     # Also construct a non-RSS item (no feed_url expected).
     non_rss = CollectedItem(
@@ -154,7 +154,7 @@ def test_feed_url_stored_in_db_via_ingest(tmp_path: Path) -> None:
     rss_stored = [i for i in stored if i.source == "rss"]
     non_rss_stored = [i for i in stored if i.source == "fake"]
 
-    fixture_url = str(FIXTURE)
+    fixture_url = f"{fixtures_web_url}/{FIXTURE.name}"
     assert len(rss_stored) > 0
     for item in rss_stored:
         assert item.feed_url == fixture_url, (
@@ -400,29 +400,29 @@ def test_write_feed_health_isolates_write_exception(
     )
 
 
-def test_write_feed_health_real_fixture_good_feed(tmp_path: Path) -> None:
+def test_write_feed_health_real_fixture_good_feed(tmp_path: Path, fixtures_web_url: str) -> None:
     """Integration: writing health against a real reader DB with the fixture feed."""
-    engine = _make_engine_with_feeds(tmp_path, [str(FIXTURE)])
+    engine = _make_engine_with_feeds(tmp_path, [f"{fixtures_web_url}/{FIXTURE.name}"])
 
     # First populate the reader DB via a real collect().
     collector = RssCollector(
-        feed_urls=[str(FIXTURE)], reader_db_path=tmp_path / "reader.db"
+        feed_urls=[f"{fixtures_web_url}/{FIXTURE.name}"], reader_db_path=tmp_path / "reader.db"
     )
     collector.collect()
 
     write_feed_health(engine, tmp_path / "reader.db")
 
     with Session(engine) as session:
-        row = session.exec(select(Feed).where(Feed.feed_url == str(FIXTURE))).one()
+        row = session.exec(select(Feed).where(Feed.feed_url == f"{fixtures_web_url}/{FIXTURE.name}")).one()
 
     assert row.last_fetch_status == "ok"
     assert row.last_fetch_at is not None
     assert row.last_error is None
 
 
-def test_write_feed_health_real_fixture_broken_feed(tmp_path: Path) -> None:
+def test_write_feed_health_real_fixture_broken_feed(tmp_path: Path, fixtures_web_url: str) -> None:
     """Integration: a non-feed file produces status='error' via the real reader."""
-    not_a_feed = str(Path(__file__).parent / "fixtures" / "not_a_feed.txt")
+    not_a_feed = f"{fixtures_web_url}/not_a_feed.txt"
     engine = _make_engine_with_feeds(tmp_path, [not_a_feed])
 
     collector = RssCollector(

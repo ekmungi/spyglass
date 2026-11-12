@@ -1,0 +1,389 @@
+/* To file: the File button in the reader's top bar, its dialog and the Feed's To file view. Tokens only. */
+.rfq-lede {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-base);
+  color: var(--ink-2);
+  max-width: 52ch;
+}
+.rfq-fields {
+  display: grid;
+  gap: var(--space-4);
+}
+.rfq-fields .r-select {
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* The split control: a main button and a small menu button side by side. */
+.r-filebtn,
+.r-filebtn__state {
+  display: inline-flex;
+  align-items: center;
+}
+/* Each state's label is as wide as the longer label: the other text is laid out invisibly under it
+   (height 0, hidden, no accessible text), so changing state does not change the control's width. */
+.r-filebtn__label {
+  display: inline-flex;
+  flex-direction: column;
+}
+.r-filebtn__label::after {
+  content: attr(data-other) / "";
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+/* Waiting is one button where "File in vault" is two: the 32px menu button minus the inline
+   chevron (14px) and its gap (8px) is added to the right padding, so both states are equally wide. */
+.r-filebtn__queued {
+  padding-right: calc(var(--space-2) + 10px);
+}
+.r-filebtn__short {
+  display: none;
+}
+@media (max-width: 760px) {
+  .r-filebtn__long {
+    display: none;
+  }
+  .r-filebtn__short {
+    display: inline;
+  }
+}
+
+/* The Feed's To file view: a status line, the groups that need the reader, then the Waiting list. */
+.r-filing {
+  display: grid;
+  gap: var(--space-5);
+  margin: 0 0 var(--space-3);
+}
+.r-filing__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.r-filing__line {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--ink-2);
+  max-width: 60ch;
+}
+.r-filing__manual {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+.r-filing__manual-actions,
+.r-filing__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.r-filing__actions {
+  margin-top: var(--space-3);
+}
+.r-filing__request {
+  margin: 0;
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--ink-2);
+  background: var(--surface);
+  white-space: pre-wrap;
+  border-radius: var(--radius-sm);
+}
+.r-filing__problem {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--danger);
+}
+.r-filing__empty {
+  margin: 0;
+}
+
+/* One question per line: the headline, the fixed question, then its choices as one group. */
+.r-filing__question,
+.r-filing__recent {
+  display: grid;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3) 0;
+}
+.r-filing__recent {
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+}
+.r-filing__recent .r-filing__path {
+  grid-column: 1;
+}
+.r-filing__recent > button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+.r-filing__headline {
+  font-family: var(--font-serif);
+  font-size: var(--text-base);
+  line-height: var(--leading-snug);
+  color: var(--ink);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-enter);
+}
+.r-filing__headline:hover {
+  color: var(--accent);
+}
+.r-filing__ask {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.r-filing__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.r-filing__option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-enter),
+    background-color var(--dur-fast) var(--ease-enter),
+    border-color var(--dur-fast) var(--ease-enter),
+    box-shadow var(--dur-fast) var(--ease-enter);
+}
+.r-filing__option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.r-filing__option:hover {
+  background: var(--surface);
+}
+.r-filing__option:has(input:checked) {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.r-filing__option:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+
+/* Vault places and note names (NotePath.tsx): a path wraps only between folders; a file name keeps
+   its end and loses its middle when there is no room. */
+.r-notepath {
+  min-width: 0;
+}
+.r-notepath__part {
+  display: inline-flex;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.r-notepath__sep {
+  color: var(--faint);
+  white-space: pre;
+}
+.r-notepath__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.r-notename {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.r-notename__head {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.r-notename__tail {
+  flex: none;
+}
+
+/* The plan. It is a table when its column is at least 900px wide; below that each proposal is a
+   compact block (container query on the wrapper, so the assistant panel narrowing the Feed counts):
+     headline .................. Strike
+     resource note  Papers / Medicine
+     20261112_Sample_Pap…Rules.md          [Project]
+   A struck row dims and its text is crossed out, both as colour transitions. */
+.r-filing__plan-wrap {
+  container-type: inline-size;
+}
+.r-filing__plan {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.r-filing__plan th {
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  font-weight: 500;
+  text-align: left;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.r-filing__plan td {
+  padding: var(--space-3) var(--space-2) var(--space-3) 0;
+  vertical-align: top;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--rule);
+  /* The line-through is always drawn, in a transparent colour until the row is struck. */
+  text-decoration: line-through;
+  text-decoration-color: transparent;
+  transition: color var(--dur-fast) var(--ease-enter), text-decoration-color var(--dur-fast) var(--ease-enter);
+}
+.r-filing__plan td.r-filing__c-act {
+  text-decoration: none;
+}
+.r-filing__plan tr.is-struck td {
+  color: var(--faint);
+  text-decoration-color: currentColor;
+}
+.r-filing__plan tr.is-struck .r-filing__headline,
+.r-filing__plan tr.is-struck .r-notename,
+.r-filing__plan tr.is-struck .r-pill {
+  color: var(--faint);
+}
+.r-filing__plan .r-filing__headline,
+.r-filing__plan .r-notename,
+.r-filing__plan .r-pill {
+  transition: color var(--dur-fast) var(--ease-enter);
+}
+.r-filing__c-name .r-notename {
+  max-width: 24ch;
+}
+.r-filing__none {
+  color: var(--faint);
+}
+/* In the table the Strike button shows its word, so its tooltip is not needed. */
+.r-filing__c-act .r-tip__bubble {
+  display: none;
+}
+
+@container (max-width: 899px) {
+  .r-filing__plan,
+  .r-filing__plan tbody {
+    display: block;
+  }
+  /* The column headings stay for screen readers only. */
+  .r-filing__plan thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .r-filing__plan tr {
+    display: grid;
+    /* "Becomes" may be a phrase ("resource note, linked from the project"): it wraps within 40%. */
+    grid-template-columns: fit-content(40%) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "item item act"
+      "becomes where where"
+      "name name project";
+    gap: var(--space-1) var(--space-2);
+    align-items: baseline;
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .r-filing__plan td {
+    display: block;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  .r-filing__c-item {
+    grid-area: item;
+  }
+  .r-filing__c-becomes {
+    grid-area: becomes;
+    color: var(--muted);
+    font-size: var(--text-xs);
+  }
+  .r-filing__c-where {
+    grid-area: where;
+    font-size: var(--text-xs);
+  }
+  .r-filing__c-name {
+    grid-area: name;
+    display: flex;
+  }
+  .r-filing__c-name .r-notename {
+    max-width: 100%;
+  }
+  .r-filing__c-project {
+    grid-area: project;
+    justify-self: end;
+  }
+  .r-filing__c-project .r-filing__none {
+    display: none;
+  }
+  .r-filing__c-act {
+    grid-area: act;
+    align-self: start;
+  }
+  /* The Strike control becomes an icon with its tooltip. */
+  .r-filing__strike-text {
+    display: none;
+  }
+  /* The control sits at the right edge, so its tooltip lines up with the button's right side
+     instead of centring and running past the column. */
+  .r-filing__c-act .r-tip__bubble {
+    display: block;
+    left: auto;
+    right: 0;
+    transform: none;
+  }
+}
+.r-filing__path {
+  overflow-wrap: anywhere;
+}
+.r-filing__unsure {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.r-filing__group--recent {
+  margin-top: var(--space-6);
+}
+
+/* Filed recently: the place, the note's name and its chips on one wrapping line under the
+   headline. Under 520px of column the Open button moves under them instead of beside. */
+.r-filing__recent-list {
+  container-type: inline-size;
+}
+.r-filing__recent .r-filing__path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--space-2);
+  overflow-wrap: normal;
+  min-width: 0;
+}
+@container (max-width: 519px) {
+  .r-filing__recent {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .r-filing__recent > button {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    margin-left: calc(-1 * var(--space-2));
+  }
+}

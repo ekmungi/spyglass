@@ -13,7 +13,12 @@ from sqlmodel import Session, select
 from spyglass_service.collectors.feedlist import parse_feed_list
 from spyglass_service.collectors.rss import resolve_feed_url
 from spyglass_service.config import Settings
-from spyglass_service.feed_http import REASONS, classify_feed_error, use_browser_user_agent
+from spyglass_service.feed_http import (
+    REASONS,
+    classify_feed_error,
+    is_web_feed_address,
+    use_browser_user_agent,
+)
 from spyglass_service.models import Feed
 
 # ---------------------------------------------------------------------------
@@ -32,7 +37,8 @@ class NotAFeedError(Exception):
 
         Args:
             url: The resolved URL that could not be parsed as a feed.
-            kind: Why: "not_a_feed", "blocked" (the site refused) or "unreachable".
+            kind: Why: "not_a_feed", "blocked" (the site refused), "unreachable" or "local_file"
+                (a path or `file:` address; feeds are read from the web only).
             reason: A plain sentence for the user; defaults to the kind's general reason.
         """
         super().__init__(f"URL is not a parseable feed: {url}")
@@ -59,7 +65,8 @@ def _validate_feed(resolved_url: str, reader_db_path: Path) -> tuple[str, str]:
     Choice rationale: reader is already used for collection and handles all
     feed format variants (RSS 1/2, Atom, JSON Feed). Using it here guarantees
     identical acceptance criteria to the live collector, with no extra dependency.
-    Local file:// URLs are supported via feed_root="" so tests need no network.
+    Local files are never read: a path or a `file:` address is refused before the reader is made,
+    and the reader itself is made without a feed root, which switches local feeds off.
 
     Args:
         resolved_url: The URL after resolve_feed_url() has been applied.
@@ -75,9 +82,12 @@ def _validate_feed(resolved_url: str, reader_db_path: Path) -> tuple[str, str]:
     """
     from reader import ReaderError, make_reader  # local import avoids circular risk
 
+    if not is_web_feed_address(resolved_url):
+        raise NotAFeedError(resolved_url, "local_file")
     reader_db_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with make_reader(str(reader_db_path), feed_root="") as reader:
+        # No feed_root: the library then opens web feeds only, never a file on this computer.
+        with make_reader(str(reader_db_path)) as reader:
             use_browser_user_agent(reader)  # the same agent as page fetching
             reader.add_feed(resolved_url)
             reader.update_feeds(workers=1)
@@ -187,6 +197,8 @@ def add_feed(
     Raises:
         NotAFeedError: If the resolved URL does not parse as a valid feed.
     """
+    if not is_web_feed_address(url):
+        raise NotAFeedError(url, "local_file")
     resolved = resolve_feed_url(url)
 
     # Dedupe: if the resolved URL already exists, return it without re-validating or
