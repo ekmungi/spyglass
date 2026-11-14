@@ -64,6 +64,18 @@ jobs:
           # The tag becomes the installer's version number, which Windows needs as digits.
           if ($env:TAG -notmatch '^\d+\.\d+\.\d+$') { throw "Tag '$env:TAG' is not a version such as 0.41.0" }
 
+      - name: Check the tag matches the version in the code
+        run: |
+          # The installer is named and numbered after the tag; a tag that differs from the code's
+          # version would ship a Spyglass that reports another version than its installer.
+          $tag = $env:TAG -replace '^v', ''
+          $manifest = (Get-Content -Raw manifest.json | ConvertFrom-Json).version
+          if ($tag -ne $manifest) { throw "Tag '$tag' differs from manifest.json's version '$manifest'" }
+          $line = Select-String -Path src\spyglass_service\__init__.py -Pattern '^__version__\s*=\s*"([^"]+)"' | Select-Object -First 1
+          if (-not $line) { throw "No __version__ found in src/spyglass_service/__init__.py" }
+          $code = $line.Matches[0].Groups[1].Value
+          if ($tag -ne $code) { throw "Tag '$tag' differs from __version__ '$code' in src/spyglass_service/__init__.py" }
+
       - name: Build the interface
         working-directory: frontend
         run: |

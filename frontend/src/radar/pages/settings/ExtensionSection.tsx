@@ -45,8 +45,9 @@ export function ExtensionSection({ keyValue, keyError, renewed }: ExtensionSecti
   const [folder, setFolder] = useState<string | null>(null)
   const [openError, setOpenError] = useState<string | null>(null)
 
-  // Both come from the desktop app. A developer run answers neither, and the steps then fall back to
-  // typing the address by hand and finding the folder named browser-extension.
+  // Both come from the service, and a developer run on Windows answers both as the app does. With no
+  // browser list (another system) or no folder (a failed read), the steps fall back to typing the
+  // address by hand and finding the folder named browser-extension.
   useEffect(() => {
     const controller = new AbortController()
     getBrowsers(controller.signal).then(setBrowsers, () => setBrowsers([]))

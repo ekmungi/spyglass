@@ -63,7 +63,9 @@ The [user guide](docs/user-guide.md) describes the daily routine in plain langua
   computer and listens only on `127.0.0.1`, port 7777.
 - A built-in scheduler collects, judges, composes the brief, searches the watch list and makes a
   nightly backup.
-- Everything is stored in one SQLite database in a data folder in your home folder.
+- Everything is stored in one SQLite database in a data folder: the one chosen in the installer
+  (by default `%LOCALAPPDATA%\Spyglass\data`), or `.spyglass` in your home folder when you run
+  the service from the repository.
 - The interface is a React application that the service serves. You open it in a browser window.
 - The AI engines are services you choose: a cloud provider with your own key, a model server on
   your computer, or a command-line AI tool you already have installed.
@@ -289,11 +291,15 @@ covers the same switches from the settings page.
 
 ## Configuration reference
 
-Every setting can be set as an environment variable or in a `.env` file in the repository folder,
-which the service reads when it starts. Many settings can also be changed in **Settings**, and
-those changes are kept in the data folder and applied over the environment. Settings take the
-prefix `SPYGLASS_`. The provider keys are also read under their usual names, such as
-`OPENROUTER_API_KEY`.
+Every setting can be set as an environment variable or in a `.env` file, which the service reads
+when it starts. The installed app reads the `.env` file in its data folder; there the data folder,
+the vault and the port come from the installer's choices and a `.env` file does not change them.
+A service run from the repository reads the `.env` file in the folder it is started from, normally
+the repository folder. If you move from a 0.40.1 setup run from the repository to the installed
+app, copy the keys from your `.env` file into a `.env` file in the new data folder. Many settings
+can also be changed in **Settings**, and those changes are kept in the data folder and applied
+over the environment. Settings take the prefix `SPYGLASS_`. The provider keys are also read under
+their usual names, such as `OPENROUTER_API_KEY`.
 
 | Variable | Default | What it does |
 |----------|---------|--------------|
@@ -338,7 +344,10 @@ legacy plugin, and you can delete them if you do not use either.
   seven in total. A computer that was asleep at 03:00 takes the backup soon after it wakes.
 - A weekly clean-up removes the stored text of old items you never opened, saved or sent in, after
   120 days by default. The items and their judgements are kept.
-- To move the data, stop the service, move the folder and set `SPYGLASS_DATA_DIR` to the new place.
+- To move the data of the installed app, quit Spyglass, move the data folder's contents to the new
+  folder, then run the installer again and choose the new folder. `SPYGLASS_DATA_DIR` applies only
+  to a service run from the repository: stop it, move the folder and set the variable to the new
+  place.
   To delete everything, stop the service and delete the folder. Keys you typed into **Settings**
   are kept in the operating system's credential store, and you remove them there.
 

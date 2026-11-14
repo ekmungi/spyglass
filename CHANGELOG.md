@@ -24,8 +24,8 @@ notification area, and stops completely when you quit it. The developer route,
   opens the interface and starts no second service, also when it is opened twice at once.
 - **Start with Windows.** A per-user start-up entry starts Spyglass in the tray at sign-in, without
   opening the browser. The tray, Settings and the installer all read and write the same entry.
-- **Settings: Spyglass on this computer.** A Start with Windows switch and a Quit Spyglass button,
-  shown when Spyglass runs as the app.
+- **Settings: Spyglass on this computer.** A Quit Spyglass button, and a Start with Windows switch
+  that is shown only when Spyglass runs as the app.
 - **Extension setup from Settings.** The Bring in section lists the installed Chrome-family browsers,
   opens the chosen browser's extensions page and shows the folder to load. Spyglass keeps its own
   copy of the extension in the data folder, which already carries the address and the key, so
@@ -36,9 +36,10 @@ notification area, and stops completely when you quit it. The developer route,
   notes its version in `spyglass-data.json` in the data folder.
 
 ### Changed
-- Quitting stops everything within 10 seconds, also during a collection: a running collection is
-  abandoned after 2 seconds and redone at the next one, and Claude runs are ended first. The service
-  itself stops within 8 seconds, in the app and in the developer route.
+- Quitting stops everything within 10 seconds, also during a collection: every Claude process that
+  Spyglass started (a background job, a judging call, an assistant reply) is ended first, and a
+  running collection is abandoned after 2 seconds and redone at the next one. The service itself
+  stops within 8 seconds, in the app and in the developer route.
 - When the last collection is older than the collection interval, a collection starts about a minute
   after Spyglass opens, instead of one interval later.
 - The reading browser for pages that need one can be an installed Edge or Chrome. The app uses Edge,

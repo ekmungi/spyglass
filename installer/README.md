@@ -62,10 +62,16 @@ Every step's output goes to `install.log` in the install folder.
 The uninstaller stops the desktop app if it runs, removes the Start with Windows entry and deletes
 the install folder. The data folder and `desktop.json` stay.
 
-## Trying it without touching your own Spyglass
+## Trying a scratch install
+
+**Warning: run this recipe only on a PC (or a virtual machine) that has no real Spyglass
+installed.** Every install of Spyglass shares one installer identity, so a scratch install replaces
+the real install's uninstall entry, its Start-menu entry and its `desktop.json`. Uninstalling the
+scratch copy then leaves the real install without an uninstaller or a Start-menu entry, and its
+`desktop.json` points at the scratch folder.
 
 A silent install takes the folder, data folder and port on its command line. Use another port and
-scratch folders, so a Spyglass you already run stays up:
+scratch folders, so a Spyglass you run from the repository stays up:
 
 ```
 Spyglass-Setup-0.41.0.exe /VERYSILENT /SUPPRESSMSGBOXES /DIR="C:\scratch\app" /DATADIR="C:\scratch\data" /PORT=7790 /LOG="C:\scratch\setup.log"
