@@ -1,0 +1,57 @@
+"""What the desktop app needs from the operating system, and the adapter for this machine.
+
+The tray app, the Settings routes and the launcher talk to `DesktopPlatform` only. Windows is
+the sole adapter today; `default_platform` returns None elsewhere so callers can degrade (for
+example, hide the "start with Windows" switch) instead of failing.
+"""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
+
+
+@dataclass(frozen=True)
+class Browser:
+    """An installed browser: a stable id, a display name, its executable and its extensions page."""
+
+    id: str
+    name: str
+    exe: Path
+    extensions_url: str
+
+
+class DesktopPlatform(Protocol):
+    """The operating-system operations the desktop app uses."""
+
+    def autostart_enabled(self) -> bool:
+        """Whether Spyglass is registered to start when the user signs in."""
+        ...
+
+    def set_autostart(self, enabled: bool) -> None:
+        """Register or remove the start-at-sign-in entry."""
+        ...
+
+    def installed_browsers(self) -> list[Browser]:
+        """The supported browsers that are installed on this machine."""
+        ...
+
+    def open_extensions_page(self, browser_id: str) -> None:
+        """Open a browser's extensions page; raises KeyError for an unknown or missing browser."""
+        ...
+
+    def show_message(self, title: str, text: str) -> None:
+        """Show a blocking message box to the user."""
+        ...
+
+
+def default_platform() -> DesktopPlatform | None:
+    """The adapter for this machine: a `WindowsPlatform` on Windows, None on any other system."""
+    if sys.platform != "win32":
+        return None
+    # Imported here so that no Windows-only module loads on other systems.
+    from spyglass_service.desktop.platform_windows import WindowsPlatform
+
+    return WindowsPlatform()
