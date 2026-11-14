@@ -6,6 +6,9 @@ import { BringInSection } from './BringInSection'
 const api = vi.hoisted(() => ({
   getImportButtonKey: vi.fn(),
   rotateImportButtonKey: vi.fn(),
+  getBrowsers: vi.fn(),
+  openExtensionsPage: vi.fn(),
+  getExtensionFolder: vi.fn(),
 }))
 vi.mock('../../api/client', async (original) => ({ ...(await original<typeof import('../../api/client')>()), ...api }))
 
@@ -23,6 +26,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.getImportButtonKey.mockResolvedValue({ key: KEY })
   api.rotateImportButtonKey.mockResolvedValue({ key: NEW_KEY })
+  // A developer run has no browsers list and no extension folder; the desktop tests below override these.
+  api.getBrowsers.mockResolvedValue([])
+  api.getExtensionFolder.mockRejectedValue(new Error('not the desktop app'))
+  api.openExtensionsPage.mockResolvedValue(null)
 })
 
 afterEach(() => {
@@ -61,10 +68,53 @@ describe('BringInSection', () => {
     expect(screen.getByText(/also replaces this key, which disconnects the extension/)).toBeInTheDocument()
     await screen.findByRole('button', { name: 'Show' })
     fireEvent.click(screen.getByRole('button', { name: 'Make a new button' }))
-    expect(await screen.findByText(/Paste the new key into the extension/)).toBeInTheDocument()
+    expect(await screen.findByText(/paste the new key into the extension/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Show' }))
     expect(screen.getByText(NEW_KEY)).toBeInTheDocument()
     expect(screen.queryByText(KEY)).toBeNull()
+  })
+
+  it('tells the reader to press Reload on the extensions page after a new button, because the extension reads its key only then', async () => {
+    render(<BringInSection origin="http://localhost:7778" />)
+    expect(screen.getByText(/until you press Reload on its card on the browser.s extensions page/)).toBeInTheDocument()
+    await screen.findByRole('button', { name: 'Show' })
+    fireEvent.click(screen.getByRole('button', { name: 'Make a new button' }))
+    expect(await screen.findByText(/The key changed. Press Reload on the extension.s card on your browser.s extensions page/)).toBeInTheDocument()
+  })
+
+  it('lists installed browsers and opens the chosen extensions page', async () => {
+    api.getBrowsers.mockResolvedValue([
+      { id: 'chrome', name: 'Google Chrome' },
+      { id: 'edge', name: 'Microsoft Edge' },
+    ])
+    render(<BringInSection origin="http://localhost:7778" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open in Microsoft Edge' }))
+    await waitFor(() => expect(api.openExtensionsPage).toHaveBeenCalledWith('edge'))
+    expect(screen.getByRole('button', { name: 'Open in Google Chrome' })).toBeInTheDocument()
+    expect(screen.getByText(/Switch on Developer mode/)).toBeInTheDocument()
+    await screen.findByText('Send to Spyglass')
+  })
+
+  it('shows the extension folder with a Copy button, even before the folder exists', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    api.getExtensionFolder.mockResolvedValue({ folder: 'C:\\Users\\me\\AppData\\Local\\Spyglass\\extension' })
+    render(<BringInSection origin="http://localhost:7778" />)
+    expect(await screen.findByText('C:\\Users\\me\\AppData\\Local\\Spyglass\\extension')).toBeInTheDocument()
+    expect(screen.getByText(/Press Load unpacked and choose this folder/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy folder' }))
+    expect(writeText).toHaveBeenCalledWith('C:\\Users\\me\\AppData\\Local\\Spyglass\\extension')
+    await screen.findByText('Send to Spyglass')
+  })
+
+  it('says why opening the extensions page failed and keeps the other browsers', async () => {
+    api.getBrowsers.mockResolvedValue([{ id: 'brave', name: 'Brave' }])
+    api.openExtensionsPage.mockRejectedValueOnce(new Error('That browser is not installed.'))
+    render(<BringInSection origin="http://localhost:7778" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open in Brave' }))
+    expect(await screen.findByText('That browser is not installed.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open in Brave' })).toBeEnabled()
+    await screen.findByText('Send to Spyglass')
   })
 
   it('says why the key is missing instead of showing a key it could not read', async () => {

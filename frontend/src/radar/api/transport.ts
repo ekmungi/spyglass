@@ -22,6 +22,16 @@ export function setFetchForTesting(fn: FetchLike | null): void {
   override = fn
 }
 
+/**
+ * Fetch a path that lives outside /api/radar (such as /api/shutdown) through the same transport.
+ * Sample-data mode never contacts a service, so it answers 202 and stops nothing.
+ */
+export function rootFetch(path: string, init?: RequestInit): Promise<Response> {
+  if (override) return override(path, init)
+  if (isMockMode()) return Promise.resolve(new Response(null, { status: 202 }))
+  return fetch(path, init)
+}
+
 /** Fetch a path under /api/radar through the active transport. */
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const url = `${API_BASE}${path}`

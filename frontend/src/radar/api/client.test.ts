@@ -1,7 +1,20 @@
 // Tests for the typed client: JSON handling, query strings, and the mapping of every failure to
 // an ApiError with a human message.
 import { afterEach, describe, expect, it } from 'vitest'
-import { createThread, getBrief, getEngines, getFeed, queryString, request } from './client'
+import {
+  createThread,
+  getAutostart,
+  getBrief,
+  getBrowsers,
+  getEngines,
+  getExtensionFolder,
+  getFeed,
+  openExtensionsPage,
+  queryString,
+  quitSpyglass,
+  request,
+  setAutostart,
+} from './client'
 import { ApiError, errorMessage, extractDetail, messageForStatus } from './errors'
 import { setFetchForTesting } from './transport'
 
@@ -125,6 +138,61 @@ describe('endpoint shapes', () => {
   it('returns thread and messages from POST /threads', async () => {
     reply(200, { thread: { id: 5 }, messages: [{ id: 1 }] })
     await expect(createThread({ item_id: 3 })).resolves.toEqual({ thread: { id: 5 }, messages: [{ id: 1 }] })
+  })
+})
+
+describe('desktop calls', () => {
+  /** Remember every request the client sends and answer each with one canned reply. */
+  function record(status: number, body: unknown): Array<{ url: string; init?: RequestInit }> {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    setFetchForTesting(async (url, init) => {
+      calls.push({ url, init })
+      return new Response(body === null ? null : JSON.stringify(body), { status })
+    })
+    return calls
+  }
+
+  it('reads and sets start with Windows under /api/radar/desktop/autostart', async () => {
+    const calls = record(200, { available: true, enabled: true })
+    await expect(getAutostart()).resolves.toEqual({ available: true, enabled: true })
+    await expect(setAutostart(true)).resolves.toEqual({ available: true, enabled: true })
+    expect(calls.map((call) => [call.init?.method, call.url])).toEqual([
+      ['GET', '/api/radar/desktop/autostart'],
+      ['PUT', '/api/radar/desktop/autostart'],
+    ])
+    expect(calls[1].init?.body).toBe(JSON.stringify({ enabled: true }))
+  })
+
+  it('lists browsers, opens one extensions page and reads the extension folder', async () => {
+    const calls = record(200, [{ id: 'chrome', name: 'Google Chrome' }])
+    await expect(getBrowsers()).resolves.toEqual([{ id: 'chrome', name: 'Google Chrome' }])
+    record(204, null)
+    await expect(openExtensionsPage('chrome')).resolves.toBeNull()
+    const folder = record(200, { folder: 'C:/Spyglass/extension' })
+    await expect(getExtensionFolder()).resolves.toEqual({ folder: 'C:/Spyglass/extension' })
+    expect(calls[0].url).toBe('/api/radar/desktop/browsers')
+    expect(folder[0].url).toBe('/api/radar/desktop/extension')
+  })
+
+  it('says why opening an extensions page failed', async () => {
+    reply(404, { detail: 'That browser is not installed.' })
+    await expect(openExtensionsPage('brave')).rejects.toMatchObject({ status: 404, message: 'That browser is not installed.' })
+  })
+
+  it('quits through POST /api/shutdown, which is outside /api/radar', async () => {
+    const calls = record(202, null)
+    await expect(quitSpyglass()).resolves.toBeNull()
+    expect(calls[0].url).toBe('/api/shutdown')
+    expect(calls[0].init?.method).toBe('POST')
+  })
+
+  it('reports a refused quit and an unreachable service as ApiErrors', async () => {
+    reply(403, { detail: 'cross-site request refused' })
+    await expect(quitSpyglass()).rejects.toMatchObject({ name: 'ApiError', status: 403 })
+    setFetchForTesting(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    await expect(quitSpyglass()).rejects.toMatchObject({ kind: 'network' })
   })
 })
 

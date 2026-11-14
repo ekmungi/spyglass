@@ -56,6 +56,15 @@ export interface CallRequest {
 export declare function callSpyglass(request: CallRequest): Promise<Outcome>
 export declare function sendToSpyglass(request: Omit<CallRequest, 'path' | 'method'> & { payload: object }): Promise<Outcome>
 export declare function checkSpyglass(request: Omit<CallRequest, 'path' | 'method' | 'payload'>): Promise<Outcome>
+export interface BundledSettings {
+  address: string
+  key: string
+  stamp: string
+}
+export declare function chooseBundledSettings(
+  saved: { address: string; key: string; stamp?: string },
+  bundled: BundledSettings | null,
+): BundledSettings | null
 
 export declare function describeOutcome(
   outcome: { kind: string; status?: number; detail?: string; data?: any },

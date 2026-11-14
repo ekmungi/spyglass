@@ -23,6 +23,10 @@ vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
   getImportButtonKey: vi.fn().mockResolvedValue({ key: '0123456789abcdef0123456789abcdef' }),
   rotateImportButtonKey: vi.fn(),
+  // The extension and this-computer sections ask the desktop app about itself; this file is not about that.
+  getBrowsers: vi.fn().mockResolvedValue([]),
+  getExtensionFolder: vi.fn().mockRejectedValue(new Error('not the desktop app')),
+  getAutostart: vi.fn().mockResolvedValue({ available: false, enabled: false }),
 }))
 
 const SECRET = 'sk-test-secret-1234567890'

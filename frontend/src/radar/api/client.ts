@@ -1,8 +1,11 @@
 // Typed client: one function per /api/radar endpoint. Every failure is thrown as an ApiError.
 import { ApiError, httpError, transportError } from './errors'
-import { API_BASE, apiFetch } from './transport'
+import { API_BASE, apiFetch, rootFetch } from './transport'
 import type {
+  Autostart,
   BriefDoc,
+  DesktopBrowser,
+  ExtensionFolder,
   ClaudeOpened,
   ClaudePreview,
   ClaudeRequest,
@@ -302,4 +305,27 @@ export const importFile = (url: string, file: File) => {
   form.set('url', url)
   form.set('file', file, file.name)
   return requestForm<RadarItem>('/import/file', form)
+}
+
+/** Whether "Start with Windows" is offered here, and whether it is on. */
+export const getAutostart = (signal?: AbortSignal) => request<Autostart>('GET', '/desktop/autostart', undefined, signal)
+/** Turn "Start with Windows" on or off; answers 409 when it is not offered and 503 when Windows refuses. */
+export const setAutostart = (enabled: boolean) => request<Autostart>('PUT', '/desktop/autostart', { enabled })
+/** The installed browsers whose extensions page Spyglass can open (the list may be empty). */
+export const getBrowsers = (signal?: AbortSignal) => request<DesktopBrowser[]>('GET', '/desktop/browsers', undefined, signal)
+/** Open one browser's extensions page; answers 404 for an unknown or uninstalled browser. */
+export const openExtensionsPage = (browser: string) => request<null>('POST', '/desktop/open-extensions', { browser })
+/** The folder with this install's copy of the extension (it may not exist yet). */
+export const getExtensionFolder = (signal?: AbortSignal) => request<ExtensionFolder>('GET', '/desktop/extension', undefined, signal)
+
+/** Stop Spyglass. POST /api/shutdown is outside /api/radar, so it goes through the root transport. */
+export async function quitSpyglass(): Promise<null> {
+  const path = '/api/shutdown'
+  let response: Response
+  try {
+    response = await rootFetch(path, { method: 'POST', headers: { Accept: 'application/json' } })
+  } catch (cause) {
+    throw transportError(cause, path)
+  }
+  return readReply<null>(response, path)
 }

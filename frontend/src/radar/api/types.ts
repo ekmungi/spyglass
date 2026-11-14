@@ -364,6 +364,7 @@ export type StreamEvent =
   | { type: 'error'; message: string }
 
 export type * from './claudeTypes'
+export type * from './desktopTypes'
 export type * from './filingTypes'
 export type * from './importTypes'
 export type * from './pageTypes'
