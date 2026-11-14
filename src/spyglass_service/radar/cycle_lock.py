@@ -7,6 +7,8 @@ lock whose owner is no longer running, or that is far older than any cycle could
 stale and taken over (the desktop lock has no age limit, and instead checks that the process
 holding the pid is not newer than the lock). A tiny window remains in which two processes that both found the same
 stale lock could race; each re-reads the file just before removing it, which narrows it.
+When the caller can tell when the machine last started, a lock written before then is stale
+too: a restart ends every process, but the file stays.
 """
 
 import json
@@ -30,6 +32,7 @@ PID_REUSE_TOLERANCE = timedelta(seconds=2)
 
 PidAlive = Callable[[int], bool]
 PidStartedAt = Callable[[int], datetime | None]
+BootTime = Callable[[], datetime | None]
 
 
 def pid_alive(pid: int) -> bool:
@@ -86,15 +89,19 @@ class CycleFileLock:
         pid_started_at: When the process now holding a pid was created, or None if unknown.
             Used only with max_age=None: process ids are reused, so a live holder whose process
             was created after the lock was written is a stranger, and the lock is stale.
+        boot_time: When the machine last started, or None if unknown. When given, a lock
+            written before then is stale whatever its pid shows: no process outlives a restart.
     """
 
     def __init__(self, path: Path, *, pid_alive: PidAlive = pid_alive,
                  pid: int | None = None, max_age: timedelta | None = MAX_LOCK_AGE,
-                 pid_started_at: PidStartedAt | None = None) -> None:
+                 pid_started_at: PidStartedAt | None = None,
+                 boot_time: BootTime | None = None) -> None:
         self.path = Path(path)
         self._max_age = max_age
         self._alive = pid_alive
         self._started_at = pid_started_at
+        self._boot_time = boot_time
         self._pid = pid if pid is not None else os.getpid()
         self._mine: str | None = None
 
@@ -153,9 +160,21 @@ class CycleFileLock:
             return True  # left by this very process; the in-process lock guards it now
         if self._max_age is not None and datetime.now(UTC) - started > self._max_age:
             return True
+        if self._written_before_boot(started):
+            return True
         if not self._alive(pid):
             return True
         return self._pid_was_reused(pid, started)
+
+    def _written_before_boot(self, locked_at: datetime) -> bool:
+        """True when the lock predates the machine's last start, so its holder cannot be alive.
+
+        The same slack as the reused-pid check absorbs rounding between the two clocks read.
+        """
+        if self._boot_time is None:
+            return False
+        booted = self._boot_time()
+        return booted is not None and locked_at + PID_REUSE_TOLERANCE < booted
 
     def _pid_was_reused(self, pid: int, locked_at: datetime) -> bool:
         """True when the live process with this pid was created after the lock was written."""

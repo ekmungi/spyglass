@@ -10,6 +10,7 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -106,10 +107,14 @@ class FakePlatform:
         self.autostart = False
         self.born = None  # what process_started_at answers for every pid
         self.asked: list[int] = []
+        self.boot = None  # what boot_time answers
 
     def process_started_at(self, pid: int):
         self.asked.append(pid)
         return self.born
+
+    def boot_time(self):
+        return self.boot
 
     def autostart_enabled(self) -> bool:
         return self.autostart
@@ -146,6 +151,7 @@ class Rig:
         monkeypatch.setattr(launcher_mod, "probe_health", self.probe)
         monkeypatch.setattr(launcher_mod, "PEER_WAIT_S", 0.3)
         monkeypatch.setattr(launcher_mod, "HEALTH_WAIT_S", 2.0)
+        monkeypatch.setattr(launcher_mod, "OPEN_WAIT_S", 3.0)
         monkeypatch.setattr(launcher_mod, "POLL_S", 0.01)
         self.behaviour = behaviour
         self.stop_during_build = False
@@ -154,11 +160,13 @@ class Rig:
         self.servers: list[FakeServer] = []
         self.trays: list[FakeTray] = []
         self.opened: list[str] = []
+        self.open_times: list[float] = []  # self.now() at each opening
+        self.now = time.monotonic
         self.exits: list[int] = []
         self.platform = FakePlatform()
         self.launcher = Launcher(
             server_factory=self.make_server, tray_factory=self.make_tray,
-            open_browser=self.opened.append, platform=self.platform,
+            open_browser=self.open_browser, platform=self.platform,
             exit_process=self.exits.append, join_timeout=join_timeout)
         self.result: list[int] = []
         self.thread: threading.Thread | None = None
@@ -181,6 +189,10 @@ class Rig:
         if self.stop_during_build:
             on_stop()  # a stop (the page, the tray) that lands while the server is being built
         return server
+
+    def open_browser(self, url: str) -> None:
+        self.opened.append(url)
+        self.open_times.append(self.now())
 
     def make_tray(self, **kwargs) -> FakeTray:
         tray = FakeTray(**kwargs)
@@ -257,6 +269,95 @@ def test_background_start_does_not_open_the_browser(make_rig) -> None:
     assert rig.opened == []
     tray.kwargs["on_quit"]()
     assert rig.finish() == 0
+
+
+class FakeClock:
+    """The launcher's clock: it moves only when the launcher sleeps, so minutes pass at once.
+
+    With `pause_at`, the sleep that reaches that time blocks until `resume` is set, so a test
+    can act (press Quit) at a known moment of the wait.
+    """
+
+    def __init__(self, pause_at: float | None = None) -> None:
+        self.now = 0.0
+        self.pause_at = pause_at
+        self.paused = threading.Event()
+        self.resume = threading.Event()
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+        if self.pause_at is not None and self.now >= self.pause_at and not self.resume.is_set():
+            self.paused.set()
+            self.resume.wait(WAIT)
+
+
+def _slow_service(rig: Rig, monkeypatch, answer_at: float | None,
+                  pause_at: float | None = None) -> FakeClock:
+    """Real waits (30 s before the tray, 120 s in all) on a fake clock; the service first answers
+    its health probe at `answer_at` seconds, or never when None."""
+    clock = FakeClock(pause_at)
+    monkeypatch.setattr(launcher_mod, "time", SimpleNamespace(monotonic=clock.monotonic,
+                                                              sleep=clock.sleep))
+    monkeypatch.setattr(launcher_mod, "HEALTH_WAIT_S", 30.0)
+    monkeypatch.setattr(launcher_mod, "OPEN_WAIT_S", 120.0)
+    monkeypatch.setattr(launcher_mod, "POLL_S", 0.25)
+    monkeypatch.setattr(
+        launcher_mod, "probe_health",
+        lambda port, timeout=1.0: (Health(__version__, "desktop")
+                                   if answer_at is not None and clock.now >= answer_at else None))
+    rig.now = clock.monotonic
+    return clock
+
+
+def _wait_until(condition) -> None:
+    deadline = time.monotonic() + WAIT
+    while not condition() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert condition()
+
+
+def test_a_slow_first_start_opens_the_page_on_the_first_answer(make_rig, monkeypatch) -> None:
+    """A first start after an install can take longer than the 30 s before the tray shows. The
+    page then opens when the service first answers, not on a port that is not listening yet."""
+    rig = make_rig()
+    _slow_service(rig, monkeypatch, answer_at=45.0)
+    rig.start()
+    tray = rig.wait_for_tray()
+    _wait_until(lambda: rig.opened)
+    assert rig.opened == [URL]
+    assert rig.open_times == [pytest.approx(45.0, abs=0.5)]
+    tray.kwargs["on_quit"]()
+    assert rig.finish() == 0
+
+
+def test_a_service_that_never_answers_gets_its_page_opened_at_120_seconds(
+        make_rig, monkeypatch) -> None:
+    rig = make_rig()
+    _slow_service(rig, monkeypatch, answer_at=None)
+    rig.start()
+    tray = rig.wait_for_tray()
+    _wait_until(lambda: rig.opened)
+    assert rig.opened == [URL]
+    assert rig.open_times == [pytest.approx(120.0, abs=0.5)]
+    tray.kwargs["on_quit"]()
+    assert rig.finish() == 0
+
+
+def test_quit_while_waiting_for_the_first_answer_opens_nothing(make_rig, monkeypatch) -> None:
+    """The tray is up while the page waits, and Quit from it ends the wait and the app."""
+    rig = make_rig()
+    clock = _slow_service(rig, monkeypatch, answer_at=None, pause_at=60.0)
+    rig.start()
+    tray = rig.wait_for_tray()
+    assert clock.paused.wait(WAIT), "the page never waited past the tray"
+    tray.kwargs["on_quit"]()
+    clock.resume.set()
+    assert rig.finish() == 0
+    time.sleep(0.1)  # a waiter that ignored the stop would open the page now
+    assert rig.opened == []
 
 
 def test_tray_switch_reads_and_flips_start_with_windows(make_rig) -> None:
@@ -356,9 +457,8 @@ def _peer_lock(rig: Rig, monkeypatch, born) -> str:
     rig.platform.born = born
     monkeypatch.setattr(
         launcher_mod, "single_instance_lock",
-        lambda data_dir, pid_started_at=None: CycleFileLock(
-            data_dir / "desktop.lock", max_age=None, pid_alive=lambda pid: True,
-            pid_started_at=pid_started_at))
+        lambda data_dir, **checks: CycleFileLock(
+            data_dir / "desktop.lock", max_age=None, pid_alive=lambda pid: True, **checks))
     return text
 
 
@@ -409,10 +509,32 @@ def test_a_genuine_holder_is_never_taken_over(make_rig, monkeypatch) -> None:
     assert (rig.data / "desktop.lock").read_text(encoding="utf-8") == old
 
 
-def test_a_holder_of_unknown_age_is_treated_as_genuine(make_rig, monkeypatch) -> None:
-    """When the platform cannot tell when the holder started, nothing is taken over."""
+def test_a_lock_from_before_the_last_boot_is_taken(make_rig, monkeypatch) -> None:
+    """A Windows restart ends the launcher without removing its lock. If the old pid now names a
+    process whose start time cannot be read, the boot time still shows the lock is stale, so the
+    start goes ahead at once instead of waiting and refusing for the whole session."""
+    rig = make_rig()
+    monkeypatch.setattr(launcher_mod, "PEER_WAIT_S", 30.0)  # would show if it waited
+    old = _peer_lock(rig, monkeypatch, None)
+    rig.platform.boot = PEER_LOCKED_AT + timedelta(hours=1)
+    began = time.monotonic()
+    rig.start(background=True)
+    tray = rig.wait_for_tray()
+    assert time.monotonic() - began < 3.0
+    lock_text = (rig.data / "desktop.lock").read_text(encoding="utf-8")
+    assert lock_text != old and json.loads(lock_text)["pid"] == os.getpid()
+    assert rig.platform.messages == []
+    tray.kwargs["on_quit"]()
+    assert rig.finish() == 0
+
+
+@pytest.mark.parametrize("boot", [None, PEER_LOCKED_AT - timedelta(hours=1)])
+def test_a_holder_of_unknown_age_is_treated_as_genuine(make_rig, monkeypatch, boot) -> None:
+    """When the platform cannot tell when the holder started, nothing is taken over: neither
+    when the boot time is unknown nor when the lock was written since the last boot."""
     rig = make_rig()
     old = _peer_lock(rig, monkeypatch, None)
+    rig.platform.boot = boot
     assert rig.launcher.run(background=True) == 0
     assert rig.platform.messages == [("Spyglass", PEER_NOT_ANSWERING_MESSAGE)]
     assert (rig.data / "desktop.lock").read_text(encoding="utf-8") == old

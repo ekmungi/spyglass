@@ -93,6 +93,23 @@ def test_a_live_pid_is_judged_by_when_its_process_started(tmp_path, born, taken)
     assert (holder["pid"] == os.getpid()) is taken
 
 
+@pytest.mark.parametrize(("boot", "taken"), [
+    (LOCKED_AT + timedelta(hours=1), True),     # written before this boot: its holder is gone
+    (LOCKED_AT - timedelta(hours=1), False),    # written since this boot: judged as before
+    (None, False),                              # boot time unknown: today's behaviour
+])
+def test_a_lock_from_before_the_last_boot_is_stale(tmp_path, boot, taken) -> None:
+    """A restart ends every process without the lock's owner removing it. When the pid is in use
+    again by a process whose start cannot be read, only the boot time shows the lock is stale."""
+    path = tmp_path / "desktop.lock"
+    _write_holder(path, OTHER_PID, LOCKED_AT)
+    lock = CycleFileLock(path, pid_alive=lambda _pid: True, max_age=None,
+                         pid_started_at=lambda _pid: None, boot_time=lambda: boot)
+    assert lock.acquire() is taken
+    holder = json.loads(path.read_text(encoding="utf-8"))
+    assert (holder["pid"] == os.getpid()) is taken
+
+
 def test_the_cycle_lock_keeps_its_age_rule_and_ignores_process_start(tmp_path) -> None:
     """Only the desktop lock (no age limit) asks when the holder started; existing callers keep
     their behaviour."""

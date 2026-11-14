@@ -24,6 +24,8 @@ from spyglass_service.radar.models import RadarDoc
 DB_NAME = "spyglass.db"
 VERSION_FILE = "spyglass-data.json"
 DEFAULT_PORT = 7777
+# The TCP ports a service can listen on.
+MIN_PORT, MAX_PORT = 1, 65535
 # Names a scratch desktop.json for test runs, so they stay away from the installed settings.
 CONFIG_OVERRIDE_VAR = "SPYGLASS_DESKTOP_CONFIG"
 
@@ -64,14 +66,19 @@ def config_path() -> Path:
 
 def load_config(path: Path | None = None) -> DesktopConfig | None:
     """Read the settings file. Returns None when it is missing; raises ConfigError otherwise
-    when the JSON is bad or `data_dir` is absent or not text."""
+    when it is not UTF-8, the JSON is bad, `data_dir` is absent or not text, or the port is not
+    one a service can listen on."""
     target = path or config_path()
     try:
-        raw = target.read_text(encoding="utf-8")
+        # utf-8-sig also reads the byte order mark Windows PowerShell 5.1 puts before UTF-8.
+        raw = target.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         return None
     except OSError as exc:
         raise ConfigError(f"Cannot read {target}: {exc}") from exc
+    except UnicodeDecodeError as exc:
+        # Windows PowerShell 5.1 writes UTF-16 with `>` or Out-File, and ANSI with Set-Content.
+        raise ConfigError(f"{target} must be saved as UTF-8 ({exc.reason})") from exc
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -88,6 +95,9 @@ def load_config(path: Path | None = None) -> DesktopConfig | None:
     # bool is an int subclass; a JSON true must not pass as port 1.
     if not isinstance(port, int) or isinstance(port, bool):
         raise ConfigError(f"{target}: port must be a number")
+    # Port 0 would make the service bind a random port while the launcher opens port 0.
+    if not MIN_PORT <= port <= MAX_PORT:
+        raise ConfigError(f"{target}: port must be from {MIN_PORT} to {MAX_PORT}")
     return DesktopConfig(data_dir=Path(data_dir), vault_path=Path(vault) if vault else None, port=port)
 
 
@@ -210,6 +220,16 @@ def check_data_dir(path: Path, own_version: str, *, must_exist: bool = False) ->
 
 
 def record_data_version(data_dir: Path, version: str) -> None:
-    """Note which Spyglass last wrote `data_dir`, so an older one can refuse it later."""
+    """Note the newest Spyglass that has written `data_dir`, so an older one can refuse it later.
+
+    A newer recorded version is kept: the developer entry skips the folder check, and an older
+    developer start that overwrote the marker would erase the newer app's guard. A marker that
+    cannot be read or compared is replaced.
+    """
     data_dir.mkdir(parents=True, exist_ok=True)
+    recorded = _recorded_version(data_dir)
+    recorded_tuple = _version_tuple(recorded) if recorded else None
+    own_tuple = _version_tuple(version)
+    if recorded_tuple and own_tuple and recorded_tuple > own_tuple:
+        return
     (data_dir / VERSION_FILE).write_text(json.dumps({"written_by": version}), encoding="utf-8")

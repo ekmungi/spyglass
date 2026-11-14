@@ -209,11 +209,15 @@ def redirect_output(data_dir: Path, limit_bytes: int = LOG_LIMIT_BYTES) -> None:
 
 def single_instance_lock(data_dir: Path,
                          pid_started_at: Callable[[int], datetime | None] | None = None,
+                         boot_time: Callable[[], datetime | None] | None = None,
                          ) -> CycleFileLock:
     """The lock that lets one launcher run per data folder.
 
     max_age=None: the lock is held for as long as the app stays open, which can be weeks, so it
-    is stale only when its holder is gone, or when `pid_started_at` shows that the process now
-    holding that pid was created after the lock was written (Windows reuses process ids).
+    is stale only when its holder is gone, when `boot_time` shows it was written before the
+    machine last started (a restart ends the app without removing it), or when
+    `pid_started_at` shows that the process now holding that pid was created after the lock was
+    written (Windows reuses process ids).
     """
-    return CycleFileLock(data_dir / "desktop.lock", max_age=None, pid_started_at=pid_started_at)
+    return CycleFileLock(data_dir / "desktop.lock", max_age=None, pid_started_at=pid_started_at,
+                         boot_time=boot_time)

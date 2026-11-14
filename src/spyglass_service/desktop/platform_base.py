@@ -52,6 +52,10 @@ class DesktopPlatform(Protocol):
         """When the process with this id was created (aware UTC); None if it cannot be read."""
         ...
 
+    def boot_time(self) -> datetime | None:
+        """When the machine last started (aware UTC); None when this system cannot tell."""
+        return None
+
 
 def no_window_flags() -> int:
     """The `creationflags` that start a console program without a console window.

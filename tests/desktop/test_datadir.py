@@ -138,6 +138,21 @@ def test_record_data_version_writes_the_version(tmp_path: Path) -> None:
     assert written == {"written_by": "0.41.0"}
 
 
+@pytest.mark.parametrize(("recorded", "own", "kept"), [
+    ("0.42.0", "0.41.0", "0.42.0"),   # an older developer start keeps the newer-data guard
+    ("0.40.1", "0.41.0", "0.41.0"),   # a newer Spyglass records itself
+    ("not-a-version", "0.41.0", "0.41.0"),
+])
+def test_record_data_version_keeps_the_newer_of_the_two(
+        tmp_path: Path, recorded: str, own: str, kept: str) -> None:
+    """The developer entry does not run the folder check, so it can start on a folder a newer
+    Spyglass used. It must not erase that version, or the newer app's guard is lost."""
+    record_data_version(tmp_path, recorded)
+    record_data_version(tmp_path, own)
+    written = json.loads((tmp_path / "spyglass-data.json").read_text(encoding="utf-8"))
+    assert written == {"written_by": kept}
+
+
 def test_config_round_trips_spaces_and_non_ascii(tmp_path: Path) -> None:
     path = tmp_path / "sub" / "desktop.json"
     config = DesktopConfig(
@@ -164,6 +179,41 @@ def test_load_config_rejects_bad_json_and_missing_keys(tmp_path: Path, body: str
     path.write_text(body, encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(path)
+
+
+@pytest.mark.parametrize("port", [0, -1, 65536, 100000])
+def test_load_config_rejects_a_port_no_service_can_listen_on(tmp_path: Path, port: int) -> None:
+    """Port 0 would bind a random port while the launcher opens http://127.0.0.1:0/."""
+    path = tmp_path / "desktop.json"
+    path.write_text(json.dumps({"data_dir": "x", "port": port}), encoding="utf-8")
+    with pytest.raises(ConfigError, match="65535"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("port", [1, 65535])
+def test_load_config_accepts_both_ends_of_the_port_range(tmp_path: Path, port: int) -> None:
+    path = tmp_path / "desktop.json"
+    path.write_text(json.dumps({"data_dir": "x", "port": port}), encoding="utf-8")
+    loaded = load_config(path)
+    assert loaded is not None and loaded.port == port
+
+
+@pytest.mark.parametrize("encoding", ["utf-16", "cp1252"])
+def test_load_config_asks_for_utf8_when_the_file_is_in_another_encoding(
+        tmp_path: Path, encoding: str) -> None:
+    """Windows PowerShell 5.1 writes UTF-16 with `>` or Out-File and ANSI with Set-Content. Such a
+    file must give the usual settings message, which says how to save it, not a crash."""
+    path = tmp_path / "desktop.json"
+    path.write_text('{"data_dir": "C:\\\\Users\\\\Zoë\\\\data"}', encoding=encoding)
+    with pytest.raises(ConfigError, match="UTF-8"):
+        load_config(path)
+
+
+def test_load_config_reads_utf8_with_a_byte_order_mark(tmp_path: Path) -> None:
+    """Windows PowerShell 5.1's `Out-File -Encoding UTF8` writes UTF-8 with a byte order mark."""
+    path = tmp_path / "desktop.json"
+    path.write_text('{"data_dir": "C:\\\\Zoë", "port": 7790}', encoding="utf-8-sig")
+    assert load_config(path) == DesktopConfig(data_dir=Path("C:\\Zoë"), port=7790)
 
 
 def test_config_path_names_desktop_json(monkeypatch) -> None:

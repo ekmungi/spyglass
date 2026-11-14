@@ -11,12 +11,10 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import threading
 import time
 import webbrowser
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -30,6 +28,7 @@ from spyglass_service.desktop.datadir import (
     load_config,
 )
 from spyglass_service.desktop.platform_base import DesktopPlatform, default_platform
+from spyglass_service.desktop.platform_calls import PlatformCalls
 from spyglass_service.desktop.startup import (
     NO_CONFIG_MESSAGE,
     PEER_NOT_ANSWERING_MESSAGE,
@@ -55,6 +54,9 @@ logger = logging.getLogger(__name__)
 PEER_WAIT_S = 30.0
 # How long a start waits for its own service to answer before it shows the tray anyway.
 HEALTH_WAIT_S = 30.0
+# How long after the service starts the page waits for its first answer before it opens anyway.
+# The wait past HEALTH_WAIT_S runs beside the tray; a first start after an install took 26 s.
+OPEN_WAIT_S = 120.0
 # The pause between two health probes while waiting.
 POLL_S = 0.25
 # Before a hard exit, how long the tray loop gets to remove the icon, so no dead icon lingers.
@@ -106,7 +108,7 @@ class Launcher:
         self._server_factory = server_factory
         self._tray_factory = tray_factory
         self._open_browser = open_browser
-        self._platform = platform if platform is not None else default_platform()
+        self._os = PlatformCalls(platform if platform is not None else default_platform())
         self._exit_process = exit_process
         self._join_timeout = join_timeout
         self._guard = threading.Lock()
@@ -123,7 +125,8 @@ class Launcher:
         """Start Spyglass and block until it stops; return the process exit code.
 
         Order: settings, environment, lock, start decision, folder check, logs, service thread,
-        health wait, the browser unless `background`, then the tray on this (the main) thread.
+        health wait, the browser unless `background` (later, from a helper thread, when the
+        service has not answered yet), then the tray on this (the main) thread.
         0 after a normal stop, or when another live launcher holds this folder; a refused
         folder returns its verdict (3, 4 or 5); every other failure returns 1.
         """
@@ -140,7 +143,8 @@ class Launcher:
             self._show(bad_config_message(exc))
             return EXIT_FAILED
         self._url = f"http://127.0.0.1:{settings.port}/"
-        lock = single_instance_lock(settings.data_dir, pid_started_at=self._process_started_at)
+        lock = single_instance_lock(settings.data_dir, pid_started_at=self._os.process_started_at,
+                                    boot_time=self._os.boot_time)
         try:
             outcome = self._claim(lock, settings.port, background)
             return outcome if outcome is not None else self._start(settings, background)
@@ -190,12 +194,13 @@ class Launcher:
     def _claim(self, lock: CycleFileLock, port: int, background: bool) -> int | None:
         """Take the lock and decide whether to start; an exit code means "stop here".
 
-        The lock takes a crash-left lock at once: its holder is gone, or the process now holding
-        that pid is newer than the lock (Windows reuses pids). A lock still refused belongs to a
+        The lock takes a crash-left lock at once: its holder is gone, the lock predates the
+        machine's last start, or the process now holding that pid is newer than the lock
+        (Windows reuses pids). A lock still refused belongs to a
         live launcher, perhaps slow to start or showing a message, and is never taken over:
         wait for its service and open it, or say that it is not answering."""
         if not lock.acquire():
-            if self._wait_for_health(port, PEER_WAIT_S, lambda: True):
+            if self._wait_for_health(port, time.monotonic() + PEER_WAIT_S, lambda: True):
                 if not background:
                     self._open_dashboard()
             else:
@@ -233,15 +238,32 @@ class Launcher:
             logger.exception("The service could not be built")
             self._show(start_failed_message(settings.data_dir))
             return EXIT_FAILED
-        answered = self._wait_for_health(settings.port, HEALTH_WAIT_S, self._service_running)
+        began = time.monotonic()
+        answered = self._wait_for_health(settings.port, began + HEALTH_WAIT_S,
+                                         self._service_running)
         if not self._service_running():
             return self._ended_during_start(settings)
         if not answered:
             logger.warning("The service did not answer within %s s; showing the tray anyway",
                            HEALTH_WAIT_S)
-        if not background:
+        if answered and not background:
             self._open_dashboard()
+        elif not background:
+            self._open_on_first_answer(settings.port, began + OPEN_WAIT_S)
         return self._run_tray()
+
+    def _open_on_first_answer(self, port: int, until: float) -> None:
+        """Open the page from a helper thread when the service first answers, or at `until`.
+
+        The tray runs on this thread meanwhile, so it stays usable and Quit works; a stop or a
+        crash during the wait opens nothing.
+        """
+        def wait_then_open() -> None:
+            self._wait_for_health(port, until, self._service_running)
+            if self._service_running():
+                self._open_dashboard()
+
+        threading.Thread(target=wait_then_open, name="spyglass-open", daemon=True).start()
 
     def _start_service(self, settings: Settings) -> None:
         """Build the server and run it in a non-daemon thread, watched for a crash. A stop that
@@ -287,13 +309,13 @@ class Launcher:
             thread, stopping = self._thread, self._stopping
         return thread is not None and thread.is_alive() and not stopping
 
-    def _wait_for_health(self, port: int, seconds: float, keep_waiting: Callable[[], bool]) -> bool:
-        """Probe until a Spyglass answers (True), `seconds` pass, or keep_waiting() turns False."""
-        deadline = time.monotonic() + seconds
+    def _wait_for_health(self, port: int, until: float, keep_waiting: Callable[[], bool]) -> bool:
+        """Probe until a Spyglass answers (True), the monotonic time `until` passes, or
+        keep_waiting() turns False."""
         while keep_waiting():
             if isinstance(probe_health(port), Health):
                 return True
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= until:
                 return False
             time.sleep(POLL_S)
         return False
@@ -316,7 +338,7 @@ class Launcher:
         try:
             self._tray.run(self._tray_factory(
                 on_open=self._open_dashboard, on_quit=self.stop,
-                autostart=self._autostart_enabled, toggle_autostart=self._toggle_autostart,
+                autostart=self._os.autostart_enabled, toggle_autostart=self._os.toggle_autostart,
                 version=__version__))
         except Exception:
             logger.exception("The tray icon failed")
@@ -358,41 +380,6 @@ class Launcher:
         except Exception:
             logger.exception("Could not open %s", self._url)
 
-    def _process_started_at(self, pid: int) -> datetime | None:
-        """When process `pid` was created, for the lock's reused-pid check; None if unknown."""
-        if self._platform is None:
-            return None
-        try:
-            return self._platform.process_started_at(pid)
-        except Exception:
-            logger.exception("Could not read when process %s started", pid)
-            return None
-
-    def _autostart_enabled(self) -> bool:
-        """Whether the start-up entry exists; False when it cannot be read."""
-        if self._platform is None:
-            return False
-        try:
-            return self._platform.autostart_enabled()
-        except Exception:
-            logger.exception("Could not read the start-with-Windows entry")
-            return False
-
-    def _toggle_autostart(self) -> None:
-        """Flip the start-up entry from what is actually there, not from what the menu showed."""
-        if self._platform is None:
-            return
-        try:
-            self._platform.set_autostart(not self._platform.autostart_enabled())
-        except Exception:
-            logger.exception("Could not change the start-with-Windows entry")
-
     def _show(self, text: str) -> None:
         """Tell the user why Spyglass is not starting: a message box, or stderr without one."""
-        if self._platform is not None:
-            try:
-                self._platform.show_message(MESSAGE_TITLE, text)
-                return
-            except Exception:
-                logger.exception("Could not show a message box")
-        print(text, file=sys.stderr)
+        self._os.show(MESSAGE_TITLE, text)

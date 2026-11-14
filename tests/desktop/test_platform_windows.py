@@ -187,6 +187,27 @@ def test_process_started_at_is_none_when_the_process_cannot_be_read() -> None:
     assert platform.process_started_at(4242) is None
 
 
+def test_boot_time_is_now_minus_the_time_since_start() -> None:
+    """Windows counts milliseconds since the machine started; the boot is that long ago."""
+    platform = WindowsPlatform(registry=FakeRegistry(), candidates={},
+                               uptime_ms=lambda: 3_600_000)
+    expected = datetime.now(UTC) - timedelta(hours=1)
+    booted = platform.boot_time()
+    assert booted is not None and booted.tzinfo is not None
+    assert abs(booted - expected) < timedelta(seconds=5)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="GetTickCount64 exists only on Windows")
+def test_boot_time_reads_the_real_clock() -> None:
+    """The machine started before this process did, and in the past."""
+    platform = WindowsPlatform(registry=FakeRegistry(), candidates={})
+    booted = platform.boot_time()
+    started = platform.process_started_at(os.getpid())
+    assert booted is not None and started is not None
+    assert booted <= started + timedelta(seconds=2)
+    assert booted < datetime.now(UTC)
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="GetProcessTimes exists only on Windows")
 def test_process_started_at_reads_a_real_process() -> None:
     """This process started in the past (aware UTC); a free pid has no start time."""

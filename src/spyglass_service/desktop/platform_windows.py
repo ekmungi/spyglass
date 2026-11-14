@@ -1,5 +1,5 @@
-"""The Windows adapter: the sign-in start-up entry, installed browsers, message boxes and
-process start times.
+"""The Windows adapter: the sign-in start-up entry, installed browsers, message boxes, process
+start times and the machine's boot time.
 
 Every Windows-only call (`winreg`, `ctypes.windll`) is imported inside the function that needs
 it, so this module imports on any system and tests can inject a fake registry and launcher.
@@ -138,6 +138,16 @@ def _process_creation_filetime(pid: int) -> int | None:
         kernel32.CloseHandle(handle)
 
 
+def _milliseconds_since_boot() -> int:
+    """How long the machine has been running, from GetTickCount64 (which never wraps)."""
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32")
+    kernel32.GetTickCount64.restype = ctypes.c_ulonglong
+    kernel32.GetTickCount64.argtypes = ()
+    return int(kernel32.GetTickCount64())
+
+
 def _start_program(args: list[str]) -> subprocess.Popen:
     """Start a program and leave it running, with no console window under pythonw."""
     return subprocess.Popen(args, creationflags=no_window_flags())  # noqa: S603 -- no shell
@@ -153,11 +163,13 @@ class WindowsPlatform:
         candidates: dict[str, list[Path]] | None = None,
         pythonw: Path | None = None,
         process_times: Callable[[int], int | None] | None = None,
+        uptime_ms: Callable[[], int] | None = None,
     ) -> None:
         """Build the adapter; each argument defaults to the real thing for this machine."""
         self._registry: RegistryAdapter = registry if registry is not None else _WinregRegistry()
         self._launch = launch if launch is not None else _start_program
         self._process_times = process_times or _process_creation_filetime
+        self._uptime_ms = uptime_ms or _milliseconds_since_boot
         self._candidates = candidates if candidates is not None else _default_candidates()
         self._pythonw = pythonw or Path(sys.executable).with_name("pythonw.exe")
 
@@ -202,3 +214,9 @@ class WindowsPlatform:
         if filetime is None:
             return None
         return _FILETIME_EPOCH + timedelta(microseconds=filetime // 10)
+
+    def boot_time(self) -> datetime | None:
+        """When the machine last started, in aware UTC: the current time minus its uptime.
+
+        A lock written before this belongs to a process that a restart ended."""
+        return datetime.now(UTC) - timedelta(milliseconds=self._uptime_ms())
