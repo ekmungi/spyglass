@@ -7,6 +7,51 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/); this pro
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-14
+
+Spyglass becomes a Windows app with a one-file installer. It opens from the Start menu, runs in the
+notification area, and stops completely when you quit it. The developer route,
+`python -m spyglass_service` from a clone, keeps working.
+
+### Added
+- **Installer.** `Spyglass-Setup-<version>.exe` installs Spyglass for one user, without administrator
+  rights or developer tools: it brings its own Python. It asks for the data folder (by default
+  `%LOCALAPPDATA%\Spyglass\data`), the Obsidian vault and Start with Windows, and an upgrade keeps
+  them. The release job builds it for every version tag and adds it to the release.
+- **Tray app.** Opening Spyglass from the Start menu starts the service, opens the interface in the
+  default browser and puts an icon in the notification area with Open Spyglass, Start with Windows
+  and Quit Spyglass. Closing the browser tab leaves Spyglass running. Opening it again while it runs
+  opens the interface and starts no second service, also when it is opened twice at once.
+- **Start with Windows.** A per-user start-up entry starts Spyglass in the tray at sign-in, without
+  opening the browser. The tray, Settings and the installer all read and write the same entry.
+- **Settings: Spyglass on this computer.** A Start with Windows switch and a Quit Spyglass button,
+  shown when Spyglass runs as the app.
+- **Extension setup from Settings.** The Bring in section lists the installed Chrome-family browsers,
+  opens the chosen browser's extensions page and shows the folder to load. Spyglass keeps its own
+  copy of the extension in the data folder, which already carries the address and the key, so
+  nothing has to be typed. After Make a new button, the extension takes the new key on its next
+  reload.
+- **Data folder check.** The app and the installer refuse a data folder that holds an older Spyglass
+  (from 0.32 or before), or one a newer Spyglass has used, and change nothing in it. Every start
+  notes its version in `spyglass-data.json` in the data folder.
+
+### Changed
+- Quitting stops everything within 10 seconds, also during a collection: a running collection is
+  abandoned after 2 seconds and redone at the next one, and Claude runs are ended first. The service
+  itself stops within 8 seconds, in the app and in the developer route.
+- When the last collection is older than the collection interval, a collection starts about a minute
+  after Spyglass opens, instead of one interval later.
+- The reading browser for pages that need one can be an installed Edge or Chrome. The app uses Edge,
+  so the installer does not download Chromium; the developer route keeps patchright's own browser.
+- The extension's message when Spyglass is not running now reads "Spyglass is closed. Open Spyglass
+  from the Start menu, then send again."
+- Programs that Spyglass starts, such as the Claude command line, open no console window.
+
+### Removed
+- The one-time move of a database from the pre-0.10 data folder (`%LOCALAPPDATA%\Spyglass`) into a
+  new data folder. It could have brought an old database into a fresh install past the data folder
+  check.
+
 ## [0.40.1] - 2026-11-14
 
 Interface fixes from the first test pass of 0.40.0.

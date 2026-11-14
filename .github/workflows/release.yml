@@ -1,5 +1,6 @@
 # Builds the Obsidian plugin and publishes a GitHub release whose assets BRAT
-# installs. Trigger: push a tag equal to the manifest version (e.g. 0.1.0).
+# installs, then adds the Windows installer to it. Trigger: push a tag equal to the
+# manifest version (e.g. 0.1.0).
 name: Release plugin
 
 on:
@@ -37,3 +38,66 @@ jobs:
             gh release create "$tag" --title "$tag" --notes "Spyglass plugin $tag"
           fi
           gh release upload "$tag" manifest.json plugin/dist/main.js --clobber
+
+  # Builds the one-file Windows installer (installer/spyglass.iss) and adds it to the same
+  # release. Runs after `release`, which creates the release when it does not exist yet.
+  installer:
+    needs: release
+    runs-on: windows-latest
+    env:
+      # uv is pinned and checked: the installer ships this exact uv.exe to every user.
+      UV_VERSION: "0.10.9"
+      UV_ZIP_SHA256: "f58dc40896000229db7c52b8bdd931394040ef2ad59abd1eda841f6d70b13d7a"
+      TAG: ${{ github.ref_name }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
+      - name: Check the tag is a version
+        run: |
+          # The tag becomes the installer's version number, which Windows needs as digits.
+          if ($env:TAG -notmatch '^\d+\.\d+\.\d+$') { throw "Tag '$env:TAG' is not a version such as 0.41.0" }
+
+      - name: Build the interface
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Download the pinned uv and verify its checksum
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "uv.zip"
+          $url = "https://github.com/astral-sh/uv/releases/download/$env:UV_VERSION/uv-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLowerInvariant()
+          if ($actual -ne $env:UV_ZIP_SHA256) { throw "uv zip checksum $actual does not match the pinned $env:UV_ZIP_SHA256" }
+          $unpacked = Join-Path $env:RUNNER_TEMP "uv"
+          Expand-Archive -Path $zip -DestinationPath $unpacked
+          $uv = Get-ChildItem -Path $unpacked -Recurse -Filter uv.exe | Select-Object -First 1
+          Copy-Item -Path $uv.FullName -Destination installer\uv.exe
+
+      - name: Install Inno Setup when it is missing
+        run: |
+          $default = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue) -and -not (Test-Path $default)) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Build the installer
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=$env:TAG" installer\spyglass.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload the installer to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload $env:TAG "installer\Output\Spyglass-Setup-$env:TAG.exe" --clobber

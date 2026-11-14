@@ -83,15 +83,50 @@ flowchart LR
 
 ## Requirements
 
+The installer needs Windows 10 or 11 and an internet connection while it runs. It brings its own
+Python, so no developer tools are needed.
+
+A developer install from the source code needs the following:
+
 | What | Version or detail |
 |------|-------------------|
 | Operating system | Windows 10 or 11. This is the only tested system. The service is plain Python and should run on macOS and Linux, but nobody has tested it there, and the start scripts are for Windows only. |
 | [uv](https://docs.astral.sh/uv/) | Creates the Python environment from the lock file. |
 | Python | 3.12 or newer (uv can install it for you). |
 | [Node.js](https://nodejs.org/) | 20.19 or newer, or 22.12 or newer. It is needed once, to build the interface. |
-| An AI engine | Needed for judging, the brief and the assistant. Without one, collection and search work, but no item is judged. See [Choosing an AI engine](#choosing-an-ai-engine). |
+
+Both need an AI engine for judging, the brief and the assistant. Without one, collection and search
+work, but no item is judged. See [Choosing an AI engine](#choosing-an-ai-engine).
 
 ## Install and first run
+
+### With the installer (Windows)
+
+1. Download `Spyglass-Setup-<version>.exe` from the
+   [latest release](https://github.com/ekmungi/spyglass/releases/latest) and run it. It installs for
+   your user only and needs no administrator rights. The installer is not signed, so Windows
+   SmartScreen may warn about it; choose **More info**, then **Run anyway**.
+2. Choose the data folder. The default, `%LOCALAPPDATA%\Spyglass\data`, is outside any cloud-synced
+   folder, which keeps the database safe. If you use Obsidian, choose your vault on the next page;
+   you can also set it later in **Settings**. Tick **Start with Windows** if Spyglass should start
+   when you sign in.
+3. Setup downloads Python and the libraries Spyglass needs, which takes a few minutes, and writes a
+   log to `install.log` in the install folder.
+4. Spyglass opens in your browser. It keeps running in the notification area after you close the
+   tab; Windows 11 may hide its icon behind the ^ arrow. Open it again from the Start menu or with a
+   click on the icon, and quit it from the icon's menu or from **Settings**.
+5. Set up Spyglass in the app, as described [below](#set-up-spyglass-in-the-app).
+
+To upgrade, run the newer installer; it keeps your data folder. To uninstall, use **Settings >
+Apps** in Windows. The data folder and the settings file `%LOCALAPPDATA%\Spyglass\desktop.json`
+stay, so a later install picks them up again. A data folder from Spyglass 0.32 or older cannot be
+opened by this version, and the installer refuses it without changing it.
+
+Only one Spyglass can run at a time. If you also start one from the source code, or from the
+Obsidian plugin's Open dashboard command, stop it before you open the installed Spyglass, and switch
+on the plugin's **Connect only** setting.
+
+### From the source code (developers)
 
 1. Get the code and create the Python environment.
 
@@ -135,21 +170,24 @@ flowchart LR
 
 5. Open `http://127.0.0.1:7777/` in your browser.
 
-6. Set up Spyglass in the app.
-   - Open **Settings** and add an AI engine (the next section explains the choices).
-   - Open **Profile** and replace the example profile with your own interests. The profile is
-     what every item is judged against.
-   - Open **Sources** and add or remove feeds. Open **Watch** and add the organisations you follow.
-   - Wait for the next collection, or press the collect button on **Sources** to start one now.
-     The first brief is composed at 06:30 the next morning by default.
-
 **On Windows**, `scripts\spyglass.cmd` starts the service if it is not running and opens it in an
 app-style window of Edge or Chrome. You can pin it to the taskbar. To start the service at every
-sign-in, run the following command. Add `-Uninstall` to remove the task again.
+sign-in, run the following command. Add `-Uninstall` to remove the task again. Do not use it next
+to the installed Spyglass, whose installer removes this task.
 
 ```
 powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1
 ```
+
+### Set up Spyglass in the app
+
+- Open **Settings** and add an AI engine (the next section explains the choices).
+- Open **Profile** and replace the example profile with your own interests. The profile is what
+  every item is judged against.
+- Open **Sources** and add or remove feeds. Open **Watch** and add the organisations you follow.
+- Wait for the next collection, or press the collect button on **Sources** to start one now. When
+  the last collection is older than the collection interval, one starts about a minute after
+  Spyglass opens. The first brief is composed at 06:30 the next morning by default.
 
 ## Choosing an AI engine
 
@@ -190,7 +228,11 @@ provider. For Claude, read Anthropic's
 Chrome, Edge, Brave, Vivaldi and other Chromium browsers. It sends the open page, or only the text
 you selected, to Spyglass with one click or with Alt+Shift+S. Because it hands over the page your
 browser already shows, it also works for pages behind a paywall that you can read. Spyglass itself
-never signs in anywhere. Install it with **Load unpacked** and paste the key from **Settings**.
+never signs in anywhere. To install it, follow **Settings > Bring in**: choose your browser, press
+**Open extensions page**, switch on Developer mode and load the folder that the panel shows with
+**Load unpacked**. That copy of the extension already knows the address and the key, so nothing
+needs to be typed. With Spyglass closed, the extension says so and asks you to open it and send
+again.
 
 The other routes:
 
@@ -286,9 +328,11 @@ legacy plugin, and you can delete them if you do not use either.
 
 ## Data and backups
 
-- All data lives in the data folder, `.spyglass` in your home folder unless `SPYGLASS_DATA_DIR`
-  says otherwise. Keep it outside a cloud-synced folder, because a live SQLite database in a synced
-  folder can be corrupted.
+- All data lives in the data folder: the one chosen in the installer (by default
+  `%LOCALAPPDATA%\Spyglass\data`), or for a developer install `.spyglass` in your home folder unless
+  `SPYGLASS_DATA_DIR` says otherwise. Keep it outside a cloud-synced folder, because a live SQLite
+  database in a synced folder can be corrupted. The logs, `service.log` and `service.err.log`, are
+  in the data folder too.
 - A backup of the database is written to the `backups` folder inside the data folder every day at
   03:00. Spyglass keeps the newest two and the newest of each of the five days before, at most
   seven in total. A computer that was asleep at 03:00 takes the backup soon after it wakes.
@@ -327,6 +371,7 @@ setting anything up.
   and Find papers.
 - `frontend/` is the React interface. The current app is in `frontend/src/radar/`.
 - `browser-extension/` is the Send to Spyglass extension.
+- `installer/` holds the Windows installer script and its icon; its README says how to build it.
 - `tests/` holds the Python tests.
 - `docs/` holds the user guide and the privacy and safety description.
 - `plugin/` and `skills/` hold the legacy Obsidian plugin and its Claude skills.
@@ -340,7 +385,7 @@ setting anything up.
   the browser extension, FDA device decisions, the usage record and the in-app Help page are new.
   The [changelog](CHANGELOG.md) lists every change.
 - Spyglass is built and tested on Windows 11 only. Other systems are untested.
-- There is no installer yet. You install from source as described above.
+- The installer is for Windows only, and it is not signed.
 - Some parts are tested only against simulated services: the live Slack connection, Slack file
   capture and the Codex command.
 - The Obsidian plugin and its skills are legacy. They still work, but new work goes into the

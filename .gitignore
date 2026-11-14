@@ -18,6 +18,10 @@ frontend/coverage/
 plugin/dist/
 *.tsbuildinfo
 
+# Installer build: the pinned uv.exe is copied in at build time, and the compiler writes Output/
+installer/uv.exe
+installer/Output/
+
 # Local plan files are never committed (user rule)
 PLAN.md
 plan.md
