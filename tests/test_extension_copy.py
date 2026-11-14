@@ -6,6 +6,8 @@ refresh: a key the user typed by hand is only replaced when the config really ch
 """
 
 import json
+import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -119,6 +121,74 @@ def test_a_refresh_keeps_the_stamp(tmp_path: Path) -> None:
     (source / "manifest.json").write_text(json.dumps({"version": "2.0.0"}), encoding="utf-8")
     sync_extension_copy(source, data, ADDRESS, KEY)
     assert read_config(data)["stamp"] == before
+
+
+def test_a_failed_refresh_keeps_the_previous_copy_whole_and_is_repaired_later(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = make_source(tmp_path, "1.0.0")
+    data = tmp_path / "data"
+    folder = sync_extension_copy(source, data, ADDRESS, KEY)
+    # A new version with more files, so the copy has several files to fail in the middle of.
+    (source / "manifest.json").write_text(json.dumps({"version": "2.0.0"}), encoding="utf-8")
+    for name in ("a.js", "b.js", "c.js", "d.js"):
+        (source / name).write_text(f"// {name}", encoding="utf-8")
+
+    real_copy = shutil.copy2
+    copied: list[str] = []
+
+    def fail_after_two(src, dst, **kwargs):
+        if len(copied) >= 2:
+            raise OSError("disk full")
+        copied.append(str(src))
+        return real_copy(src, dst, **kwargs)
+
+    monkeypatch.setattr(shutil, "copy2", fail_after_two)
+    with pytest.raises(OSError):
+        sync_extension_copy(source, data, ADDRESS, KEY)
+
+    # The previous copy is intact and complete, with its config; no temporary folder is left.
+    assert json.loads((folder / "manifest.json").read_text(encoding="utf-8"))["version"] == "1.0.0"
+    assert (folder / "background.js").is_file() and (folder / "icons" / "icon.png").is_file()
+    assert read_config(data)["key"] == KEY
+    assert sorted(p.name for p in data.iterdir()) == [COPY_DIR]
+
+    # A later call, with the failure gone, rebuilds the copy correctly.
+    monkeypatch.setattr(shutil, "copy2", real_copy)
+    sync_extension_copy(source, data, ADDRESS, KEY)
+    assert json.loads((folder / "manifest.json").read_text(encoding="utf-8"))["version"] == "2.0.0"
+    assert (folder / "d.js").is_file()
+    assert read_config(data)["stamp"] == config_stamp(ADDRESS, KEY)
+    assert sorted(p.name for p in data.iterdir()) == [COPY_DIR]
+
+
+def test_a_failed_first_copy_leaves_no_folder_and_a_stale_temporary_folder_is_cleared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = make_source(tmp_path)
+    data = tmp_path / "data"
+    (data / (COPY_DIR + ".new")).mkdir(parents=True)  # left by an earlier crash
+    ((data / (COPY_DIR + ".new")) / "junk.js").write_text("// junk", encoding="utf-8")
+
+    def fail(src, dst, **kwargs):
+        raise OSError("locked")
+
+    monkeypatch.setattr(shutil, "copy2", fail)
+    with pytest.raises(OSError):
+        sync_extension_copy(source, data, ADDRESS, KEY)
+    assert list(data.iterdir()) == []
+
+
+def test_a_failed_config_write_leaves_no_part_file_holding_the_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(src, dst):
+        raise OSError("cannot replace")
+
+    monkeypatch.setattr(os, "replace", fail)
+    with pytest.raises(OSError):
+        write_extension_config(tmp_path, ADDRESS, KEY)
+    assert list((tmp_path / COPY_DIR).iterdir()) == []
 
 
 @pytest.fixture()

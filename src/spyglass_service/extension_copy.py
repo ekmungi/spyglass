@@ -38,16 +38,26 @@ def _atomic_write(path: Path, text: str) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".part")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-        handle.write(text)
-    os.replace(temporary, path)
+    try:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(temporary, path)
+    except BaseException:
+        # The temporary file holds the key; never leave it behind when the write fails.
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _write_config_in(folder: Path, address: str, key: str) -> None:
+    """Write the config file inside `folder`: the address, the key and the stamp of both."""
+    config = {"address": address, "key": key, "stamp": config_stamp(address, key)}
+    _atomic_write(folder / CONFIG_FILE, json.dumps(config, indent=2) + "\n")
 
 
 def write_extension_config(data_dir: Path | str, address: str, key: str) -> None:
     """Write the copy's config: the address, the key and the stamp that follows from both."""
-    config = {"address": address, "key": key, "stamp": config_stamp(address, key)}
-    _atomic_write(Path(data_dir) / COPY_DIR / CONFIG_FILE, json.dumps(config, indent=2) + "\n")
+    _write_config_in(Path(data_dir) / COPY_DIR, address, key)
 
 
 def _manifest_version(folder: Path) -> str | None:
@@ -83,9 +93,37 @@ def sync_extension_copy(source: Path, data_dir: Path | str, address: str, key: s
         if _manifest_version(folder) is None:
             return folder  # nothing to configure: do not leave a folder holding only a config
     elif _manifest_version(folder) != source_version:
-        if folder.exists():
-            shutil.rmtree(folder)
-        shutil.copytree(source, folder, ignore=_skip_development_folders(source))
+        _rebuild_copy(source, folder, address, key)
         logger.info("copied the browser extension %s into %s", source_version, folder)
+        return folder  # the new copy already holds its config
     write_extension_config(data_dir, address, key)
     return folder
+
+
+def _rebuild_copy(source: Path, folder: Path, address: str, key: str) -> None:
+    """Build the new copy beside `folder`, with its config, then swap it into place.
+
+    A failure while copying (a full disk, a file a browser holds open) leaves the previous copy
+    untouched and no temporary folder behind, so the next start tries again from a whole copy.
+    """
+    building = folder.with_name(folder.name + ".new")
+    previous = folder.with_name(folder.name + ".old")
+    # Leftovers of an earlier crash.
+    shutil.rmtree(building, ignore_errors=True)
+    shutil.rmtree(previous, ignore_errors=True)
+    try:
+        shutil.copytree(
+            source, building, ignore=_skip_development_folders(source), copy_function=shutil.copy2
+        )
+        _write_config_in(building, address, key)
+        if folder.exists():
+            os.replace(folder, previous)  # a rename: it moves the whole folder or nothing
+        try:
+            os.replace(building, folder)
+        except OSError:
+            if previous.exists():
+                os.replace(previous, folder)
+            raise
+    finally:
+        shutil.rmtree(building, ignore_errors=True)
+        shutil.rmtree(previous, ignore_errors=True)
