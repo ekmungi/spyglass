@@ -4,8 +4,11 @@ Kept apart from the scheduler class so the decisions (is a brief due, did a stag
 succeed) can be read and tested without threads or a running scheduler.
 """
 
+import json
 import logging
-from datetime import date, datetime, time as dtime, tzinfo
+import os
+from datetime import UTC, date, datetime, time as dtime, timedelta, tzinfo
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -15,6 +18,13 @@ from sqlmodel import Session, select
 from spyglass_service.radar.models import RadarBrief
 
 logger = logging.getLogger(__name__)
+
+# Records when the last collection cycle finished, inside the data folder, so a restart can
+# tell a fresh collection from a stale one.
+LAST_CYCLE_FILE = "radar-last-cycle.json"
+# How long after opening the first collection runs when the last one is stale or unknown: long
+# enough for the service to finish starting, short enough to feel immediate.
+FIRST_CYCLE_DELAY = timedelta(seconds=60)
 
 
 def parse_brief_time(text: str) -> dtime:
@@ -116,3 +126,49 @@ def cycle_result(stages: dict[str, dict], stopped: bool) -> str:
     if len(bad) == len(stages) and all(s["status"] == "error" for s in bad):
         return "error"
     return "partial"
+
+
+def first_cycle_at(now: datetime, last_finished: datetime | None, interval: timedelta) -> datetime:
+    """When the first interval cycle after opening should run.
+
+    Args:
+        now: The current aware time.
+        last_finished: When the last cycle finished, or None when unknown.
+        interval: The time between collection cycles.
+
+    Returns:
+        A minute from now when no cycle is known or the last one is older than `interval`,
+        else the last finish time plus `interval` (the normal rhythm continues).
+    """
+    if last_finished is None or now - last_finished > interval:
+        return now + FIRST_CYCLE_DELAY
+    return last_finished + interval
+
+
+def read_last_finished(data_dir: Path | str | None) -> datetime | None:
+    """The finish time stored by `write_last_finished`; None when missing or unreadable."""
+    if not data_dir:
+        return None
+    try:
+        raw = json.loads((Path(data_dir) / LAST_CYCLE_FILE).read_text(encoding="utf-8"))
+        when = datetime.fromisoformat(raw["finished_at"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=UTC)
+
+
+def write_last_finished(data_dir: Path | str | None, finished_at: datetime) -> None:
+    """Store a cycle's finish time atomically (temp file, then replace); never raises.
+
+    A failed write only costs an early collection at the next start, so it is logged and
+    ignored rather than failing the cycle that just finished.
+    """
+    if not data_dir:
+        return
+    target = Path(data_dir) / LAST_CYCLE_FILE
+    temp = target.with_name(target.name + ".tmp")
+    try:
+        temp.write_text(json.dumps({"finished_at": finished_at.isoformat()}), encoding="utf-8")
+        os.replace(temp, target)
+    except OSError as error:
+        logger.warning("could not record the last cycle time: %s", error)

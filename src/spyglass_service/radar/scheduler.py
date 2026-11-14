@@ -40,15 +40,20 @@ from spyglass_service.radar.scheduler_extras import (
     stop_slack_live,
 )
 from spyglass_service.radar.scheduler_support import (
+    LAST_CYCLE_FILE,
     brief_detail,
     brief_exists,
     cycle_result,
+    first_cycle_at,
     needs_catchup,
     parse_brief_time,
+    read_last_finished,
+    write_last_finished,
     zone_for,
 )
 
-__all__ = ["RadarScheduler", "needs_catchup", "parse_brief_time", "brief_detail"]
+__all__ = ["RadarScheduler", "needs_catchup", "parse_brief_time", "brief_detail",
+           "first_cycle_at", "LAST_CYCLE_FILE"]
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +119,7 @@ class RadarScheduler(StagesMixin):
         self.slack_live: Any | None = None
         self._applied = self._wanted_schedule()
         data_dir = getattr(settings, "data_dir", None)
+        self._data_dir = data_dir
         self._file_lock = (CycleFileLock(Path(data_dir) / LOCK_FILE, pid_alive=pid_alive)
                            if data_dir else None)
         self._scheduler = BackgroundScheduler(timezone=zone_for(settings.radar_timezone),
@@ -190,7 +196,12 @@ class RadarScheduler(StagesMixin):
             self._record_brief(day or self._now().date(), stages.get("compose"))
         with self._state_lock:
             self._last_cycle = result
+        write_last_finished(self._data_dir, datetime.fromisoformat(result["finished_at"]))
         return result
+
+    def last_finished(self) -> datetime | None:
+        """When the last cycle finished (kept across restarts), or None when unknown."""
+        return read_last_finished(self._data_dir)
 
     def run_cycle(self, trigger: str = "manual", *, compose: bool = False,
                   wait_seconds: float = 0, day: date | None = None) -> dict:
@@ -258,8 +269,20 @@ class RadarScheduler(StagesMixin):
         return self._clock().astimezone(zone_for(self._settings.radar_timezone))
 
     def _scheduled_cycle(self) -> None:
-        """Interval job: a plain cycle."""
+        """Interval job: a plain cycle, unless one finished within the interval already.
+
+        The catch-up cycle that runs shortly after start would otherwise be followed at once
+        by this one, collecting twice back to back.
+        """
+        last = self.last_finished()
+        if last is not None and self._clock() - last < self._interval():
+            logger.info("scheduled cycle skipped: the last cycle finished at %s", last)
+            return
         self.run_cycle("schedule")
+
+    def _interval(self) -> timedelta:
+        """The time between collection cycles, as set in the settings (at least 15 minutes)."""
+        return timedelta(hours=max(0.25, float(self._settings.radar_collect_hours)))
 
     def _daily_brief(self) -> None:
         """Daily job: a cycle, then compose, waiting for a running cycle if need be.
@@ -330,11 +353,13 @@ class RadarScheduler(StagesMixin):
         self._stop_event.clear()
         self._applied = self._wanted_schedule()
         when = parse_brief_time(self._settings.radar_brief_time)
-        hours = max(0.25, float(self._settings.radar_collect_hours))
+        interval = self._interval()
         now = _utc_now()
         add = self._scheduler.add_job
-        add(self._in_thread(self._scheduled_cycle, "radar-cycle"), "interval", hours=hours,
-            id=CYCLE_JOB, next_run_time=now + timedelta(hours=hours))
+        # The first cycle comes a minute after opening when the last collection is stale.
+        add(self._in_thread(self._scheduled_cycle, "radar-cycle"), "interval",
+            seconds=interval.total_seconds(), id=CYCLE_JOB,
+            next_run_time=first_cycle_at(now, self.last_finished(), interval))
         add(self._in_thread(self._daily_brief, "radar-brief"), CronTrigger(
             hour=when.hour, minute=when.minute, timezone=zone_for(self._settings.radar_timezone)),
             id=BRIEF_JOB)
