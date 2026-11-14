@@ -133,6 +133,34 @@ def test_default_platform_is_none_off_windows(monkeypatch: pytest.MonkeyPatch) -
     assert default_platform() is None
 
 
+def test_no_window_flags_is_zero_off_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Other systems have no console windows to hide, and subprocess refuses non-zero flags."""
+    monkeypatch.setattr(platform_base.sys, "platform", "linux")
+    assert platform_base.no_window_flags() == 0
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the flag exists only on Windows")
+def test_no_window_flags_hides_the_console_on_windows() -> None:
+    """Under pythonw a console program started without this flag opens a window."""
+    import subprocess
+
+    assert platform_base.no_window_flags() == subprocess.CREATE_NO_WINDOW
+
+
+def test_default_launcher_starts_the_browser_without_a_console(monkeypatch, tmp_path: Path) -> None:
+    """The extensions page opens through one helper that passes the no-window flag."""
+    from spyglass_service.desktop import platform_windows
+
+    started: list[tuple[list[str], dict]] = []
+    monkeypatch.setattr(platform_windows.subprocess, "Popen",
+                        lambda args, **kwargs: started.append((args, kwargs)))
+    edge = _exe(tmp_path, "edge", "msedge.exe")
+    platform = WindowsPlatform(registry=FakeRegistry(), candidates={"edge": [edge]})
+    platform.open_extensions_page("edge")
+    assert started == [([str(edge), "edge://extensions"],
+                        {"creationflags": platform_base.no_window_flags()})]
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="MessageBoxW exists only on Windows")
 def test_show_message_comes_to_the_front(monkeypatch: pytest.MonkeyPatch) -> None:
     """Under pythonw a plain box can open behind other windows; it must come to the front."""

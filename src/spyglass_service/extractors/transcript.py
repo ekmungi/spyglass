@@ -11,6 +11,8 @@ import subprocess
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
+from spyglass_service.desktop.platform_base import no_window_flags
+
 # The resolved yt-transcribe command, set once at startup by app wiring (explicit setting or
 # auto-discovery). None until set; falls back to the env var, then the bare name.
 _YT_CMD: str | None = None
@@ -29,8 +31,12 @@ def _yt_transcribe_cmd() -> str:
 
 
 def _default_cli_runner(args: list[str]) -> subprocess.CompletedProcess:
-    """Run a command capturing stdout, never raising on a non-zero exit (we parse its JSON)."""
-    return subprocess.run(args, capture_output=True, text=True, timeout=600, check=False)
+    """Run a command capturing stdout, never raising on a non-zero exit (we parse its JSON).
+
+    yt-transcribe is a console program, so under the windowed desktop app it is started with
+    no console window."""
+    return subprocess.run(args, capture_output=True, text=True, timeout=600, check=False,
+                          creationflags=no_window_flags())
 
 
 def _fetch_transcript_via_cli(

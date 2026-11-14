@@ -286,6 +286,19 @@ def test_transcript_via_cli_returns_text_from_json() -> None:
     assert _fetch_transcript_via_cli("https://youtu.be/x", runner=runner) == "hello transcript"
 
 
+def test_transcript_command_starts_without_a_console_window(monkeypatch) -> None:
+    """Under the windowed desktop app, yt-transcribe (a console program) must not open a window."""
+    from spyglass_service.desktop.platform_base import no_window_flags
+    from spyglass_service.extractors import transcript
+
+    seen: list[dict] = []
+    monkeypatch.setattr(transcript.subprocess, "run",
+                        lambda args, **kwargs: seen.append(kwargs) or "done")
+    assert transcript._default_cli_runner(["yt-transcribe", "--version"]) == "done"
+    assert seen[0]["creationflags"] == no_window_flags()
+    assert seen[0]["capture_output"] is True and seen[0]["check"] is False
+
+
 def test_transcript_via_cli_error_json_returns_none() -> None:
     """A yt-transcribe error JSON (no captions) yields None so the caller can fall back."""
     import json as _json

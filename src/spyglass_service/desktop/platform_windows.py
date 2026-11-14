@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from spyglass_service.desktop.platform_base import Browser
+from spyglass_service.desktop.platform_base import Browser, no_window_flags
 
 # The per-user key Windows reads at sign-in; a value here starts a program without admin rights.
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -103,19 +103,24 @@ def _default_candidates() -> dict[str, list[Path]]:
     }
 
 
+def _start_program(args: list[str]) -> subprocess.Popen:
+    """Start a program and leave it running, with no console window under pythonw."""
+    return subprocess.Popen(args, creationflags=no_window_flags())  # noqa: S603 -- no shell
+
+
 class WindowsPlatform:
     """The `DesktopPlatform` for Windows; the registry, launcher and paths are injectable."""
 
     def __init__(
         self,
         registry: RegistryAdapter | None = None,
-        launch: Callable[[list[str]], object] = subprocess.Popen,
+        launch: Callable[[list[str]], object] | None = None,
         candidates: dict[str, list[Path]] | None = None,
         pythonw: Path | None = None,
     ) -> None:
         """Build the adapter; each argument defaults to the real thing for this machine."""
         self._registry: RegistryAdapter = registry if registry is not None else _WinregRegistry()
-        self._launch = launch
+        self._launch = launch if launch is not None else _start_program
         self._candidates = candidates if candidates is not None else _default_candidates()
         self._pythonw = pythonw or Path(sys.executable).with_name("pythonw.exe")
 

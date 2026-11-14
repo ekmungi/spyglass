@@ -7,6 +7,7 @@ example, hide the "start with Windows" switch) instead of failing.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +46,18 @@ class DesktopPlatform(Protocol):
     def show_message(self, title: str, text: str) -> None:
         """Show a blocking message box to the user."""
         ...
+
+
+def no_window_flags() -> int:
+    """The `creationflags` that start a console program without a console window.
+
+    The desktop app runs under pythonw.exe, which has no console, so Windows gives every console
+    child (Claude's command line, yt-transcribe, taskkill) a window of its own unless asked not
+    to. Other systems have no such windows, and subprocess refuses non-zero flags there.
+    """
+    if sys.platform == "win32":
+        return subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+    return 0
 
 
 def default_platform() -> DesktopPlatform | None:
