@@ -34,6 +34,7 @@ from spyglass_service.cards import materialize_cards
 from spyglass_service.categories import migrate_categories_once, migrate_group_label_to_category
 from spyglass_service.collectors.factory import build_collectors
 from spyglass_service.config import Settings, apply_overlay
+from spyglass_service.desktop.datadir import record_data_version
 from spyglass_service.db import backfill_rss_feed_urls, check_db_integrity, create_db_engine, init_db
 from spyglass_service.documents import set_yt_transcribe_cmd
 from spyglass_service.yt_discovery import discover_yt_transcribe
@@ -311,6 +312,8 @@ def create_app(
         app.state.db_ok = check_db_integrity(engine)
         if app.state.db_ok:
             init_db(engine)
+            # Note this version in the data folder so an older Spyglass refuses the folder later.
+            record_data_version(settings.data_dir, __version__)
             # One-time migration: reset any RECENT pre-publish-day-windowing
             # briefs (un-stamp their cards + delete the rows) so the compose trigger
             # below rebuilds them into proper per-day briefs. Guarded to run exactly
