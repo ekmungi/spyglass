@@ -20,8 +20,13 @@ RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 # The name Spyglass gives its value, so it can find and remove only its own entry.
 RUN_VALUE = "Spyglass"
 
-# MessageBoxW style: an information icon with a single OK button.
+# MessageBoxW style: an information icon with a single OK button, brought to the front and kept
+# above other windows. A pythonw process owns no window, so without the last two flags Windows
+# may open the box behind whatever the user is looking at, and the start seems to do nothing.
 _MB_OK_INFORMATION = 0x40
+_MB_SETFOREGROUND = 0x10000
+_MB_TOPMOST = 0x40000
+_MB_STYLE = _MB_OK_INFORMATION | _MB_SETFOREGROUND | _MB_TOPMOST
 
 # (id, display name, extensions address, executable path under an Application root)
 _BROWSERS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
@@ -147,4 +152,4 @@ class WindowsPlatform:
         """Show a blocking information box (used when no interface is up to tell the user)."""
         import ctypes
 
-        ctypes.windll.user32.MessageBoxW(None, text, title, _MB_OK_INFORMATION)
+        ctypes.windll.user32.MessageBoxW(None, text, title, _MB_STYLE)

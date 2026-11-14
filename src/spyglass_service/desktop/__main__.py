@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     # Imported here so the folder check stays fast and free of the launcher's heavy imports.
     from spyglass_service.desktop.launcher import Launcher
 
-    return Launcher(open_browser=not args.background).run()
+    return Launcher().run(background=args.background)
 
 
 if __name__ == "__main__":

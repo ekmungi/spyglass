@@ -3,6 +3,7 @@
 `build_server` is the one place the service is assembled; the tray launcher calls it too, so the
 two entries cannot drift apart."""
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
@@ -11,6 +12,8 @@ import uvicorn
 from spyglass_service.app import create_app
 from spyglass_service.config import Settings
 from spyglass_service.desktop.platform_base import default_platform
+
+logger = logging.getLogger(__name__)
 
 # Built frontend relative to the repo layout; missing dir falls back to a placeholder page.
 _SPA_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -39,8 +42,14 @@ def build_server(
     def request_stop() -> None:
         if server is not None:
             server.should_exit = True
-        if on_stop is not None:
+        if on_stop is None:
+            return
+        # The server is already stopping; a failure in the host's own stop is logged rather
+        # than turned into a 500, so the page still learns that the stop was accepted.
+        try:
             on_stop()
+        except Exception:
+            logger.exception("The stop callback failed; the service is stopping anyway")
 
     # radar=True: this is the real service, so the built-in scheduler collects, judges and
     # composes on its own; nothing else needs to be open.

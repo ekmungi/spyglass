@@ -51,3 +51,17 @@ def test_shutdown_route_sets_should_exit_and_calls_on_stop(tmp_path) -> None:
         assert client.post("/api/shutdown").json() == {"status": "stopping"}
     assert server.should_exit is True
     assert seen == [True]
+
+
+def test_shutdown_route_stays_202_when_on_stop_fails(tmp_path) -> None:
+    """A broken stop callback is logged; the page still hears 202 and the server still stops."""
+
+    def on_stop() -> None:
+        raise RuntimeError("the tray is already gone")
+
+    server = main_module.build_server(make_settings(tmp_path), on_stop=on_stop)
+    with TestClient(server.config.app) as client:
+        response = client.post("/api/shutdown")
+    assert response.status_code == 202
+    assert response.json() == {"status": "stopping"}
+    assert server.should_exit is True

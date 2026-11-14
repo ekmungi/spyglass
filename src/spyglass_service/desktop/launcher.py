@@ -1,187 +1,397 @@
-"""The desktop launcher's testable core: environment, health probe, start decision, logs, lock.
+"""The desktop launcher: it puts the start pieces together, runs the service thread and the tray,
+and owns the one stop path.
 
-The tray, the service thread and the browser (which need Windows) are added on top of these
-pieces; everything here runs and is tested without a tray or a real service on port 7777.
+The pieces themselves (environment, health probe, decision table, messages, logs, lock) live in
+`startup.py`; the names the launcher uses are importable from here too. The Launcher's server,
+tray, browser, platform and exit are injected, so the whole start and stop path runs in tests
+without a tray or a real service.
 """
 
 from __future__ import annotations
 
-import http.client
-import json
+import logging
 import os
 import sys
-import urllib.error
-import urllib.request
-from collections.abc import MutableMapping
-from dataclasses import dataclass
-from enum import Enum
+import threading
+import time
+import webbrowser
+from collections.abc import Callable
 from pathlib import Path
-from typing import Literal, TextIO
+from typing import Any, Protocol
 
-from spyglass_service.config import Settings, apply_overlay
-from spyglass_service.desktop.datadir import DesktopConfig
+from spyglass_service import __version__
+from spyglass_service.config import Settings
+from spyglass_service.desktop.datadir import (
+    ConfigError,
+    DesktopConfig,
+    FolderVerdict,
+    check_data_dir,
+    load_config,
+)
+from spyglass_service.desktop.platform_base import DesktopPlatform, default_platform
+from spyglass_service.desktop.startup import (
+    LOCK_TAKEN_MESSAGE,
+    NO_CONFIG_MESSAGE,
+    Health,
+    StartAction,
+    bad_config_message,
+    decide_start,
+    port_busy_message,
+    prepare_environment,
+    probe_health,
+    redirect_output,
+    refusal_message,
+    single_instance_lock,
+    start_failed_message,
+)
+from spyglass_service.desktop.tray_runner import TrayLike, TrayRunner
 from spyglass_service.radar.cycle_lock import CycleFileLock
 
-# The reading browser the desktop app asks for: Edge ships with Windows, so it is always there.
-BROWSER_CHANNEL = "msedge"
-# A service log over this size is moved aside at start, so logs never grow without limit.
-LOG_LIMIT_BYTES = 10_000_000
-NOT_SPYGLASS = "not-spyglass"
+logger = logging.getLogger(__name__)
+
+# How long a second start waits for the running launcher's service to answer. That service does
+# its start-up work (backup, migrations, index load) before it opens the port.
+PEER_WAIT_S = 30.0
+# How long a start waits for its own service to answer before it shows the tray anyway.
+HEALTH_WAIT_S = 30.0
+# The pause between two health probes while waiting.
+POLL_S = 0.25
+# Before a hard exit, how long the tray loop gets to remove the icon, so no dead icon lingers.
+TRAY_CLOSE_GRACE_S = 0.5
+# run()'s result when Spyglass did not start, or stopped on its own.
+EXIT_FAILED = 1
+MESSAGE_TITLE = "Spyglass"
 
 
-@dataclass(frozen=True)
-class Health:
-    """What a running Spyglass reports about itself on /api/health."""
+class ServerLike(Protocol):
+    """What the launcher needs from uvicorn.Server."""
 
-    version: str
-    started_by: str | None  # "desktop", "developer", or None for 0.40.0 and older
+    should_exit: bool
 
-
-HealthResult = Health | Literal["not-spyglass"] | None
-
-
-class StartAction(Enum):
-    """What the launcher does after looking at the lock and at the port."""
-
-    START = "start"
-    OPEN_PEER = "open_peer"
-    REFUSE_OTHER_SPYGLASS = "refuse_other_spyglass"
-    REFUSE_PORT_BUSY = "refuse_port_busy"
+    def run(self) -> None:
+        """Serve until should_exit is set."""
+        ...
 
 
-def prepare_environment(config: DesktopConfig,
-                        environ: MutableMapping[str, str] = os.environ) -> Settings:
-    """Point the process at the installed data folder and return the settings to run with.
+def _desktop_server(settings: Settings, on_stop: Callable[[], None]) -> ServerLike:
+    """The real service, built as the developer entry builds it and marked as the desktop's."""
+    # Imported here: the app is heavy, and it must load only after the logs are redirected.
+    from spyglass_service.__main__ import build_server
 
-    Sets the SPYGLASS_* variables (so child processes see them too), moves the working
-    directory into the data folder (so a stray `.env` elsewhere is never read), and layers the
-    folder's settings.json over them. The values are also passed to Settings directly, so the
-    result does not depend on which mapping `environ` is.
-    """
-    environ["SPYGLASS_DATA_DIR"] = str(config.data_dir)
-    environ["SPYGLASS_PORT"] = str(config.port)
-    environ["SPYGLASS_BROWSER_CHANNEL"] = BROWSER_CHANNEL
-    explicit: dict = {"data_dir": config.data_dir, "port": config.port,
-                      "browser_channel": BROWSER_CHANNEL}
-    if config.vault_path is not None:
-        environ["SPYGLASS_VAULT_PATH"] = str(config.vault_path)
-        explicit["vault_path"] = config.vault_path
-    os.chdir(config.data_dir)
-    return apply_overlay(Settings(**explicit))
+    return build_server(settings, started_by="desktop", on_stop=on_stop)
 
 
-def probe_health(port: int, timeout: float = 1.0) -> HealthResult:
-    """Ask whatever listens on 127.0.0.1:`port` who it is.
+def _system_tray(**callbacks: Any) -> TrayLike:
+    """The real pystray icon (imported here because pystray is installed on Windows only)."""
+    from spyglass_service.desktop.tray import build_tray
 
-    Returns a Health for a JSON answer that names a version and None when nothing accepts
-    the connection. Anything that did accept it but is not a healthy Spyglass (another HTTP
-    service, a non-HTTP service, a dropped connection, or no answer within `timeout`, as from
-    a hung or busy service) is "not-spyglass", so the caller never starts a second service
-    on a busy port.
-    """
-    # An empty proxy map: a system proxy must never sit between us and this computer.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    return build_tray(**callbacks)
+
+
+def _lock_text(path: Path) -> str | None:
+    """The lock file's text, or None when it is gone or unreadable."""
     try:
-        with opener.open(f"http://127.0.0.1:{port}/api/health", timeout=timeout) as response:
-            raw = response.read()
-    except urllib.error.HTTPError:
-        return NOT_SPYGLASS  # it answered HTTP, but with an error status
-    except urllib.error.URLError as exc:
-        # urllib wraps only errors from making the connection. A refusal, or a connect timeout
-        # (Windows takes about two seconds to refuse a closed local port), means nothing
-        # accepted; a reset or a malformed reply means something did.
-        reason = exc.reason
-        if isinstance(reason, (ConnectionResetError, ConnectionAbortedError,
-                               http.client.HTTPException)):
-            return NOT_SPYGLASS
-        return None
-    except ConnectionRefusedError:
-        return None
-    except (http.client.HTTPException, ConnectionError, TimeoutError):
-        # Raised after the connection was made: garbage instead of HTTP, a connection dropped
-        # mid-reply, or a service that accepted and never answered.
-        return NOT_SPYGLASS
+        return path.read_text(encoding="utf-8")
     except OSError:
         return None
-    try:
-        body = json.loads(raw)
-    except ValueError:
-        return NOT_SPYGLASS
-    version = body.get("version") if isinstance(body, dict) else None
-    if not isinstance(version, str):
-        return NOT_SPYGLASS
-    started_by = body.get("started_by")
-    return Health(version, started_by if isinstance(started_by, str) else None)
 
 
-def decide_start(lock_acquired: bool, health: HealthResult) -> StartAction:
-    """The start decision table. Pure: waiting for a peer to come up is the caller's job.
+class Launcher:
+    """Starts Spyglass as a tray app and owns its one stop path.
 
-    Without the lock, another launcher on this data folder is running or starting, so the
-    right move is to open its interface whatever the port answers right now. With the lock,
-    anything already answering on the port is not ours to use.
+    The tray's Quit, the Settings page's Quit button and POST /api/shutdown all end in stop().
     """
-    if not lock_acquired:
-        return StartAction.OPEN_PEER
-    if health is None:
-        return StartAction.START
-    if health == NOT_SPYGLASS:
-        return StartAction.REFUSE_PORT_BUSY
-    return StartAction.REFUSE_OTHER_SPYGLASS
 
+    def __init__(self, *,
+                 server_factory: Callable[[Settings, Callable[[], None]], ServerLike] = _desktop_server,
+                 tray_factory: Callable[..., TrayLike] = _system_tray,
+                 open_browser: Callable[[str], object] = webbrowser.open,
+                 platform: DesktopPlatform | None = None,
+                 exit_process: Callable[[int], object] = os._exit,
+                 join_timeout: float = 10.0) -> None:
+        """Each argument defaults to the real thing; platform None means this machine's adapter."""
+        self._server_factory = server_factory
+        self._tray_factory = tray_factory
+        self._open_browser = open_browser
+        self._platform = platform if platform is not None else default_platform()
+        self._exit_process = exit_process
+        self._join_timeout = join_timeout
+        self._guard = threading.Lock()
+        self._server: ServerLike | None = None
+        self._thread: threading.Thread | None = None
+        self._tray = TrayRunner()
+        self._stopping = False
+        self._crashed = False
+        self._bind_failed = False
+        self._url = ""
+        self._stopped = threading.Event()
 
-def refusal_message(health: Health, port: int) -> str:
-    """The text shown when `decide_start` returned REFUSE_OTHER_SPYGLASS."""
-    if health.started_by == "desktop":
-        return (f"Another Spyglass (version {health.version}) is already running on port "
-                f"{port} with a different data folder. Quit it from its tray icon, then "
-                "open Spyglass again.")
-    return (f"Spyglass is already running outside the app (version {health.version}), started "
-            "from a command line, a script or the Obsidian plugin's Open dashboard. Stop it, "
-            "then open Spyglass again.")
+    def run(self, background: bool = False) -> int:
+        """Start Spyglass and block until it stops; return the process exit code.
 
+        Order: settings, environment, lock, start decision, folder check, logs, service thread,
+        health wait, the browser unless `background`, then the tray on this (the main) thread.
+        0 after a normal stop or after opening a running peer; a refused folder returns its
+        verdict (3, 4 or 5); every other failure returns 1.
+        """
+        config = self._read_config()
+        if config is None:
+            return EXIT_FAILED
+        if not config.data_dir.exists():
+            # Before the environment (which moves into the folder) and the lock (whose file
+            # would create it), so a vanished folder is reported, not silently recreated.
+            return self._folder_refusal(config.data_dir) or EXIT_FAILED
+        try:
+            settings = prepare_environment(config)
+        except (OSError, ValueError) as exc:
+            self._show(bad_config_message(exc))
+            return EXIT_FAILED
+        self._url = f"http://127.0.0.1:{settings.port}/"
+        lock = single_instance_lock(settings.data_dir)
+        try:
+            outcome = self._claim(lock, settings.port, background)
+            return outcome if outcome is not None else self._start(settings, background)
+        finally:
+            lock.release()  # removes the file only if it is ours
 
-def _rotate_if_large(path: Path, limit_bytes: int) -> None:
-    """Move `path` to `path.1` when it is over the limit; keep it in place if that fails.
+    def stop(self) -> None:
+        """The one stop path. Idempotent, thread-safe, and it never raises.
 
-    On Windows os.replace raises PermissionError while another process holds either file open.
-    A log that grows a little past its limit is better than a launcher that cannot start.
-    """
-    try:
-        if path.exists() and path.stat().st_size > limit_bytes:
-            os.replace(path, path.with_name(path.name + ".1"))
-    except OSError:
-        pass
+        It runs inside the request that answers POST /api/shutdown, which must still answer
+        202, so it only sets should_exit and hands the rest to a helper thread: joining the
+        service thread from one of its own requests would wait for itself. The helper joins
+        the service thread for up to join_timeout, closes the tray, and calls exit_process(0)
+        only if the thread is still alive, so a stuck thread can never keep the port.
+        """
+        with self._guard:
+            if self._stopping:
+                return
+            self._stopping = True
+            server = self._server
+        try:
+            if server is not None:
+                server.should_exit = True
+        except Exception:
+            logger.exception("Could not tell the service to stop")
+        try:
+            threading.Thread(target=self._finish_stop, name="spyglass-stop", daemon=True).start()
+        except Exception:
+            logger.exception("No thread for the stop; finishing it here")
+            self._finish_stop()
 
+    def wait_until_stopped(self, timeout: float | None = None) -> bool:
+        """Block until a stop has finished; False if `timeout` passed first."""
+        return self._stopped.wait(timeout)
 
-def _open_log(path: Path) -> TextIO:
-    """Open `path` for appending; discard the output (os.devnull) if it cannot be opened."""
-    try:
-        return open(path, "a", encoding="utf-8", errors="replace", buffering=1)
-    except OSError:
-        return open(os.devnull, "a", encoding="utf-8")
+    def _read_config(self) -> DesktopConfig | None:
+        """desktop.json, or None after telling the user to run the installer (again)."""
+        try:
+            config = load_config()
+        except ConfigError as exc:
+            self._show(bad_config_message(exc))
+            return None
+        if config is None:
+            self._show(NO_CONFIG_MESSAGE)
+        return config
 
+    def _claim(self, lock: CycleFileLock, port: int, background: bool) -> int | None:
+        """Take the lock and decide whether to start; an exit code means "stop here".
 
-def redirect_output(data_dir: Path, limit_bytes: int = LOG_LIMIT_BYTES) -> None:
-    """Send stdout and stderr to service.log and service.err.log in the data folder.
+        Without the lock another launcher on this folder is running or starting, so wait for
+        its service and open it. If no Spyglass answers within PEER_WAIT_S the lock is stale:
+        Windows reuses process ids, so a lock left by a crash can name a live, unrelated
+        process. It is then removed and taken, and the normal start goes on.
+        """
+        if not lock.acquire():
+            seen = _lock_text(lock.path)
+            if self._wait_for_health(port, PEER_WAIT_S, lambda: True):
+                if not background:
+                    self._open_dashboard()
+                return 0
+            if _lock_text(lock.path) == seen:  # still the same silent holder
+                try:
+                    lock.path.unlink(missing_ok=True)
+                except OSError:
+                    pass  # the acquire below then fails and says so
+            if not lock.acquire():
+                self._show(LOCK_TAKEN_MESSAGE)
+                return EXIT_FAILED
+        health = probe_health(port)
+        action = decide_start(True, health)
+        if action is StartAction.REFUSE_OTHER_SPYGLASS and isinstance(health, Health):
+            self._show(refusal_message(health, port))
+            return EXIT_FAILED
+        if action is StartAction.REFUSE_PORT_BUSY:
+            self._show(port_busy_message(port))
+            return EXIT_FAILED
+        return None
 
-    The windowed app has no console (sys.stdout may be None), so without this every message
-    and traceback would be lost. A log already over `limit_bytes` is first moved to `.1`,
-    replacing the previous one; the new run then appends. Neither a failed rotation nor a log
-    that cannot be opened stops the start: the file keeps growing, or its output is dropped.
-    """
-    streams: list[TextIO] = []
-    for name in ("service.log", "service.err.log"):
-        path = data_dir / name
-        _rotate_if_large(path, limit_bytes)
-        streams.append(_open_log(path))
-    sys.stdout, sys.stderr = streams
+    def _folder_refusal(self, data_dir: Path) -> int | None:
+        """Show why the data folder is refused and return its verdict; None when it suits."""
+        verdict, message = check_data_dir(data_dir, __version__, must_exist=True)
+        if verdict is FolderVerdict.OK:
+            return None
+        self._show(message)
+        return int(verdict)
 
+    def _start(self, settings: Settings, background: bool) -> int:
+        """Check the folder, redirect the logs, start the service, then run the tray."""
+        refused = self._folder_refusal(settings.data_dir)
+        if refused is not None:
+            return refused
+        # Before anything sets up logging (uvicorn does, inside build_server), so every handler
+        # binds to the log files and not to the console pythonw does not have.
+        redirect_output(settings.data_dir)
+        try:
+            self._start_service(settings)
+        except Exception:
+            logger.exception("The service could not be built")
+            self._show(start_failed_message(settings.data_dir))
+            return EXIT_FAILED
+        answered = self._wait_for_health(settings.port, HEALTH_WAIT_S, self._service_running)
+        if not self._service_running():
+            return self._ended_during_start(settings)
+        if not answered:
+            logger.warning("The service did not answer within %s s; showing the tray anyway",
+                           HEALTH_WAIT_S)
+        if not background:
+            self._open_dashboard()
+        return self._run_tray()
 
-def single_instance_lock(data_dir: Path) -> CycleFileLock:
-    """The lock that lets one launcher run per data folder.
+    def _start_service(self, settings: Settings) -> None:
+        """Build the server and run it in a non-daemon thread, watched for a crash."""
+        server = self._server_factory(settings, self.stop)
+        thread = threading.Thread(target=self._serve, args=(server,), name="spyglass-service")
+        with self._guard:
+            self._server, self._thread = server, thread
+        thread.start()
+        threading.Thread(target=self._watch, args=(thread,), name="spyglass-watch",
+                         daemon=True).start()
 
-    max_age=None: the lock is held for as long as the app stays open, which can be weeks, so
-    only a dead holder process may make it stale.
-    """
-    return CycleFileLock(data_dir / "desktop.lock", max_age=None)
+    def _serve(self, server: ServerLike) -> None:
+        """The service thread: run uvicorn and record how it ended."""
+        try:
+            server.run()
+        except SystemExit:
+            # uvicorn logs the reason and exits this way when it cannot bind the port, for
+            # example to a listener with a full backlog that the probe read as free.
+            self._bind_failed = True
+        except Exception:
+            logger.exception("The service stopped with an error")
+
+    def _watch(self, thread: threading.Thread) -> None:
+        """Close the tray when the service ends without a stop: the icon must never show a
+        Spyglass that is not running."""
+        thread.join()
+        with self._guard:
+            if self._stopping:
+                return
+            self._crashed = True
+        logger.error("The service stopped on its own; closing the tray")
+        self._tray.close()
+
+    def _service_running(self) -> bool:
+        """True while the service thread lives and no stop was asked for."""
+        with self._guard:
+            thread, stopping = self._thread, self._stopping
+        return thread is not None and thread.is_alive() and not stopping
+
+    def _wait_for_health(self, port: int, seconds: float, keep_waiting: Callable[[], bool]) -> bool:
+        """Probe until a Spyglass answers (True), `seconds` pass, or keep_waiting() turns False."""
+        deadline = time.monotonic() + seconds
+        while keep_waiting():
+            if isinstance(probe_health(port), Health):
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(POLL_S)
+        return False
+
+    def _ended_during_start(self, settings: Settings) -> int:
+        """The service ended, or a stop came, before the tray was shown."""
+        with self._guard:
+            stopping = self._stopping
+        if stopping:
+            self._stopped.wait()
+            return 0
+        if self._bind_failed:
+            self._show(port_busy_message(settings.port))
+        else:
+            self._show(start_failed_message(settings.data_dir))
+        return EXIT_FAILED
+
+    def _run_tray(self) -> int:
+        """Show the tray on this thread until a stop or a crash closes it."""
+        try:
+            self._tray.run(self._tray_factory(
+                on_open=self._open_dashboard, on_quit=self.stop,
+                autostart=self._autostart_enabled, toggle_autostart=self._toggle_autostart,
+                version=__version__))
+        except Exception:
+            logger.exception("The tray icon failed")
+        with self._guard:
+            crashed, stopping = self._crashed, self._stopping
+        if crashed:
+            return EXIT_FAILED
+        if not stopping:
+            # The tray ended without a stop, so it failed: never leave a service without an icon.
+            self.stop()
+            self._stopped.wait()
+            return EXIT_FAILED
+        self._stopped.wait()
+        return 0
+
+    def _finish_stop(self) -> None:
+        """Join the service thread, close the tray, and end the process if the thread is stuck."""
+        try:
+            with self._guard:
+                thread = self._thread
+            if thread is not None:
+                thread.join(self._join_timeout)
+            stuck = thread is not None and thread.is_alive()
+            self._tray.close()
+            if stuck:
+                logger.error("The service did not stop within %s s; ending the process",
+                             self._join_timeout)
+                self._tray.wait_closed(TRAY_CLOSE_GRACE_S)
+                self._exit_process(0)
+        except Exception:
+            logger.exception("Stopping Spyglass failed")
+        finally:
+            self._stopped.set()
+
+    def _open_dashboard(self) -> None:
+        """Open the interface in the default browser."""
+        try:
+            self._open_browser(self._url)
+        except Exception:
+            logger.exception("Could not open %s", self._url)
+
+    def _autostart_enabled(self) -> bool:
+        """Whether the start-up entry exists; False when it cannot be read."""
+        if self._platform is None:
+            return False
+        try:
+            return self._platform.autostart_enabled()
+        except Exception:
+            logger.exception("Could not read the start-with-Windows entry")
+            return False
+
+    def _toggle_autostart(self) -> None:
+        """Flip the start-up entry from what is actually there, not from what the menu showed."""
+        if self._platform is None:
+            return
+        try:
+            self._platform.set_autostart(not self._platform.autostart_enabled())
+        except Exception:
+            logger.exception("Could not change the start-with-Windows entry")
+
+    def _show(self, text: str) -> None:
+        """Tell the user why Spyglass is not starting: a message box, or stderr without one."""
+        if self._platform is not None:
+            try:
+                self._platform.show_message(MESSAGE_TITLE, text)
+                return
+            except Exception:
+                logger.exception("Could not show a message box")
+        print(text, file=sys.stderr)

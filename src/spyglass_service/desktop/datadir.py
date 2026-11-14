@@ -9,6 +9,7 @@ The check only reads: it opens the database read-only and creates nothing.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sqlite3
 import tempfile
@@ -23,6 +24,8 @@ from spyglass_service.radar.models import RadarDoc
 DB_NAME = "spyglass.db"
 VERSION_FILE = "spyglass-data.json"
 DEFAULT_PORT = 7777
+# Names a scratch desktop.json for test runs, so they stay away from the installed settings.
+CONFIG_OVERRIDE_VAR = "SPYGLASS_DESKTOP_CONFIG"
 
 
 @dataclass(frozen=True)
@@ -48,7 +51,14 @@ class FolderVerdict(IntEnum):
 
 
 def config_path() -> Path:
-    """Where `desktop.json` lives: the per-user config folder, under "Spyglass"."""
+    """Where `desktop.json` lives: the per-user config folder, under "Spyglass".
+
+    SPYGLASS_DESKTOP_CONFIG, when set, names another file instead. It is for manual and
+    installer test runs only, so they never read or overwrite the real settings.
+    """
+    override = os.environ.get(CONFIG_OVERRIDE_VAR)
+    if override:
+        return Path(override)
     return Path(platformdirs.user_config_dir("Spyglass", appauthor=False)) / "desktop.json"
 
 

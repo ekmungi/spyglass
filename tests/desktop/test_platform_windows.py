@@ -131,3 +131,15 @@ def test_open_extensions_page_rejects_an_unknown_browser(tmp_path: Path) -> None
 def test_default_platform_is_none_off_windows(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(platform_base.sys, "platform", "linux")
     assert default_platform() is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="MessageBoxW exists only on Windows")
+def test_show_message_comes_to_the_front(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Under pythonw a plain box can open behind other windows; it must come to the front."""
+    import ctypes
+
+    shown: list[tuple] = []
+    monkeypatch.setattr(ctypes.windll.user32, "MessageBoxW", lambda *args: shown.append(args))
+    WindowsPlatform(registry=FakeRegistry(), candidates={}).show_message("Spyglass", "Hello")
+    information, set_foreground, topmost = 0x40, 0x10000, 0x40000
+    assert shown == [(None, "Hello", "Spyglass", information | set_foreground | topmost)]

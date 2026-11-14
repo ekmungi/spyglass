@@ -34,6 +34,8 @@ dependencies = [
     "feedparser>=6.0.12",
     "googlenewsdecoder>=0.2.2",
     "keyring>=25.7.0",
+    "pystray>=0.19.5 ; sys_platform == 'win32'",
+    "pillow>=12.2.0",
 ]
 
 [dependency-groups]

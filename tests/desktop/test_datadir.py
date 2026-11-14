@@ -166,9 +166,19 @@ def test_load_config_rejects_bad_json_and_missing_keys(tmp_path: Path, body: str
         load_config(path)
 
 
-def test_config_path_names_desktop_json() -> None:
+def test_config_path_names_desktop_json(monkeypatch) -> None:
+    monkeypatch.delenv("SPYGLASS_DESKTOP_CONFIG", raising=False)
     assert config_path().name == "desktop.json"
     assert config_path().parent.name == "Spyglass"
+
+
+def test_config_path_honours_the_test_override(tmp_path: Path, monkeypatch) -> None:
+    """Manual and installer test runs point the launcher at a scratch desktop.json."""
+    scratch = tmp_path / "scratch" / "desktop.json"
+    monkeypatch.setenv("SPYGLASS_DESKTOP_CONFIG", str(scratch))
+    assert config_path() == scratch
+    save_config(DesktopConfig(data_dir=tmp_path / "data", port=7790))
+    assert load_config() == DesktopConfig(data_dir=tmp_path / "data", port=7790)
 
 
 def test_service_start_records_its_version(tmp_path: Path) -> None:
