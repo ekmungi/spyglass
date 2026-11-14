@@ -145,8 +145,13 @@ def first_cycle_at(now: datetime, last_finished: datetime | None, interval: time
     return last_finished + interval
 
 
-def read_last_finished(data_dir: Path | str | None) -> datetime | None:
-    """The finish time stored by `write_last_finished`; None when missing or unreadable."""
+def read_last_finished(data_dir: Path | str | None, now: datetime | None = None) -> datetime | None:
+    """The finish time stored by `write_last_finished`.
+
+    Returns None when the file is missing or unreadable, and also when the stored time lies
+    after `now` (a corrupted file or a clock set back): a future time would otherwise push
+    the first cycle, and with it every interval collection, out of reach.
+    """
     if not data_dir:
         return None
     try:
@@ -154,7 +159,8 @@ def read_last_finished(data_dir: Path | str | None) -> datetime | None:
         when = datetime.fromisoformat(raw["finished_at"])
     except (OSError, ValueError, KeyError, TypeError):
         return None
-    return when if when.tzinfo else when.replace(tzinfo=UTC)
+    when = when if when.tzinfo else when.replace(tzinfo=UTC)
+    return None if now is not None and when > now else when
 
 
 def write_last_finished(data_dir: Path | str | None, finished_at: datetime) -> None:

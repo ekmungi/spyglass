@@ -196,12 +196,15 @@ class RadarScheduler(StagesMixin):
             self._record_brief(day or self._now().date(), stages.get("compose"))
         with self._state_lock:
             self._last_cycle = result
-        write_last_finished(self._data_dir, datetime.fromisoformat(result["finished_at"]))
+        # A cycle cut short by stop() or one where every stage raised collected nothing, so it
+        # must not make the next opening wait a full interval.
+        if result["result"] not in ("stopped", "error"):
+            write_last_finished(self._data_dir, datetime.fromisoformat(result["finished_at"]))
         return result
 
     def last_finished(self) -> datetime | None:
         """When the last cycle finished (kept across restarts), or None when unknown."""
-        return read_last_finished(self._data_dir)
+        return read_last_finished(self._data_dir, self._clock())
 
     def run_cycle(self, trigger: str = "manual", *, compose: bool = False,
                   wait_seconds: float = 0, day: date | None = None) -> dict:
@@ -269,13 +272,15 @@ class RadarScheduler(StagesMixin):
         return self._clock().astimezone(zone_for(self._settings.radar_timezone))
 
     def _scheduled_cycle(self) -> None:
-        """Interval job: a plain cycle, unless one finished within the interval already.
+        """Interval job: a plain cycle, unless one finished a moment ago.
 
         The catch-up cycle that runs shortly after start would otherwise be followed at once
-        by this one, collecting twice back to back.
+        by this one, collecting twice back to back. Only a finish within half an interval
+        counts: the previous interval cycle finished about one interval ago (its duration
+        short of it), and a full-interval limit would skip every second run.
         """
         last = self.last_finished()
-        if last is not None and self._clock() - last < self._interval():
+        if last is not None and self._clock() - last < self._interval() / 2:
             logger.info("scheduled cycle skipped: the last cycle finished at %s", last)
             return
         self.run_cycle("schedule")

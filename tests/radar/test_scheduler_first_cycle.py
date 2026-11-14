@@ -77,9 +77,85 @@ def test_scheduled_cycle_skips_after_a_recent_catch_up(tmp_path) -> None:
     try:
         scheduler = _scheduler(engine, calls, clock=Clock(NOW), settings=settings)
         (tmp_path / LAST_CYCLE_FILE).write_text(
-            json.dumps({"finished_at": (NOW - timedelta(minutes=10)).isoformat()}), encoding="utf-8")
+            json.dumps({"finished_at": (NOW - timedelta(seconds=30)).isoformat()}), encoding="utf-8")
         scheduler._scheduled_cycle()
         assert calls == []
+    finally:
+        engine.dispose()
+
+
+def test_scheduled_cycle_runs_when_the_last_finish_is_one_interval_ago(tmp_path) -> None:
+    """The previous interval cycle finished slightly under an interval ago and must not block this one."""
+    engine = make_engine(tmp_path)
+    settings = make_settings(radar_timezone="UTC", data_dir=tmp_path)
+    calls: list[str] = []
+    try:
+        scheduler = _scheduler(engine, calls, clock=Clock(NOW), settings=settings)
+        (tmp_path / LAST_CYCLE_FILE).write_text(
+            json.dumps({"finished_at": (NOW - INTERVAL + timedelta(minutes=5)).isoformat()}),
+            encoding="utf-8")
+        scheduler._scheduled_cycle()
+        assert "legacy" in calls
+    finally:
+        engine.dispose()
+
+
+def test_a_future_finish_reads_as_unknown(tmp_path) -> None:
+    """A finish time after now (corrupted file, clock set back) is treated as unknown."""
+    engine = make_engine(tmp_path)
+    settings = make_settings(radar_timezone="UTC", data_dir=tmp_path)
+    try:
+        scheduler = _scheduler(engine, [], clock=Clock(NOW), settings=settings)
+        (tmp_path / LAST_CYCLE_FILE).write_text(
+            json.dumps({"finished_at": "2099-01-01T00:00:00+00:00"}), encoding="utf-8")
+        assert scheduler.last_finished() is None
+    finally:
+        engine.dispose()
+
+
+def test_start_schedules_soon_when_the_stored_finish_is_in_the_future(tmp_path) -> None:
+    """A future-dated file does not push the first cycle out of reach."""
+    engine = make_engine(tmp_path)
+    (tmp_path / LAST_CYCLE_FILE).write_text(
+        json.dumps({"finished_at": "2099-01-01T00:00:00+00:00"}), encoding="utf-8")
+    scheduler = _scheduler(engine, [], settings=make_settings(radar_timezone="UTC", data_dir=tmp_path))
+    try:
+        scheduler.start()
+        wait = (scheduler._scheduler.get_job(CYCLE_JOB).next_run_time - datetime.now(UTC)).total_seconds()
+        assert 50 < wait <= 60
+    finally:
+        scheduler.stop()
+        engine.dispose()
+
+
+def test_a_stopped_cycle_does_not_record_a_finish(tmp_path) -> None:
+    """A cycle cut short by stop() leaves the stored finish time unchanged."""
+    engine = make_engine(tmp_path)
+    settings = make_settings(radar_timezone="UTC", data_dir=tmp_path)
+    try:
+        scheduler = _scheduler(engine, [], clock=Clock(NOW), settings=settings)
+        scheduler._stop_event.set()
+        result = scheduler.run_cycle("manual")
+        assert result["result"] == "stopped"
+        assert not (tmp_path / LAST_CYCLE_FILE).exists()
+    finally:
+        engine.dispose()
+
+
+def test_an_all_error_cycle_does_not_record_a_finish(tmp_path) -> None:
+    """A cycle in which every stage raised leaves the stored finish time unchanged."""
+    engine = make_engine(tmp_path)
+    settings = make_settings(radar_timezone="UTC", data_dir=tmp_path)
+
+    def boom():
+        raise RuntimeError("down")
+
+    try:
+        scheduler = _scheduler(engine, [], clock=Clock(NOW), settings=settings,
+                               **{name: boom for name in STAGES})
+        result = scheduler.run_cycle("manual")
+        assert result["result"] == "error"
+        assert not (tmp_path / LAST_CYCLE_FILE).exists()
     finally:
         engine.dispose()
 
