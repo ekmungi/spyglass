@@ -110,6 +110,45 @@ def test_a_lock_from_before_the_last_boot_is_stale(tmp_path, boot, taken) -> Non
     assert (holder["pid"] == os.getpid()) is taken
 
 
+@pytest.mark.parametrize(("before_boot", "taken"), [
+    (timedelta(minutes=2), False),   # within the slack: the clock may have been stepped since
+    (timedelta(minutes=10), True),   # clearly written before the machine started
+])
+def test_the_boot_rule_allows_five_minutes_of_clock_slack(tmp_path, before_boot, taken) -> None:
+    """A clock stepped forward after the lock was written makes a live holder's lock look older
+    than the computed boot; only a lock more than five minutes older counts as stale."""
+    path = tmp_path / "desktop.lock"
+    _write_holder(path, OTHER_PID, LOCKED_AT)
+    lock = CycleFileLock(path, pid_alive=lambda _pid: True, max_age=None,
+                         pid_started_at=lambda _pid: None,
+                         boot_time=lambda: LOCKED_AT + before_boot)
+    assert lock.acquire() is taken
+
+
+def test_take_over_replaces_a_lock_without_judging_its_holder(tmp_path) -> None:
+    """The desktop app takes over its lock file when the operating system already told it that
+    no other launcher lives; the holder recorded in the file is not consulted at all."""
+    path = tmp_path / "desktop.lock"
+    _write_holder(path, OTHER_PID, datetime.now(UTC))
+    asked: list[str] = []
+    lock = CycleFileLock(path, max_age=None,
+                         pid_alive=lambda _pid: asked.append("alive") or True,
+                         pid_started_at=lambda _pid: asked.append("started") or None,
+                         boot_time=lambda: asked.append("boot") or None)
+    assert lock.take_over() is True
+    assert asked == []
+    assert json.loads(path.read_text(encoding="utf-8"))["pid"] == os.getpid()
+    lock.release()
+    assert not path.exists()
+
+
+def test_take_over_with_no_lock_file_just_creates_it(tmp_path) -> None:
+    lock = CycleFileLock(tmp_path / "desktop.lock", max_age=None)
+    assert lock.take_over() is True
+    lock.release()
+    assert not (tmp_path / "desktop.lock").exists()
+
+
 def test_the_cycle_lock_keeps_its_age_rule_and_ignores_process_start(tmp_path) -> None:
     """Only the desktop lock (no age limit) asks when the holder started; existing callers keep
     their behaviour."""

@@ -1,5 +1,5 @@
 """The pieces the desktop start path is made of: environment, health probe, start decision,
-refusal messages, log redirection and the single-instance lock.
+refusal messages, log redirection, and the single-instance lock with its operating-system hold.
 
 `launcher.Launcher` puts them together (and re-exports them); everything here runs and is
 tested without a tray or a real service on port 7777.
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import logging
 import os
 import sys
 import urllib.error
@@ -22,13 +23,18 @@ from typing import Literal, TextIO
 
 from spyglass_service.config import Settings, apply_overlay
 from spyglass_service.desktop.datadir import DesktopConfig
+from spyglass_service.desktop.platform_base import UNSUPPORTED, DesktopPlatform, InstanceHold
 from spyglass_service.radar.cycle_lock import CycleFileLock
+
+logger = logging.getLogger(__name__)
 
 # The reading browser the desktop app asks for: Edge ships with Windows, so it is always there.
 BROWSER_CHANNEL = "msedge"
 # A service log over this size is moved aside at start, so logs never grow without limit.
 LOG_LIMIT_BYTES = 10_000_000
 NOT_SPYGLASS = "not-spyglass"
+# Beside desktop.lock: the file whose first byte the operating system locks for the launcher.
+INSTANCE_FILE = "desktop.instance"
 
 
 @dataclass(frozen=True)
@@ -221,3 +227,43 @@ def single_instance_lock(data_dir: Path,
     """
     return CycleFileLock(data_dir / "desktop.lock", max_age=None, pid_started_at=pid_started_at,
                          boot_time=boot_time)
+
+
+@dataclass
+class FolderClaim:
+    """Whether this launcher runs the data folder, and what it holds until it ends."""
+
+    owned: bool
+    lock: CycleFileLock
+    hold: InstanceHold | None = None
+
+    def release(self) -> None:
+        """Remove the lock file if this process wrote it, then give up the instance hold."""
+        try:
+            self.lock.release()
+        finally:
+            if self.hold is not None:
+                self.hold.release()
+
+
+def claim_data_folder(lock: CycleFileLock, data_dir: Path,
+                      platform: DesktopPlatform | None) -> FolderClaim:
+    """Decide whether this launcher may run `data_dir`, asking the operating system first.
+
+    The platform's instance hold is dropped by the kernel when its owner dies for any reason
+    (a sign-out, a Fast Startup shutdown, a forced kill), so it decides alone when it exists:
+    busy means another launcher lives and the lock file is left untouched; held means none can
+    live, so any lock file is stale and is taken over without judging the holder it names.
+    Without a hold (another system, or no platform) the lock file's own rules decide. A failure
+    to take the hold other than "busy" is raised.
+    """
+    hold = (platform.try_hold_instance(data_dir / INSTANCE_FILE) if platform is not None
+            else UNSUPPORTED)
+    if hold is None:
+        return FolderClaim(owned=False, lock=lock)
+    if hold is UNSUPPORTED:
+        return FolderClaim(owned=lock.acquire(), lock=lock)
+    if not lock.take_over():
+        # The hold alone already proves this is the only launcher; the file is informational.
+        logger.warning("Could not replace %s; starting anyway under the instance hold", lock.path)
+    return FolderClaim(owned=True, lock=lock, hold=hold)

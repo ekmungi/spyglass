@@ -35,6 +35,7 @@ from spyglass_service.desktop.startup import (
     Health,
     StartAction,
     bad_config_message,
+    claim_data_folder,
     decide_start,
     port_busy_message,
     prepare_environment,
@@ -45,7 +46,6 @@ from spyglass_service.desktop.startup import (
     start_failed_message,
 )
 from spyglass_service.desktop.tray_runner import TrayLike, TrayRunner
-from spyglass_service.radar.cycle_lock import CycleFileLock
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,8 @@ class Launcher:
         self._server_factory = server_factory
         self._tray_factory = tray_factory
         self._open_browser = open_browser
-        self._os = PlatformCalls(platform if platform is not None else default_platform())
+        self._platform = platform if platform is not None else default_platform()
+        self._os = PlatformCalls(self._platform)
         self._exit_process = exit_process
         self._join_timeout = join_timeout
         self._guard = threading.Lock()
@@ -145,11 +146,12 @@ class Launcher:
         self._url = f"http://127.0.0.1:{settings.port}/"
         lock = single_instance_lock(settings.data_dir, pid_started_at=self._os.process_started_at,
                                     boot_time=self._os.boot_time)
+        claim = claim_data_folder(lock, settings.data_dir, self._platform)
         try:
-            outcome = self._claim(lock, settings.port, background)
+            outcome = self._claim(claim.owned, settings.port, background)
             return outcome if outcome is not None else self._start(settings, background)
         finally:
-            lock.release()  # deletes the file only if this process wrote it, never a holder's
+            claim.release()  # the lock file only if this process wrote it, then the hold
 
     def stop(self) -> None:
         """The one stop path. Idempotent, thread-safe, and it never raises.
@@ -191,15 +193,14 @@ class Launcher:
             self._show(NO_CONFIG_MESSAGE)
         return config
 
-    def _claim(self, lock: CycleFileLock, port: int, background: bool) -> int | None:
-        """Take the lock and decide whether to start; an exit code means "stop here".
+    def _claim(self, owned: bool, port: int, background: bool) -> int | None:
+        """Decide whether to start, given whether this launcher owns the data folder; an exit
+        code means "stop here".
 
-        The lock takes a crash-left lock at once: its holder is gone, the lock predates the
-        machine's last start, or the process now holding that pid is newer than the lock
-        (Windows reuses pids). A lock still refused belongs to a
-        live launcher, perhaps slow to start or showing a message, and is never taken over:
-        wait for its service and open it, or say that it is not answering."""
-        if not lock.acquire():
+        `claim_data_folder` already took a crash-left lock (see there). A folder still not
+        owned belongs to a live launcher, perhaps slow to start or showing a message, which is
+        never taken over: wait for its service and open it, or say that it is not answering."""
+        if not owned:
             if self._wait_for_health(port, time.monotonic() + PEER_WAIT_S, lambda: True):
                 if not background:
                     self._open_dashboard()

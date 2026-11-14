@@ -18,6 +18,7 @@ import spyglass_service.desktop.launcher as launcher_mod
 from spyglass_service import __version__
 from spyglass_service.desktop.__main__ import main
 from spyglass_service.desktop.datadir import DesktopConfig, record_data_version, save_config
+from spyglass_service.desktop.platform_base import UNSUPPORTED
 from spyglass_service.desktop.launcher import (
     PEER_NOT_ANSWERING_MESSAGE,
     Health,
@@ -99,6 +100,16 @@ class FakeTray:
             self.stopped.set()
 
 
+class FakeHold:
+    """An operating-system instance hold that notes when it is given up."""
+
+    def __init__(self) -> None:
+        self.released = False
+
+    def release(self) -> None:
+        self.released = True
+
+
 class FakePlatform:
     """Records message boxes and keeps the start-with-Windows switch in memory."""
 
@@ -108,13 +119,22 @@ class FakePlatform:
         self.born = None  # what process_started_at answers for every pid
         self.asked: list[int] = []
         self.boot = None  # what boot_time answers
+        # What try_hold_instance answers: a FakeHold (held), None (busy) or UNSUPPORTED, which
+        # keeps the lock file's own identity and boot-time rules in charge.
+        self.hold = UNSUPPORTED
+        self.hold_paths: list[Path] = []
 
     def process_started_at(self, pid: int):
         self.asked.append(pid)
         return self.born
 
     def boot_time(self):
+        self.asked.append(-1)  # -1 marks a boot-time question
         return self.boot
+
+    def try_hold_instance(self, path: Path):
+        self.hold_paths.append(path)
+        return self.hold
 
     def autostart_enabled(self) -> bool:
         return self.autostart
@@ -538,6 +558,51 @@ def test_a_holder_of_unknown_age_is_treated_as_genuine(make_rig, monkeypatch, bo
     assert rig.launcher.run(background=True) == 0
     assert rig.platform.messages == [("Spyglass", PEER_NOT_ANSWERING_MESSAGE)]
     assert (rig.data / "desktop.lock").read_text(encoding="utf-8") == old
+
+
+@pytest.mark.parametrize("peer_answers", [False, True])
+def test_an_instance_held_by_another_launcher_is_never_taken_over(
+        make_rig, monkeypatch, peer_answers) -> None:
+    """When the operating system says another process holds the instance, a launcher lives,
+    whatever the lock file looks like (here its pid is reused and it predates the boot). The
+    live-holder path runs and the lock file is not touched or even judged."""
+    rig = make_rig(health=Health(__version__, "desktop") if peer_answers else None)
+    old = _peer_lock(rig, monkeypatch, REUSED)
+    rig.platform.boot = PEER_LOCKED_AT + timedelta(hours=1)
+    rig.platform.hold = None  # busy
+    assert rig.launcher.run(background=False) == 0
+    assert rig.platform.hold_paths == [rig.data / "desktop.instance"]
+    if peer_answers:
+        assert rig.opened == [URL] and rig.platform.messages == []
+    else:
+        assert rig.opened == [] and rig.platform.messages == [("Spyglass", PEER_NOT_ANSWERING_MESSAGE)]
+    assert rig.platform.asked == []
+    assert rig.order == [] and rig.trays == []
+    assert (rig.data / "desktop.lock").read_text(encoding="utf-8") == old
+
+
+def test_holding_the_instance_takes_over_a_lock_left_by_a_sign_out(make_rig, monkeypatch) -> None:
+    """A sign-out or a Fast Startup shutdown ends the launcher without removing its lock and
+    without a new boot. The old pid names a live process whose start cannot be read, after the
+    boot: the lock file's own rules would refuse. Holding the instance proves no launcher lives,
+    so the lock is taken over at once and Spyglass starts; the hold is given up at the end."""
+    rig = make_rig()
+    monkeypatch.setattr(launcher_mod, "PEER_WAIT_S", 30.0)  # would show if it waited
+    old = _peer_lock(rig, monkeypatch, None)
+    rig.platform.boot = PEER_LOCKED_AT - timedelta(hours=1)
+    hold = FakeHold()
+    rig.platform.hold = hold
+    began = time.monotonic()
+    rig.start(background=True)
+    tray = rig.wait_for_tray()
+    assert time.monotonic() - began < 3.0
+    assert rig.platform.asked == []  # neither the pid's start nor the boot was consulted
+    lock_text = (rig.data / "desktop.lock").read_text(encoding="utf-8")
+    assert lock_text != old and json.loads(lock_text)["pid"] == os.getpid()
+    assert not hold.released
+    tray.kwargs["on_quit"]()
+    assert rig.finish() == 0
+    assert hold.released and not (rig.data / "desktop.lock").exists()
 
 
 def test_stop_is_idempotent_across_threads(make_rig) -> None:

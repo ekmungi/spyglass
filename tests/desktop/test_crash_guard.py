@@ -50,13 +50,26 @@ def test_an_error_inside_run_is_logged_and_shown(platform, tmp_path: Path, monke
 
 def test_a_crash_log_that_cannot_be_written_still_shows_the_message(
         platform, tmp_path: Path, monkeypatch) -> None:
-    """A folder that cannot be created (here a file stands in its place) does not hide the error."""
+    """A folder that cannot be created (here a file stands in its place) does not hide the error.
+    With no log to point at, the message names the error itself instead."""
     blocker = tmp_path / "Spyglass"
     blocker.write_text("not a folder", encoding="utf-8")
     monkeypatch.setenv("SPYGLASS_DESKTOP_CONFIG", str(blocker / "desktop.json"))
     assert desktop_main.main(["--background"]) != 0
-    assert len(platform.messages) == 1
-    assert platform.messages[0][1].startswith("Spyglass could not start. Details are in ")
+    assert platform.messages == [
+        ("Spyglass", "Spyglass could not start: PermissionError: the data folder is read-only")]
+
+
+def test_only_the_first_line_of_a_long_error_is_shown(platform, tmp_path: Path, monkeypatch) -> None:
+    class Wordy:
+        def run(self, background: bool = False) -> int:
+            raise RuntimeError("first line\nsecond line\nthird line")
+
+    monkeypatch.setattr(launcher_mod, "Launcher", Wordy)
+    monkeypatch.setattr(desktop_main, "_write_crash_log", lambda path, details: False)
+    monkeypatch.setenv("SPYGLASS_DESKTOP_CONFIG", str(tmp_path / "desktop.json"))
+    assert desktop_main.main([]) != 0
+    assert platform.messages == [("Spyglass", "Spyglass could not start: RuntimeError: first line")]
 
 
 def test_the_folder_check_is_not_guarded(platform, tmp_path: Path) -> None:

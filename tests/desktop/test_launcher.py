@@ -337,3 +337,46 @@ def test_redirect_output_falls_back_to_devnull_when_a_log_cannot_be_opened(
     sys.stdout.flush()
     sys.stderr.flush()
     assert (tmp_path / "service.err.log").read_text(encoding="utf-8") == "kept\n"
+
+
+class _HoldingPlatform:
+    """A platform whose instance hold always succeeds, noting the file it was asked for."""
+
+    def __init__(self) -> None:
+        self.paths: list[Path] = []
+        self.released = False
+
+    def try_hold_instance(self, path: Path):
+        self.paths.append(path)
+        return self
+
+    def release(self) -> None:
+        self.released = True
+
+
+def test_claim_without_a_platform_lets_the_lock_file_decide(tmp_path) -> None:
+    from spyglass_service.desktop.startup import claim_data_folder
+
+    held = CycleFileLock(tmp_path / "desktop.lock", max_age=None, pid=4242,
+                         pid_alive=lambda pid: True)
+    assert held.acquire()
+    lock = CycleFileLock(tmp_path / "desktop.lock", max_age=None, pid_alive=lambda pid: True)
+    claim = claim_data_folder(lock, tmp_path, None)
+    assert claim.owned is False and claim.hold is None
+    claim.release()
+    assert (tmp_path / "desktop.lock").exists()  # someone else's lock is never removed
+
+
+def test_claim_under_the_hold_starts_even_if_the_old_lock_cannot_be_replaced(
+        tmp_path, monkeypatch, caplog) -> None:
+    """The hold alone proves this is the only launcher; the lock file is only informational."""
+    from spyglass_service.desktop.startup import claim_data_folder
+
+    lock = CycleFileLock(tmp_path / "desktop.lock", max_age=None)
+    monkeypatch.setattr(lock, "take_over", lambda: False)
+    platform = _HoldingPlatform()
+    claim = claim_data_folder(lock, tmp_path, platform)
+    assert claim.owned is True and platform.paths == [tmp_path / "desktop.instance"]
+    assert "starting anyway under the instance hold" in caplog.text
+    claim.release()
+    assert platform.released

@@ -48,32 +48,47 @@ def main(argv: list[str] | None = None) -> int:
         from spyglass_service.desktop.launcher import Launcher
 
         return Launcher().run(background=args.background)
-    except Exception:
-        return _report_crash(traceback.format_exc())
+    except Exception as exc:
+        return _report_crash(exc)
 
 
-def _report_crash(details: str) -> int:
-    """Write an unexpected error's traceback to the crash log and tell the user where it is.
-
-    Under pythonw an escaped exception is invisible, and it can happen before the service logs
-    exist (a settings file that cannot be read, a read-only data folder). Failing to write the
-    log must not hide the message.
-    """
-    try:
-        path = config_path().parent / CRASH_LOG_NAME
-    except Exception:
-        path = Path(CRASH_LOG_NAME)
+def _write_crash_log(path: Path, details: str) -> bool:
+    """Append `details` to the crash log at `path`, creating its folder; False if that failed."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as log:
             log.write(f"{datetime.now().isoformat()} Spyglass {__version__}\n{details}\n")
     except OSError:
-        pass
+        return False
+    return True
+
+
+def _crash_message(exc: BaseException, log: Path | None) -> str:
+    """What the message box says: where the log is, or the error itself when there is no log."""
+    if log is not None:
+        return f"Spyglass could not start. Details are in {log}."
+    lines = str(exc).splitlines()
+    detail = f": {lines[0]}" if lines else ""
+    return f"Spyglass could not start: {type(exc).__name__}{detail}"
+
+
+def _report_crash(exc: BaseException) -> int:
+    """Write an unexpected error's traceback to the crash log and tell the user about it.
+
+    Under pythonw an escaped exception is invisible, and it can happen before the service logs
+    exist (a settings file that cannot be read, a read-only data folder). Failing to write the
+    log must not hide the message, which then names the error instead of a missing file.
+    """
+    try:
+        path = config_path().parent / CRASH_LOG_NAME
+    except Exception:
+        path = Path(CRASH_LOG_NAME)
+    written = _write_crash_log(path, "".join(traceback.format_exception(exc)))
     try:
         platform = default_platform()
     except Exception:
         platform = None
-    PlatformCalls(platform).show("Spyglass", f"Spyglass could not start. Details are in {path}.")
+    PlatformCalls(platform).show("Spyglass", _crash_message(exc, path if written else None))
     return EXIT_CRASHED
 
 

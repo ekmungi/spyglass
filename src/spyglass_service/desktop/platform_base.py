@@ -11,6 +11,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
@@ -23,6 +24,25 @@ class Browser:
     name: str
     exe: Path
     extensions_url: str
+
+
+class InstanceHold(Protocol):
+    """An operating-system lock this process holds; the kernel drops it when the process dies."""
+
+    def release(self) -> None:
+        """Give the lock up early (the end of the process releases it anyway)."""
+        ...
+
+
+class Unsupported(Enum):
+    """The answer of a platform that has no operating-system instance lock."""
+
+    UNSUPPORTED = "unsupported"
+
+
+UNSUPPORTED = Unsupported.UNSUPPORTED
+# try_hold_instance's three outcomes: held (the hold), busy (None) or UNSUPPORTED.
+HoldResult = InstanceHold | None | Unsupported
 
 
 class DesktopPlatform(Protocol):
@@ -55,6 +75,15 @@ class DesktopPlatform(Protocol):
     def boot_time(self) -> datetime | None:
         """When the machine last started (aware UTC); None when this system cannot tell."""
         return None
+
+    def try_hold_instance(self, path: Path) -> HoldResult:
+        """Take the operating-system lock on the instance file `path` without waiting.
+
+        Returns the hold when this process now owns it (keep it referenced for the life of the
+        process), None when another live process owns it, or UNSUPPORTED when this system has
+        no such lock. The kernel releases a hold when its process dies for any reason.
+        """
+        return UNSUPPORTED
 
 
 def no_window_flags() -> int:

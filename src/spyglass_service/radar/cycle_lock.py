@@ -29,6 +29,10 @@ UNREADABLE_GRACE = timedelta(minutes=1)
 # A real holder's process was created before it wrote the lock; this much slack absorbs clock
 # rounding between the process start time and the time written in the file.
 PID_REUSE_TOLERANCE = timedelta(seconds=2)
+# A lock counts as written before the machine started only when it is older than the computed
+# boot by more than this: the boot is "now minus uptime", so a clock stepped forward after the
+# lock was written (a time sync after start-up) would otherwise make a live holder's lock stale.
+BOOT_CLOCK_SLACK = timedelta(minutes=5)
 
 PidAlive = Callable[[int], bool]
 PidStartedAt = Callable[[int], datetime | None]
@@ -118,6 +122,21 @@ class CycleFileLock:
                 self._remove()
         return False
 
+    def take_over(self) -> bool:
+        """Replace any lock file with ours, without judging the holder it names.
+
+        Only for a caller that already knows no other holder can be alive: the desktop app
+        holds an operating-system instance lock, which the kernel drops when its owner dies.
+        False only when the old file could not be removed.
+        """
+        for _ in range(2):
+            if self._create():
+                return True
+            seen = self._read_text()
+            logger.warning("taking over the lock %s: %s", self.path, (seen or "").strip())
+            self._remove()
+        return False
+
     def release(self) -> None:
         """Remove the lock if it is still ours (never another process's lock)."""
         if self._mine is not None and self._read_text() == self._mine:
@@ -167,14 +186,12 @@ class CycleFileLock:
         return self._pid_was_reused(pid, started)
 
     def _written_before_boot(self, locked_at: datetime) -> bool:
-        """True when the lock predates the machine's last start, so its holder cannot be alive.
-
-        The same slack as the reused-pid check absorbs rounding between the two clocks read.
-        """
+        """True when the lock predates the machine's last start by more than BOOT_CLOCK_SLACK,
+        so its holder cannot be alive."""
         if self._boot_time is None:
             return False
         booted = self._boot_time()
-        return booted is not None and locked_at + PID_REUSE_TOLERANCE < booted
+        return booted is not None and locked_at + BOOT_CLOCK_SLACK < booted
 
     def _pid_was_reused(self, pid: int, locked_at: datetime) -> bool:
         """True when the live process with this pid was created after the lock was written."""

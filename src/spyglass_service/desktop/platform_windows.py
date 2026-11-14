@@ -1,12 +1,13 @@
 """The Windows adapter: the sign-in start-up entry, installed browsers, message boxes, process
-start times and the machine's boot time.
+start times, the machine's boot time and the one-instance lock.
 
-Every Windows-only call (`winreg`, `ctypes.windll`) is imported inside the function that needs
-it, so this module imports on any system and tests can inject a fake registry and launcher.
+Every Windows-only call (`winreg`, `ctypes.windll`, `msvcrt`) is imported inside the function that
+needs it, so this module imports on any system and tests can inject a fake registry and launcher.
 """
 
 from __future__ import annotations
 
+import errno
 import os
 import subprocess
 import sys
@@ -15,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
-from spyglass_service.desktop.platform_base import Browser, no_window_flags
+from spyglass_service.desktop.platform_base import Browser, HoldResult, no_window_flags
 
 # Windows process times count 100-nanosecond steps from the start of 1601 (UTC).
 _FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=UTC)
@@ -23,6 +24,8 @@ _FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=UTC)
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 # Process ids are DWORDs; anything outside that range cannot name a process.
 _MAX_PID = 0xFFFFFFFF
+# How msvcrt.locking reports a byte that another process has locked (EDEADLK after retries).
+_LOCK_BUSY_ERRNOS = frozenset({errno.EACCES, errno.EDEADLK})
 
 # The per-user key Windows reads at sign-in; a value here starts a program without admin rights.
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -148,6 +151,42 @@ def _milliseconds_since_boot() -> int:
     return int(kernel32.GetTickCount64())
 
 
+def _lock_first_byte(fd: int) -> None:
+    """Lock byte 0 of the open file `fd` without waiting; OSError when another process holds it."""
+    import msvcrt
+
+    os.lseek(fd, 0, os.SEEK_SET)
+    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+
+
+def _unlock_first_byte(fd: int) -> None:
+    """Unlock byte 0 of the open file `fd`."""
+    import msvcrt
+
+    os.lseek(fd, 0, os.SEEK_SET)
+    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+
+
+class _InstanceFileHold:
+    """The open instance file whose first byte this process has locked."""
+
+    def __init__(self, fd: int) -> None:
+        """Hold `fd` open; the lock lives as long as the file stays open."""
+        self._fd: int | None = fd
+
+    def release(self) -> None:
+        """Unlock and close the file; safe to repeat. Closing alone would also drop the lock."""
+        fd, self._fd = self._fd, None
+        if fd is None:
+            return
+        try:
+            _unlock_first_byte(fd)
+        except (OSError, ImportError):
+            pass  # the byte was not locked through msvcrt (a test), or the lock is gone
+        finally:
+            os.close(fd)
+
+
 def _start_program(args: list[str]) -> subprocess.Popen:
     """Start a program and leave it running, with no console window under pythonw."""
     return subprocess.Popen(args, creationflags=no_window_flags())  # noqa: S603 -- no shell
@@ -164,12 +203,14 @@ class WindowsPlatform:
         pythonw: Path | None = None,
         process_times: Callable[[int], int | None] | None = None,
         uptime_ms: Callable[[], int] | None = None,
+        lock_byte: Callable[[int], None] | None = None,
     ) -> None:
         """Build the adapter; each argument defaults to the real thing for this machine."""
         self._registry: RegistryAdapter = registry if registry is not None else _WinregRegistry()
         self._launch = launch if launch is not None else _start_program
         self._process_times = process_times or _process_creation_filetime
         self._uptime_ms = uptime_ms or _milliseconds_since_boot
+        self._lock_byte = lock_byte or _lock_first_byte
         self._candidates = candidates if candidates is not None else _default_candidates()
         self._pythonw = pythonw or Path(sys.executable).with_name("pythonw.exe")
 
@@ -220,3 +261,21 @@ class WindowsPlatform:
 
         A lock written before this belongs to a process that a restart ended."""
         return datetime.now(UTC) - timedelta(milliseconds=self._uptime_ms())
+
+    def try_hold_instance(self, path: Path) -> HoldResult:
+        """Lock the first byte of the instance file `path` (created if missing) without waiting.
+
+        Returns the hold, or None when another process holds the byte; any other failure is a
+        real error and is raised. The kernel drops the lock when this process dies for any
+        reason, a sign-out, a shutdown or a forced kill included, so a hold never outlives its
+        launcher. The file itself is never deleted.
+        """
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
+        try:
+            self._lock_byte(fd)
+        except BaseException as exc:
+            os.close(fd)
+            if isinstance(exc, OSError) and exc.errno in _LOCK_BUSY_ERRNOS:
+                return None
+            raise
+        return _InstanceFileHold(fd)

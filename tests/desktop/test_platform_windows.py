@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import errno
 import os
+import subprocess
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from spyglass_service.desktop import platform_base
-from spyglass_service.desktop.platform_base import Browser, default_platform
+from spyglass_service.desktop.platform_base import UNSUPPORTED, Browser, default_platform
 from spyglass_service.desktop.platform_windows import (
     RUN_KEY,
     RUN_VALUE,
@@ -218,3 +221,92 @@ def test_process_started_at_reads_a_real_process() -> None:
     assert now - timedelta(days=1) < started <= now
     assert platform.process_started_at(2**31 - 3) is None
     assert platform.process_started_at(0) is None
+
+
+def _platform_with_lock(lock_byte) -> WindowsPlatform:
+    return WindowsPlatform(registry=FakeRegistry(), candidates={}, lock_byte=lock_byte)
+
+
+def test_try_hold_instance_returns_a_hold_that_releases(tmp_path: Path) -> None:
+    """The instance file is created if missing, its first byte is locked, and the hold keeps the
+    file open until it is released; the file itself is never deleted."""
+    locked: list[int] = []
+    path = tmp_path / "desktop.instance"
+    hold = _platform_with_lock(locked.append).try_hold_instance(path)
+    assert hold is not None and hold is not UNSUPPORTED
+    assert len(locked) == 1 and path.exists()
+    hold.release()
+    hold.release()  # a second release is harmless
+    path.unlink()  # the file is closed again (Windows refuses to delete an open file)
+
+
+@pytest.mark.parametrize("code", [errno.EACCES, errno.EDEADLK])
+def test_try_hold_instance_reports_busy_when_the_byte_is_locked(tmp_path: Path, code: int) -> None:
+    def busy(fd: int) -> None:
+        raise OSError(code, "the region is locked")
+
+    path = tmp_path / "desktop.instance"
+    assert _platform_with_lock(busy).try_hold_instance(path) is None
+    path.unlink()  # the file was closed after the failed attempt
+
+
+def test_try_hold_instance_raises_any_other_error(tmp_path: Path) -> None:
+    def broken(fd: int) -> None:
+        raise OSError(errno.EIO, "the disk failed")
+
+    path = tmp_path / "desktop.instance"
+    with pytest.raises(OSError, match="the disk failed"):
+        _platform_with_lock(broken).try_hold_instance(path)
+    path.unlink()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="byte-range locks are Windows-only here")
+def test_two_holds_on_one_instance_file_exclude_each_other(tmp_path: Path) -> None:
+    platform = WindowsPlatform(registry=FakeRegistry(), candidates={})
+    path = tmp_path / "desktop.instance"
+    first = platform.try_hold_instance(path)
+    assert first is not None and first is not UNSUPPORTED
+    try:
+        assert platform.try_hold_instance(path) is None
+    finally:
+        first.release()
+    again = platform.try_hold_instance(path)
+    assert again is not None and again is not UNSUPPORTED
+    again.release()
+
+
+_HOLDER = """
+import sys, time
+from pathlib import Path
+from spyglass_service.desktop.platform_windows import WindowsPlatform
+hold = WindowsPlatform().try_hold_instance(Path(sys.argv[1]))
+print("busy" if hold is None else "held", flush=True)
+time.sleep(60)
+"""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="byte-range locks are Windows-only here")
+def test_the_kernel_releases_the_hold_when_its_process_is_killed(tmp_path: Path) -> None:
+    """Windows ends the launcher at sign-out or shutdown without running any of its code. The
+    kernel still drops the lock, so the next start owns the instance at once."""
+    path = tmp_path / "desktop.instance"
+    child = subprocess.Popen(  # noqa: S603 -- this interpreter, a fixed script
+        [sys.executable, "-c", _HOLDER, str(path)], stdout=subprocess.PIPE, text=True,
+        creationflags=subprocess.CREATE_NO_WINDOW)  # type: ignore[attr-defined]
+    try:
+        assert child.stdout is not None and child.stdout.readline().strip() == "held"
+        platform = WindowsPlatform(registry=FakeRegistry(), candidates={})
+        assert platform.try_hold_instance(path) is None
+        child.kill()
+        child.wait(timeout=10)
+        began = time.monotonic()
+        hold = platform.try_hold_instance(path)
+        assert hold is not None and hold is not UNSUPPORTED
+        assert time.monotonic() - began < 1.0
+        hold.release()
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=10)
+        if child.stdout is not None:
+            child.stdout.close()
