@@ -3,7 +3,7 @@
 // in a masked field and is never logged. All messages are shown with textContent.
 
 import { checkSpyglass, describeOutcome, normalizeAddress, normalizeKey } from './lib.js'
-import { loadSettings, saveSettings } from './store.js'
+import { adoptBundledConfig, loadSettings, saveSettings } from './store.js'
 
 const form = document.getElementById('form')
 const addressField = document.getElementById('address')
@@ -75,7 +75,11 @@ revealButton.addEventListener('click', () => {
   revealButton.setAttribute('aria-pressed', String(show))
 })
 
-loadSettings().then((settings) => {
-  addressField.value = settings.address
-  keyField.value = settings.key
-})
+// Adopt a new key from Spyglass first, so the fields show what the extension will use.
+adoptBundledConfig()
+  .catch(() => false)
+  .then(loadSettings)
+  .then((settings) => {
+    addressField.value = settings.address
+    keyField.value = settings.key
+  })

@@ -246,7 +246,7 @@ async def menus_and_failures(report: Report, d: Driver) -> None:
     report.add("failure notification when Spyglass is not running", 2, bool(notes) and notes[0]["title"] == "Send to Spyglass: not sent"
                and "not running" in notes[0]["message"], str(notes))
     result = await d.send("/selection-first")
-    report.add("closed port: plain sentence", 2, result.get("message") == "Spyglass is not running on this computer.", str(result))
+    report.add("closed port: plain sentence", 2, result.get("message") == "Spyglass is closed. Open Spyglass from the Start menu, then send again.", str(result))
     await d.aim(d.address, "b" * 32)
     result = await d.send("/selection-first")
     report.add("wrong key on a send", 2, result.get("message") == KEY_MESSAGE, str(result))

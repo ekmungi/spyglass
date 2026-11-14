@@ -211,6 +211,20 @@ export function checkSpyglass(request) {
   return callSpyglass({ ...request, path: '/api/radar/import/direct/check', method: 'GET' })
 }
 
+/**
+ * Decide whether to adopt the address and key that Spyglass wrote into this copy of the extension.
+ * Only a changed stamp means Spyglass wrote something new, so a key the reader typed by hand
+ * stays until then.
+ * @param {{address: string, key: string, stamp?: string}} saved what the extension holds now
+ * @param {{address: string, key: string, stamp: string} | null} bundled the file's content, or null
+ * @returns {{address: string, key: string, stamp: string} | null} the values to save, or null
+ */
+export function chooseBundledSettings(saved, bundled) {
+  if (!bundled || !bundled.address || !bundled.key || !bundled.stamp) return null
+  if (bundled.stamp === saved.stamp) return null
+  return { address: bundled.address, key: bundled.key, stamp: bundled.stamp }
+}
+
 const PDF_HINT = 'Download the file and add it in Spyglass.'
 
 /**
@@ -228,7 +242,7 @@ export function describeOutcome(outcome, purpose = 'send') {
     case 'no-key':
       return { ok: false, message: "The key is missing or wrong. Open the extension's settings." }
     case 'network':
-      return { ok: false, message: 'Spyglass is not running on this computer.' }
+      return { ok: false, message: 'Spyglass is closed. Open Spyglass from the Start menu, then send again.' }
     case 'timeout':
       return { ok: false, message: 'Spyglass did not answer within 30 seconds. The page may not have been added.' }
     case 'pdf':

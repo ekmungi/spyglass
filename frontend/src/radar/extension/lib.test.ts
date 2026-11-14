@@ -6,6 +6,7 @@ import {
   buildPayload,
   callSpyglass,
   checkSpyglass,
+  chooseBundledSettings,
   chooseHtml,
   classifyPage,
   clipToBytes,
@@ -230,7 +231,7 @@ describe('describeOutcome', () => {
     expect(describeOutcome({ kind: 'ok', data: { replaced: false } })).toEqual({ ok: true, message: 'Added to Spyglass' })
     expect(describeOutcome({ kind: 'ok', data: { replaced: true } }).message).toBe('Updated in Spyglass')
     expect(describeOutcome({ kind: 'ok', data: {} }, 'check')).toEqual({ ok: true, message: 'Connected to Spyglass' })
-    expect(describeOutcome({ kind: 'network' }).message).toBe('Spyglass is not running on this computer.')
+    expect(describeOutcome({ kind: 'network' }).message).toBe('Spyglass is closed. Open Spyglass from the Start menu, then send again.')
     expect(describeOutcome({ kind: 'no-key' }).message).toBe(settings)
     expect(describeOutcome({ kind: 'http', status: 403, detail: 'The key is missing or wrong.' }).message).toBe(settings)
     expect(describeOutcome({ kind: 'timeout' }).message).toMatch(/did not answer within 30 seconds/)
@@ -264,5 +265,47 @@ describe('the extension package', () => {
 
   it('asks for only the local computer as a host', () => {
     expect(extensionManifest.host_permissions).toEqual(['http://localhost/*', 'http://127.0.0.1/*'])
+  })
+})
+
+describe('chooseBundledSettings', () => {
+  it('adopts a bundled key with a new stamp', () => {
+    expect(chooseBundledSettings({ address: 'a', key: 'old', stamp: 's1' }, { address: 'a', key: 'new', stamp: 's2' })).toEqual({
+      address: 'a',
+      key: 'new',
+      stamp: 's2',
+    })
+  })
+
+  it('adopts the bundled file the first time, when no stamp was saved yet', () => {
+    expect(chooseBundledSettings({ address: 'a', key: '' }, { address: 'b', key: 'new', stamp: 's1' })).toEqual({
+      address: 'b',
+      key: 'new',
+      stamp: 's1',
+    })
+  })
+
+  it('keeps a hand-typed key while the stamp is unchanged', () => {
+    expect(chooseBundledSettings({ address: 'a', key: 'typed', stamp: 's2' }, { address: 'a', key: 'new', stamp: 's2' })).toBeNull()
+  })
+
+  it('does nothing without a bundled file', () => {
+    expect(chooseBundledSettings({ address: 'a', key: 'k' }, null)).toBeNull()
+  })
+
+  it('ignores a bundled file that lacks an address, a key or a stamp', () => {
+    expect(chooseBundledSettings({ address: 'a', key: 'k' }, { address: 'a', key: '', stamp: 's' })).toBeNull()
+    expect(chooseBundledSettings({ address: 'a', key: 'k' }, { address: '', key: 'k', stamp: 's' })).toBeNull()
+    expect(chooseBundledSettings({ address: 'a', key: 'k' }, { address: 'a', key: 'k', stamp: '' })).toBeNull()
+  })
+})
+
+describe('closed message', () => {
+  it('tells the user to open Spyglass when it is closed', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    const outcome = describeOutcome(await checkSpyglass({ address: ADDRESS, key: KEY, fetchImpl: fetchImpl as unknown as typeof fetch }), 'check')
+    expect(outcome.message).toBe('Spyglass is closed. Open Spyglass from the Start menu, then send again.')
   })
 })

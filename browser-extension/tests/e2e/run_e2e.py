@@ -59,7 +59,7 @@ async def layer1(report: Report, address: str, key: str, workdir: Path) -> None:
         message = await fill_and_test(page, address, WRONG_KEY)
         report.add("wrong key gives the plain sentence", 1, message == KEY_MESSAGE, message)
         message = await fill_and_test(page, f"http://localhost:{CLOSED_PORT}", key)
-        report.add("stopped address gives the plain sentence", 1, message == "Spyglass is not running on this computer.", message)
+        report.add("stopped address gives the plain sentence", 1, message == "Spyglass is closed. Open Spyglass from the Start menu, then send again.", message)
         message = await fill_and_test(page, address, "not-a-key")
         report.add("malformed key refused by the form", 1, message.startswith("That does not look like the key"), message)
         for bad in ("http://example.com:7777", "https://localhost:7778", "http://localhost", "http://localhost.evil.com:7778"):

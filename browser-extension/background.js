@@ -4,7 +4,11 @@
 
 import { LIMITS, buildPayload, classifyPage, describeOutcome, sendToSpyglass } from './lib.js'
 import { collectInPage } from './reader.js'
-import { loadSettings } from './store.js'
+import { adoptBundledConfig, loadSettings } from './store.js'
+
+// The service worker starts again after a reload, an update and a browser start, so this picks up
+// a new key that Spyglass wrote into the extension's folder. A failure leaves the saved settings.
+const adopted = adoptBundledConfig().catch(() => false)
 
 const MENU_PAGE = 'send-page'
 const MENU_SELECTION = 'send-selection'
@@ -37,6 +41,7 @@ async function readTab(tabId, kind) {
  * @returns {Promise<{ok: boolean, message: string, hint?: string, itemId?: number, address?: string}>}
  */
 export async function sendTab(tabId, kind, note = '') {
+  await adopted
   const settings = await loadSettings()
   if (!settings.key) return describeOutcome({ kind: 'no-key' })
   const tab = await chrome.tabs.get(tabId).catch(() => null)
