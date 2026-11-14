@@ -41,7 +41,10 @@ def test_a_finished_cycle_is_persisted(tmp_path) -> None:
     """The end of a cycle writes its finish time, which a new scheduler reads back."""
     engine = make_engine(tmp_path)
     settings = make_settings(radar_timezone="UTC", data_dir=tmp_path)
-    clock = Clock(NOW)
+    # A cycle stamps its finish with the real time, and a finish later than the scheduler's
+    # clock reads as unknown, so this clock must stand a little after the real time, not at a
+    # fixed date that real time eventually passes.
+    clock = Clock(datetime.now(UTC) + timedelta(minutes=5))
     try:
         scheduler = _scheduler(engine, [], clock=clock, settings=settings)
         assert scheduler.last_finished() is None
