@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
+import subprocess
+import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -220,6 +224,67 @@ def test_the_tag_check_runs_before_anything_is_published() -> None:
     assert "TAG: ${{ github.ref_name }}" in step  # the tag reaches the script through env only
     assert "manifest.json" in step and "__version__" in step
     assert "needs: release" in installer_job
+
+
+def _tag_check_script() -> str:
+    """The Python the release job runs to check the tag, cut out of the workflow file."""
+    release_job = RELEASE.split("\n  installer:", 1)[0]
+    body = release_job.split("python3 - <<'PY'\n", 1)[1].split("\n          PY", 1)[0]
+    return textwrap.dedent(body)
+
+
+def _run_tag_check(tmp_path: Path, tag: str, code_version: str = "0.41.0") -> tuple[int, str]:
+    """Run the release job's tag check for `tag` against code at `code_version`.
+
+    Returns:
+        The exit code and what the check wrote to the step's output file.
+    """
+    (tmp_path / "src" / "spyglass_service").mkdir(parents=True)
+    (tmp_path / "manifest.json").write_text(json.dumps({"version": code_version}), encoding="utf-8")
+    (tmp_path / "src" / "spyglass_service" / "__init__.py").write_text(
+        f'__version__ = "{code_version}"\n', encoding="utf-8")
+    output = tmp_path / "github-output.txt"
+    output.write_text("", encoding="utf-8")
+    env = {**os.environ, "TAG": tag, "GITHUB_OUTPUT": str(output)}
+    done = subprocess.run(  # noqa: S603 -- this interpreter, the workflow's own script
+        [sys.executable, "-c", _tag_check_script()], cwd=tmp_path, env=env,
+        capture_output=True, text=True, check=False)
+    return done.returncode, output.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(("tag", "test_build"), [("0.41.0", "false"), ("0.41.0-test1", "true"),
+                                                 ("v0.41.0-test12", "true")])
+def test_a_version_tag_or_a_test_tag_passes_the_check(tmp_path: Path, tag: str,
+                                                      test_build: str) -> None:
+    """A release tag and a test tag both name the code's version; only the test tag is marked."""
+    code, written = _run_tag_check(tmp_path, tag)
+    assert code == 0
+    assert "version=0.41.0" in written.splitlines()
+    assert f"test={test_build}" in written.splitlines()
+
+
+@pytest.mark.parametrize("tag", ["0.41.1", "0.41.1-test1", "0.41.0-rc1", "0.41.0-test", "latest"])
+def test_a_tag_that_is_not_the_codes_version_stops_the_release(tmp_path: Path, tag: str) -> None:
+    """A tag naming another version, or one that is neither a version nor a test tag, fails."""
+    code, written = _run_tag_check(tmp_path, tag)
+    assert code != 0
+    assert written == ""
+
+
+def test_a_test_tag_builds_the_installer_without_publishing() -> None:
+    """A test tag runs the whole build, attaches the installer to the workflow run and publishes
+    no release, so BRAT and the release page never see it."""
+    release_job, installer_job = RELEASE.split("\n  installer:", 1)
+    publish = release_job[release_job.index("name: Publish release with plugin assets"):]
+    assert "if: steps.tag.outputs.test != 'true'" in publish
+    assert "id: tag" in release_job
+    assert "version: ${{ steps.tag.outputs.version }}" in release_job
+    assert "test: ${{ steps.tag.outputs.test }}" in release_job
+    to_release = installer_job[installer_job.index("name: Upload the installer to the release"):]
+    assert "if: needs.release.outputs.test != 'true'" in to_release.split("\n      - ", 1)[0]
+    artifact = installer_job[installer_job.index("actions/upload-artifact@") - 200:]
+    assert "if: needs.release.outputs.test == 'true'" in artifact
+    assert "/DAppVersion=$env:VERSION" in installer_job
 
 
 def test_versions_agree() -> None:

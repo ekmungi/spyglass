@@ -4,6 +4,12 @@
 installer. The release job in `.github/workflows/release.yml` builds it for every version tag and
 adds it to the GitHub release. These are the steps to build and try it on your own PC.
 
+To try the GitHub build without publishing anything, push a test tag: the code's version plus
+`-testN`, for example `0.41.0-test1`. The job builds the plugin and the installer exactly as for a
+release, creates no release, and attaches `Spyglass-Setup-<version>.exe` to the workflow run, where
+it can be downloaded from the run's page for seven days. Delete the test tag afterwards with
+`git push origin :refs/tags/0.41.0-test1`.
+
 ## What you need
 
 - Windows 10 or 11.

@@ -1,6 +1,11 @@
 # Builds the Obsidian plugin and publishes a GitHub release whose assets BRAT
 # installs, then adds the Windows installer to it. Trigger: push a tag equal to the
 # manifest version (e.g. 0.1.0).
+#
+# Test tags: a tag such as 0.41.0-test1 (the code's version plus -testN) runs the same build
+# but publishes nothing. The installer is attached to the workflow run instead, downloadable
+# from the run's page for a week, so the release path can be tried without a release that
+# BRAT would install. Delete the test tag afterwards.
 name: Release plugin
 
 on:
@@ -14,6 +19,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      # The code's version (the tag without any -testN), and whether this is a test tag.
+      version: ${{ steps.tag.outputs.version }}
+      test: ${{ steps.tag.outputs.test }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,22 +30,29 @@ jobs:
       # numbered after the tag, so a tag that differs from the code's version would ship a
       # Spyglass that reports another version. The installer job needs this job, so it stops too.
       - name: Check the tag matches the version in the code
+        id: tag
         env:
           TAG: ${{ github.ref_name }}
         run: |
           python3 - <<'PY'
           import json, os, re, sys
           tag = os.environ["TAG"].removeprefix("v")
+          match = re.fullmatch(r"(\d+\.\d+\.\d+)(-test\d+)?", tag)
+          if match is None:
+              sys.exit(f"Tag '{tag}' is not a version such as 0.41.0 or a test tag such as 0.41.0-test1")
+          version, test_build = match.group(1), match.group(2) is not None
           with open("manifest.json", encoding="utf-8") as handle:
               manifest = json.load(handle)["version"]
           with open("src/spyglass_service/__init__.py", encoding="utf-8") as handle:
               found = re.search(r'^__version__\s*=\s*"([^"]+)"', handle.read(), re.MULTILINE)
-          if tag != manifest:
+          if version != manifest:
               sys.exit(f"Tag '{tag}' differs from manifest.json's version '{manifest}'")
           if found is None:
               sys.exit("No __version__ found in src/spyglass_service/__init__.py")
-          if tag != found.group(1):
+          if version != found.group(1):
               sys.exit(f"Tag '{tag}' differs from __version__ '{found.group(1)}' in src/spyglass_service/__init__.py")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"version={version}\ntest={'true' if test_build else 'false'}\n")
           PY
 
       - uses: actions/setup-node@v4
@@ -50,6 +66,7 @@ jobs:
           npm run build
 
       - name: Publish release with plugin assets
+        if: steps.tag.outputs.test != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -71,6 +88,7 @@ jobs:
       UV_VERSION: "0.10.9"
       UV_ZIP_SHA256: "f58dc40896000229db7c52b8bdd931394040ef2ad59abd1eda841f6d70b13d7a"
       TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.release.outputs.version }}
     defaults:
       run:
         shell: pwsh
@@ -81,10 +99,10 @@ jobs:
         with:
           node-version: "20.x"
 
-      - name: Check the tag is a version
+      - name: Check the version is digits
         run: |
-          # The tag becomes the installer's version number, which Windows needs as digits.
-          if ($env:TAG -notmatch '^\d+\.\d+\.\d+$') { throw "Tag '$env:TAG' is not a version such as 0.41.0" }
+          # The version becomes the installer's version number, which Windows needs as digits.
+          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$env:VERSION' from tag '$env:TAG' is not a version such as 0.41.0" }
 
       - name: Build the interface
         working-directory: frontend
@@ -115,11 +133,22 @@ jobs:
         run: |
           $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
           if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
-          & $iscc "/DAppVersion=$env:TAG" installer\spyglass.iss
+          & $iscc "/DAppVersion=$env:VERSION" installer\spyglass.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload the installer to the release
+        if: needs.release.outputs.test != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload $env:TAG "installer\Output\Spyglass-Setup-$env:TAG.exe" --clobber
+          gh release upload $env:TAG "installer\Output\Spyglass-Setup-$env:VERSION.exe" --clobber
+
+      # A test tag publishes nothing: the installer is attached to this workflow run instead.
+      - name: Attach the installer to the workflow run (test tags)
+        if: needs.release.outputs.test == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Spyglass-Setup-${{ needs.release.outputs.version }}-${{ github.ref_name }}
+          path: installer/Output/Spyglass-Setup-${{ needs.release.outputs.version }}.exe
+          if-no-files-found: error
+          retention-days: 7
