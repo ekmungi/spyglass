@@ -292,14 +292,15 @@ covers the same switches from the settings page.
 ## Configuration reference
 
 Every setting can be set as an environment variable or in a `.env` file, which the service reads
-when it starts. The installed app reads the `.env` file in its data folder; there the data folder,
-the vault and the port come from the installer's choices and a `.env` file does not change them.
-A service run from the repository reads the `.env` file in the folder it is started from, normally
-the repository folder. If you move from a 0.40.1 setup run from the repository to the installed
-app, copy the keys from your `.env` file into a `.env` file in the new data folder. Many settings
-can also be changed in **Settings**, and those changes are kept in the data folder and applied
-over the environment. Settings take the prefix `SPYGLASS_`. The provider keys are also read under
-their usual names, such as `OPENROUTER_API_KEY`.
+when it starts. The installed app reads the `.env` file in its data folder; there the data folder
+and the port always come from the installer's choices, and so does the vault when one was chosen
+in the installer. A `.env` file cannot change those, but it can set a vault when none was chosen
+in the installer. A service run from the repository reads the `.env` file in the folder it is
+started from, normally the repository folder. If you move from a 0.40.1 setup run from the
+repository to the installed app, copy the keys from your `.env` file into a `.env` file in the new
+data folder. Many settings can also be changed in **Settings**, and those changes are kept in the
+data folder and applied over the environment. Settings take the prefix `SPYGLASS_`. The provider
+keys are also read under their usual names, such as `OPENROUTER_API_KEY`.
 
 | Variable | Default | What it does |
 |----------|---------|--------------|

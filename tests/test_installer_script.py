@@ -207,6 +207,21 @@ def test_release_job_builds_and_uploads_the_installer() -> None:
     assert "Spyglass-Setup-" in RELEASE
 
 
+def test_the_tag_check_runs_before_anything_is_published() -> None:
+    """A tag that differs from the code's version stops the release in its first job, before the
+    plugin files are published; the installer job needs that job, so it never runs either."""
+    release_job, installer_job = RELEASE.split("\n  installer:", 1)
+    check = "name: Check the tag matches the version in the code"
+    assert check in release_job and check not in installer_job
+    first_steps = release_job.index("actions/checkout"), release_job.index(check)
+    assert first_steps[0] < first_steps[1] < release_job.index("name: Build plugin bundle")
+    assert release_job.index(check) < release_job.index("Publish release with plugin assets")
+    step = release_job[release_job.index(check):release_job.index("name: Build plugin bundle")]
+    assert "TAG: ${{ github.ref_name }}" in step  # the tag reaches the script through env only
+    assert "manifest.json" in step and "__version__" in step
+    assert "needs: release" in installer_job
+
+
 def test_versions_agree() -> None:
     """Every place that names the version names the same one."""
     plugin = json.loads(_read(ROOT / "manifest.json"))
