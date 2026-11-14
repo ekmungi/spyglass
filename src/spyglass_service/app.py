@@ -59,7 +59,6 @@ from spyglass_service.request_guards import (
 )
 from spyglass_service.mcp_server import ServiceState, build_mcp
 from spyglass_service.skill_sync import default_repo_skills_dir, sync_skills
-from spyglass_service.migrate_data_dir import migrate_data_dir
 from spyglass_service.models import RunLog
 from spyglass_service.rebucket import (
     _rebucket_marker_done,
@@ -306,8 +305,6 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # One-time relocation of operational state to ~/.spyglass, before the DB opens.
-        migrate_data_dir(settings.data_dir)
         # Surface a corrupt DB via /api/health instead of crash-looping: check
         # integrity BEFORE init_db (init_db itself raises on a malformed file), and skip every
         # DB-dependent startup step when it fails.

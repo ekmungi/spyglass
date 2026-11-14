@@ -69,16 +69,6 @@ def _nullpool_engines(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _no_real_data_dir_migration(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """Point the legacy data dir at a non-existent path so app startup never migrates the
-    real %LOCALAPPDATA%/Spyglass into a test's tmp dir. Tests of migrate_data_dir
-    itself pass an explicit legacy_dir and are unaffected."""
-    monkeypatch.setattr(
-        "spyglass_service.migrate_data_dir.legacy_data_dir", lambda: tmp_path / "no-legacy"
-    )
-
-
-@pytest.fixture(autouse=True)
 def _fetch_worker_off_unless_requested(request: pytest.FixtureRequest, monkeypatch) -> None:
     """Neuter FetchWorker.start() by default so no test silently performs a real fetch.
 

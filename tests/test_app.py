@@ -31,6 +31,20 @@ def test_health_reports_desktop_when_built_by_the_launcher(tmp_path: Path) -> No
         assert client.get("/api/health").json()["started_by"] == "desktop"
 
 
+def test_start_never_pulls_a_database_from_the_old_data_folder(tmp_path: Path, monkeypatch) -> None:
+    """Starting the service must not move a database out of the pre-0.10 data folder: a later
+    data-folder check would otherwise be bypassed by a silent move into a folder with no database.
+    Every legacy path here is under tmp_path, so the real old folder is never read."""
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    (legacy / "spyglass.db").write_bytes(b"old")
+    monkeypatch.setattr("platformdirs.user_data_dir", lambda *a, **k: str(legacy))
+    app = create_app(make_settings(tmp_path))
+    with TestClient(app):
+        pass
+    assert (legacy / "spyglass.db").read_bytes() == b"old"
+
+
 def test_teardown_stops_claude_runs_first(tmp_path: Path, monkeypatch) -> None:
     """The stop order and limits keep the whole shutdown inside eight seconds: the Claude job
     worker goes first (2 s), then the radar scheduler (2 s), then the fetch worker (1 s)."""
