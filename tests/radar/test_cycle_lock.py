@@ -53,6 +53,15 @@ def test_a_live_holder_is_respected_but_a_very_old_lock_is_not(tmp_path) -> None
     lock.release()
 
 
+def test_lock_with_no_max_age_is_not_stale_after_twelve_hours(tmp_path) -> None:
+    """The desktop app holds its lock as long as it stays open, so only a dead holder may make
+    it stale, however old the lock is."""
+    path = tmp_path / "desktop.lock"
+    _write_holder(path, OTHER_PID, datetime.now(UTC) - timedelta(days=2))
+    assert CycleFileLock(path, pid_alive=lambda _pid: True, max_age=None).acquire() is False
+    assert CycleFileLock(path, pid_alive=lambda _pid: False, max_age=None).acquire() is True
+
+
 def test_an_unreadable_fresh_lock_counts_as_held(tmp_path) -> None:
     """A lock file being written by another process right now is not stolen."""
     path = tmp_path / "cycle.lock"

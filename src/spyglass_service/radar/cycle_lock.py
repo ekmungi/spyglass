@@ -75,11 +75,15 @@ class CycleFileLock:
         path: Where the lock file lives (normally in the data directory).
         pid_alive: Liveness check for the holder's pid (replaced in tests).
         pid: This process's id (replaced in tests to act as another process).
+        max_age: A lock older than this counts as stale even if its holder runs. None means
+            only a dead holder makes it stale, for a lock that is held for as long as an
+            application stays open (the desktop app's one-instance lock).
     """
 
     def __init__(self, path: Path, *, pid_alive: PidAlive = pid_alive,
-                 pid: int | None = None) -> None:
+                 pid: int | None = None, max_age: timedelta | None = MAX_LOCK_AGE) -> None:
         self.path = Path(path)
+        self._max_age = max_age
         self._alive = pid_alive
         self._pid = pid if pid is not None else os.getpid()
         self._mine: str | None = None
@@ -137,7 +141,7 @@ class CycleFileLock:
             started = started.replace(tzinfo=UTC)
         if pid == os.getpid() and self._pid == os.getpid():
             return True  # left by this very process; the in-process lock guards it now
-        if datetime.now(UTC) - started > MAX_LOCK_AGE:
+        if self._max_age is not None and datetime.now(UTC) - started > self._max_age:
             return True
         return not self._alive(pid)
 
