@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Module name -> what it serves. Order only affects the generated docs.
 MODULES = ("items", "briefs", "assist", "profile", "sources", "watch", "papers",
            "feed_search", "tracks", "media", "privacy", "importer", "import_direct", "bridge",
-           "filing", "usage")
+           "filing", "usage", "desktop")
 
 
 def build_router() -> APIRouter:

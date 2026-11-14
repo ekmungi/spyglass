@@ -10,6 +10,7 @@ import uvicorn
 
 from spyglass_service.app import create_app
 from spyglass_service.config import Settings
+from spyglass_service.desktop.platform_base import default_platform
 
 # Built frontend relative to the repo layout; missing dir falls back to a placeholder page.
 _SPA_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -44,7 +45,8 @@ def build_server(
     # radar=True: this is the real service, so the built-in scheduler collects, judges and
     # composes on its own; nothing else needs to be open.
     app = create_app(settings, spa_dir=_SPA_DIST, shutdown_handler=request_stop, radar=True,
-                     started_by=started_by, **(extra_app_kwargs or {}))
+                     started_by=started_by, desktop_platform=default_platform(),
+                     **(extra_app_kwargs or {}))
     config = uvicorn.Config(app, host=settings.host, port=settings.port, log_level="info",
                             timeout_graceful_shutdown=STOP_WAIT_S)
     server = uvicorn.Server(config)

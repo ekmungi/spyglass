@@ -35,6 +35,7 @@ from spyglass_service.categories import migrate_categories_once, migrate_group_l
 from spyglass_service.collectors.factory import build_collectors
 from spyglass_service.config import Settings, apply_overlay
 from spyglass_service.desktop.datadir import record_data_version
+from spyglass_service.desktop.platform_base import DesktopPlatform
 from spyglass_service.db import backfill_rss_feed_urls, check_db_integrity, create_db_engine, init_db
 from spyglass_service.documents import set_yt_transcribe_cmd
 from spyglass_service.yt_discovery import discover_yt_transcribe
@@ -120,6 +121,7 @@ def create_app(
     skip_claude_worker: bool = False,
     radar: bool = False,
     started_by: str = "developer",
+    desktop_platform: DesktopPlatform | None = None,
 ) -> FastAPI:
     """Build the Spyglass FastAPI app.
 
@@ -145,6 +147,8 @@ def create_app(
     started_by: who launched this process ("developer" for `python -m spyglass_service`,
     "desktop" for the tray launcher); /api/health reports it so a second launch can tell
     whether the service on the port is its own.
+    desktop_platform: the operating-system adapter behind the Settings routes for "Start with
+    Windows" and the extensions page; None means those routes report nothing available.
     """
 
     # Dashboard-edited settings overlay the env config on every start.
@@ -410,6 +414,7 @@ def create_app(
     app.state.settings = settings
     app.state.radar_scheduler = None
     app.state.started_by = started_by
+    app.state.desktop_platform = desktop_platform
     app.state.engine = engine
     app.state.service_state = state
     # The manual /briefs/generate endpoint (a separate router) composes
