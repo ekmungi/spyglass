@@ -59,6 +59,45 @@ def test_check_changes_nothing(tmp_path: Path) -> None:
     assert sorted(p.name for p in tmp_path.iterdir()) == ["spyglass.db"]
 
 
+def test_check_leaves_a_wal_database_and_its_folder_untouched(tmp_path: Path) -> None:
+    """The service runs its database in WAL mode; a plain read-only open would add -wal and -shm
+    files to the folder, so the check must not leave any trace there."""
+    db = _make_db(tmp_path, "card")
+    conn = sqlite3.connect(db)
+    assert conn.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal"
+    conn.close()
+    names_before = sorted(p.name for p in tmp_path.iterdir())
+    bytes_before = db.read_bytes()
+    assert check_data_dir(tmp_path, "0.41.0")[0] is FolderVerdict.OLDER
+    assert sorted(p.name for p in tmp_path.iterdir()) == names_before
+    assert db.read_bytes() == bytes_before
+
+
+def test_table_still_in_the_wal_file_counts_as_present(tmp_path: Path) -> None:
+    """After a crash the newest tables can sit only in the -wal file; the check must see them
+    (else it would refuse the user's own data) and still leave the folder as it found it."""
+    db = _make_db(tmp_path, "card")
+    conn = sqlite3.connect(db)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA wal_autocheckpoint=0")
+    conn.execute(f'CREATE TABLE "{RadarDoc.__tablename__}" (id INTEGER PRIMARY KEY)')
+    conn.commit()
+    try:
+        assert (tmp_path / "spyglass.db-wal").stat().st_size > 0
+        names_before = sorted(p.name for p in tmp_path.iterdir())
+        assert check_data_dir(tmp_path, "0.41.0")[0] is FolderVerdict.OK
+        assert sorted(p.name for p in tmp_path.iterdir()) == names_before
+    finally:
+        conn.close()
+
+
+def test_check_reads_a_folder_whose_name_looks_percent_encoded(tmp_path: Path) -> None:
+    """A folder named like '100%41 x' must be opened literally, not as '100A x'."""
+    folder = tmp_path / "100%41 x"
+    _make_db(folder, "card")
+    assert check_data_dir(folder, "0.41.0")[0] is FolderVerdict.OLDER
+
+
 def test_folder_used_by_a_newer_version_is_refused(tmp_path: Path) -> None:
     record_data_version(tmp_path, "0.42.0")
     verdict, message = check_data_dir(tmp_path, "0.41.0")

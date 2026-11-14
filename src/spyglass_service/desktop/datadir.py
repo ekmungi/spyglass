@@ -9,7 +9,9 @@ The check only reads: it opens the database read-only and creates nothing.
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
+import tempfile
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
@@ -109,23 +111,65 @@ def _recorded_version(folder: Path) -> str | None:
     return written_by if isinstance(written_by, str) else None
 
 
-def _has_redesign_tables(db: Path) -> bool:
-    """True unless the database is readable and lacks the radar table. A file that cannot be
-    opened as a database is not called old: the service's own integrity check deals with it."""
+def _table_exists(db: Path) -> bool | None:
+    """Whether `db` holds the radar table, read without leaving any file beside it.
+
+    immutable=1 stops SQLite creating -wal/-shm files next to a WAL database, and as_uri()
+    percent-encodes the path so a folder such as "100%41 x" is read literally. Returns None
+    when the file cannot be read as a database.
+    """
     try:
-        conn = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"{db.absolute().as_uri()}?mode=ro&immutable=1", uri=True)
     except sqlite3.Error:
-        return True
+        return None
     try:
         row = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
             (RadarDoc.__tablename__,),
         ).fetchone()
     except sqlite3.Error:
-        return True
+        return None
     finally:
         conn.close()
     return row is not None
+
+
+def _has_redesign_tables(db: Path) -> bool:
+    """True unless the database is readable and lacks the radar table. A file that cannot be
+    opened as a database is not called old: the service's own integrity check deals with it.
+
+    An immutable open ignores the -wal file, and after a crash the newest tables can live only
+    there. When a non-empty -wal exists the database and it are read from a temporary copy,
+    so the real folder stays exactly as found.
+    """
+    wal = db.with_name(db.name + "-wal")
+    try:
+        has_wal = wal.exists() and wal.stat().st_size > 0
+    except OSError:
+        has_wal = False
+    if not has_wal:
+        found = _table_exists(db)
+        return True if found is None else found
+    with tempfile.TemporaryDirectory(prefix="spyglass-check-") as scratch:
+        copy = Path(scratch) / DB_NAME
+        try:
+            shutil.copy2(db, copy)
+            shutil.copy2(wal, copy.with_name(copy.name + "-wal"))
+        except OSError:
+            return True
+        # The copy sits in a folder we own, so a normal read-only open may replay its -wal.
+        try:
+            conn = sqlite3.connect(f"{copy.as_uri()}?mode=ro", uri=True)
+            try:
+                row = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                    (RadarDoc.__tablename__,),
+                ).fetchone()
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            return True
+        return row is not None
 
 
 def check_data_dir(path: Path, own_version: str, *, must_exist: bool = False) -> tuple[FolderVerdict, str]:
