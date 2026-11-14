@@ -279,6 +279,7 @@ def make_browser_rung(
     *,
     renderer: Callable[[str], str] | None = None,
     allow_bot_checks: bool = False,
+    channel: str = "",
 ) -> Callable[[str], AcquireResult]:
     """Build the T3 rung: render `url` in a local headless Chromium via patchright.
 
@@ -307,6 +308,9 @@ def make_browser_rung(
     `allow_bot_checks` is the reader's `privacy_allow_bot_checks` switch (see fetch_bot_check):
     off, the page sends reads only and an interstitial gets 8 seconds to clear on its own; on,
     the checking service's challenge endpoints may also receive the check's data, for 20 seconds.
+
+    `channel` names an installed browser to drive ("msedge" or "chrome"); empty means patchright's
+    own Chromium. The installed app passes "msedge" so no Chromium has to be downloaded.
     """
 
     def _default_renderer(url: str) -> str:
@@ -315,7 +319,8 @@ def make_browser_rung(
 
         with sync_playwright() as playwright:
             # Local-network checks on, and the page's own host resolved to its checked address.
-            browser = playwright.chromium.launch(headless=True, args=chromium_args(url))
+            browser = playwright.chromium.launch(
+                headless=True, args=chromium_args(url), channel=channel or None)
             try:
                 page = open_guarded_page(browser, allow_bot_checks=allow_bot_checks, page_url=url)
                 page.goto(url, timeout=60000)
@@ -381,5 +386,6 @@ def build_rungs(
         rungs = rungs + (make_jina_rung(settings.jina_api_key),)
     if settings.browser_enabled and target_kind == "html":
         rungs = rungs + (make_browser_rung(
-            allow_bot_checks=bool(getattr(settings, "privacy_allow_bot_checks", False))),)
+            allow_bot_checks=bool(getattr(settings, "privacy_allow_bot_checks", False)),
+            channel=getattr(settings, "browser_channel", "")),)
     return rungs

@@ -166,7 +166,7 @@ def test_default_renderer_installs_the_guard_before_navigating(monkeypatch) -> N
         """Fake playwright driver."""
 
         chromium = types.SimpleNamespace(
-            launch=lambda headless=True, args=(): launched.append(list(args)) or Browser())
+            launch=lambda headless=True, args=(), channel=None: launched.append(list(args)) or Browser())
 
     class Manager:
         """Fake context manager for sync_playwright()."""

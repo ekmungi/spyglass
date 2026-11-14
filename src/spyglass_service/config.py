@@ -195,6 +195,11 @@ class Settings(BaseSettings):
     # never includes this rung for a pdf/image ladder, so a PDF/image target never
     # launches a browser regardless of this flag.
     browser_enabled: bool = True
+    # Which installed browser the T3 rung drives: "msedge" or "chrome" use that program
+    # (every Windows PC has Edge, so the installed app skips the Chromium download); empty
+    # keeps patchright's own Chromium, which is what the developer entry uses. Set by the
+    # environment variable only -- NOT in OVERLAY_KEYS, because the app decides it, not the reader.
+    browser_channel: str = ""
 
     # ---- Radar (the redesigned product layer) ---------------------------------------------
     # Model for the cheap first pass that judges title and snippet (OpenRouter model id).
