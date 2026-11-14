@@ -20,7 +20,44 @@ def test_health_reports_ok_and_version(tmp_path: Path) -> None:
     with TestClient(app) as client:
         response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": __version__, "db": "ok"}
+    assert response.json() == {
+        "status": "ok", "version": __version__, "db": "ok", "started_by": "developer"}
+
+
+def test_health_reports_desktop_when_built_by_the_launcher(tmp_path: Path) -> None:
+    """The tray launcher tells the service who started it, so a second launch can recognise it."""
+    app = create_app(make_settings(tmp_path), started_by="desktop")
+    with TestClient(app) as client:
+        assert client.get("/api/health").json()["started_by"] == "desktop"
+
+
+def test_teardown_stops_claude_runs_first(tmp_path: Path, monkeypatch) -> None:
+    """The stop order and limits keep the whole shutdown inside eight seconds: the Claude job
+    worker goes first (2 s), then the radar scheduler (2 s), then the fetch worker (1 s)."""
+    calls: list[tuple[str, float]] = []
+
+    class FakeJobWorker:
+        def stop(self, timeout: float = 5.0) -> None:
+            calls.append(("job", timeout))
+
+    class FakeScheduler:
+        def stop(self, wait_seconds: float = 15) -> bool:
+            calls.append(("scheduler", wait_seconds))
+            return True
+
+    class FakeFetchWorker:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self, timeout: float = 5.0) -> None:
+            calls.append(("fetch", timeout))
+
+    monkeypatch.setattr("spyglass_service.app.FetchWorker", FakeFetchWorker)
+    app = create_app(make_settings(tmp_path), claude_worker=FakeJobWorker(), skip_claude_worker=True,
+                     skip_fetch_worker=True)
+    with TestClient(app):
+        app.state.radar_scheduler = FakeScheduler()
+    assert calls == [("job", 2.0), ("scheduler", 2.0), ("fetch", 1.0)]
 
 
 def test_health_reports_degraded_on_corrupt_db(tmp_path: Path) -> None:

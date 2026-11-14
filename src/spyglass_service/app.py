@@ -119,6 +119,7 @@ def create_app(
     claude_worker: ClaudeJobWorker | None = None,
     skip_claude_worker: bool = False,
     radar: bool = False,
+    started_by: str = "developer",
 ) -> FastAPI:
     """Build the Spyglass FastAPI app.
 
@@ -141,6 +142,9 @@ def create_app(
     API tests can assert on queued state without a live worker racing them to completion.
     claude_worker: the background-job worker; built from the settings when None, so tests
     can inject one with a fake Claude run. skip_claude_worker: create it but never start it.
+    started_by: who launched this process ("developer" for `python -m spyglass_service`,
+    "desktop" for the tray launcher); /api/health reports it so a second launch can tell
+    whether the service on the port is its own.
     """
 
     # Dashboard-edited settings overlay the env config on every start.
@@ -374,12 +378,14 @@ def create_app(
         # The mounted MCP app needs its own lifespan run inside ours.
         async with mcp_app.lifespan(app):
             yield
-        # Stop the worker before disposing the engine -- it holds sessions against it.
+        # Stop the workers before disposing the engine -- they hold sessions against it. The
+        # whole stop must fit in eight seconds (server 3 s + these 2 + 2 + 1), so the order and
+        # the limits matter: a Claude run is the slowest thing to end and goes first.
+        job_worker.stop(timeout=2.0)
         radar_scheduler = getattr(app.state, "radar_scheduler", None)
         if radar_scheduler is not None:
-            radar_scheduler.stop()
-        fetch_worker.stop()
-        job_worker.stop()
+            radar_scheduler.stop(wait_seconds=2.0)
+        fetch_worker.stop(timeout=1.0)
         engine.dispose()
 
     app = FastAPI(title="Spyglass", version=__version__, lifespan=lifespan)
@@ -403,6 +409,7 @@ def create_app(
     app.add_middleware(SecurityHeaders)
     app.state.settings = settings
     app.state.radar_scheduler = None
+    app.state.started_by = started_by
     app.state.engine = engine
     app.state.service_state = state
     # The manual /briefs/generate endpoint (a separate router) composes
@@ -444,6 +451,7 @@ def create_app(
             "status": "ok" if db_ok else "degraded",
             "version": __version__,
             "db": "ok" if db_ok else "unhealthy",
+            "started_by": started_by,
         }
 
     @app.post("/api/shutdown", status_code=202)

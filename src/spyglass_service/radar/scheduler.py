@@ -63,8 +63,9 @@ CATCHUP_DELAY_SECONDS = 15
 # Longest the daily brief waits for a running cycle; after that it is recorded as skipped and
 # the next catch-up check composes it.
 BRIEF_WAIT_SECONDS = 3600
-# Longest `stop()` waits for a running cycle to reach a stopping point.
-STOP_WAIT_SECONDS = 15
+# Longest `stop()` waits for a running cycle to reach a stopping point. Part of the service's
+# eight-second stop budget, so a cycle still running after this is abandoned in its daemon thread.
+STOP_WAIT_SECONDS = 2
 # The inter-process lock file, inside the data directory.
 LOCK_FILE = "radar-cycle.lock"
 # Jobs never expire (a PC asleep at the brief time still gets its brief on wake), and missed
