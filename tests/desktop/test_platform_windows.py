@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -276,37 +277,59 @@ def test_two_holds_on_one_instance_file_exclude_each_other(tmp_path: Path) -> No
 
 
 _HOLDER = """
-import sys, time
+import os, sys, time
 from pathlib import Path
 from spyglass_service.desktop.platform_windows import WindowsPlatform
 hold = WindowsPlatform().try_hold_instance(Path(sys.argv[1]))
-print("busy" if hold is None else "held", flush=True)
+print("busy" if hold is None else "held", os.getpid(), flush=True)
 time.sleep(60)
 """
+
+# How long the test allows the kernel to drop a killed holder's lock. Termination is
+# asynchronous to the kill call and there is no process handle to wait on, so the test polls.
+_RELEASE_WAIT_S = 5.0
+
+
+def _end_process(pid: int) -> None:
+    """End `pid` without running any of its code (TerminateProcess on Windows); ignore a pid
+    that has already gone."""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        pass
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="byte-range locks are Windows-only here")
 def test_the_kernel_releases_the_hold_when_its_process_is_killed(tmp_path: Path) -> None:
     """Windows ends the launcher at sign-out or shutdown without running any of its code. The
-    kernel still drops the lock, so the next start owns the instance at once."""
+    kernel still drops the lock, so the next start owns the instance within moments."""
     path = tmp_path / "desktop.instance"
     child = subprocess.Popen(  # noqa: S603 -- this interpreter, a fixed script
         [sys.executable, "-c", _HOLDER, str(path)], stdout=subprocess.PIPE, text=True,
         creationflags=subprocess.CREATE_NO_WINDOW)  # type: ignore[attr-defined]
+    holder_pid = None
     try:
-        assert child.stdout is not None and child.stdout.readline().strip() == "held"
+        assert child.stdout is not None
+        state, pid_text = child.stdout.readline().split()
+        assert state == "held"
+        # A virtual environment's python.exe is a small launcher that runs the real interpreter
+        # as its own child, so the lock belongs to the pid the script reports, not to `child`.
+        holder_pid = int(pid_text)
         platform = WindowsPlatform(registry=FakeRegistry(), candidates={})
         assert platform.try_hold_instance(path) is None
-        child.kill()
-        child.wait(timeout=10)
-        began = time.monotonic()
+        _end_process(holder_pid)
+        deadline = time.monotonic() + _RELEASE_WAIT_S
         hold = platform.try_hold_instance(path)
+        while hold is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+            hold = platform.try_hold_instance(path)
         assert hold is not None and hold is not UNSUPPORTED
-        assert time.monotonic() - began < 1.0
         hold.release()
     finally:
+        if holder_pid is not None:
+            _end_process(holder_pid)
         if child.poll() is None:
             child.kill()
-            child.wait(timeout=10)
+        child.wait(timeout=10)
         if child.stdout is not None:
             child.stdout.close()
