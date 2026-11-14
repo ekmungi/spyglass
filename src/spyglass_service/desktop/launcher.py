@@ -6,6 +6,7 @@ pieces; everything here runs and is tested without a tray or a real service on p
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import sys
@@ -15,7 +16,7 @@ from collections.abc import MutableMapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TextIO
 
 from spyglass_service.config import Settings, apply_overlay
 from spyglass_service.desktop.datadir import DesktopConfig
@@ -72,8 +73,11 @@ def prepare_environment(config: DesktopConfig,
 def probe_health(port: int, timeout: float = 1.0) -> HealthResult:
     """Ask whatever listens on 127.0.0.1:`port` who it is.
 
-    Returns a Health for a JSON answer that names a version, "not-spyglass" for any other
-    HTTP answer, and None when nothing answers (connection refused or timed out).
+    Returns a Health for a JSON answer that names a version and None when nothing accepts
+    the connection. Anything that did accept it but is not a healthy Spyglass (another HTTP
+    service, a non-HTTP service, a dropped connection, or no answer within `timeout`, as from
+    a hung or busy service) is "not-spyglass", so the caller never starts a second service
+    on a busy port.
     """
     # An empty proxy map: a system proxy must never sit between us and this computer.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -82,8 +86,23 @@ def probe_health(port: int, timeout: float = 1.0) -> HealthResult:
             raw = response.read()
     except urllib.error.HTTPError:
         return NOT_SPYGLASS  # it answered HTTP, but with an error status
-    except (urllib.error.URLError, OSError):
-        return None  # refused or timed out: nothing is listening
+    except urllib.error.URLError as exc:
+        # urllib wraps only errors from making the connection. A refusal, or a connect timeout
+        # (Windows takes about two seconds to refuse a closed local port), means nothing
+        # accepted; a reset or a malformed reply means something did.
+        reason = exc.reason
+        if isinstance(reason, (ConnectionResetError, ConnectionAbortedError,
+                               http.client.HTTPException)):
+            return NOT_SPYGLASS
+        return None
+    except ConnectionRefusedError:
+        return None
+    except (http.client.HTTPException, ConnectionError, TimeoutError):
+        # Raised after the connection was made: garbage instead of HTTP, a connection dropped
+        # mid-reply, or a service that accepted and never answered.
+        return NOT_SPYGLASS
+    except OSError:
+        return None
     try:
         body = json.loads(raw)
     except ValueError:
@@ -122,19 +141,40 @@ def refusal_message(health: Health, port: int) -> str:
             "then open Spyglass again.")
 
 
+def _rotate_if_large(path: Path, limit_bytes: int) -> None:
+    """Move `path` to `path.1` when it is over the limit; keep it in place if that fails.
+
+    On Windows os.replace raises PermissionError while another process holds either file open.
+    A log that grows a little past its limit is better than a launcher that cannot start.
+    """
+    try:
+        if path.exists() and path.stat().st_size > limit_bytes:
+            os.replace(path, path.with_name(path.name + ".1"))
+    except OSError:
+        pass
+
+
+def _open_log(path: Path) -> TextIO:
+    """Open `path` for appending; discard the output (os.devnull) if it cannot be opened."""
+    try:
+        return open(path, "a", encoding="utf-8", errors="replace", buffering=1)
+    except OSError:
+        return open(os.devnull, "a", encoding="utf-8")
+
+
 def redirect_output(data_dir: Path, limit_bytes: int = LOG_LIMIT_BYTES) -> None:
     """Send stdout and stderr to service.log and service.err.log in the data folder.
 
     The windowed app has no console (sys.stdout may be None), so without this every message
     and traceback would be lost. A log already over `limit_bytes` is first moved to `.1`,
-    replacing the previous one; the new run then appends.
+    replacing the previous one; the new run then appends. Neither a failed rotation nor a log
+    that cannot be opened stops the start: the file keeps growing, or its output is dropped.
     """
-    streams = []
+    streams: list[TextIO] = []
     for name in ("service.log", "service.err.log"):
         path = data_dir / name
-        if path.exists() and path.stat().st_size > limit_bytes:
-            os.replace(path, data_dir / f"{name}.1")
-        streams.append(open(path, "a", encoding="utf-8", errors="replace", buffering=1))
+        _rotate_if_large(path, limit_bytes)
+        streams.append(_open_log(path))
     sys.stdout, sys.stderr = streams
 
 

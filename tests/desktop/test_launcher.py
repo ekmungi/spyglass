@@ -1,6 +1,8 @@
 """Tests for the desktop launcher core: environment, start decision, logs, folder check."""
 
 import json
+import os
+import socket
 import sqlite3
 import sys
 import threading
@@ -152,6 +154,72 @@ def test_probe_health_returns_none_when_nothing_listens() -> None:
 
 
 @pytest.fixture
+def raw_service():
+    """A raw TCP server on a free port. Set .script to a function taking the accepted socket."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(5)
+    listener.settimeout(0.2)
+    state = {"script": lambda conn: None, "stop": False, "held": []}
+
+    def serve() -> None:
+        while not state["stop"]:
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                continue
+            state["held"].append(conn)
+            conn.settimeout(2)
+            try:
+                conn.recv(4096)  # the request
+                state["script"](conn)
+            except OSError:
+                pass
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    state["port"] = listener.getsockname()[1]
+    yield state
+    state["stop"] = True
+    thread.join(timeout=5)
+    for conn in state["held"]:
+        conn.close()
+    listener.close()
+
+
+def test_probe_health_non_http_bytes_are_not_spyglass(raw_service) -> None:
+    """A service that answers with garbage instead of HTTP must not crash the probe."""
+    def garbage(conn):
+        conn.sendall(b"GARBAGE this is not http\r\n\r\n")
+        conn.close()
+
+    raw_service["script"] = garbage
+    assert probe_health(raw_service["port"], timeout=2) == "not-spyglass"
+
+
+def test_probe_health_connection_closed_mid_body_is_not_spyglass(raw_service) -> None:
+    """A reply that promises more body than it sends must not crash the probe."""
+    def truncated(conn):
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 500\r\n\r\n{\"version\": ")
+        conn.close()
+
+    raw_service["script"] = truncated
+    assert probe_health(raw_service["port"], timeout=2) == "not-spyglass"
+
+
+def test_probe_health_connection_dropped_without_a_reply_is_not_spyglass(raw_service) -> None:
+    """Accepting and closing at once is something other than a healthy Spyglass."""
+    raw_service["script"] = lambda conn: conn.close()
+    assert probe_health(raw_service["port"], timeout=2) == "not-spyglass"
+
+
+def test_probe_health_a_service_that_never_answers_is_not_spyglass(raw_service) -> None:
+    """A hung or busy service accepted the connection, so the port is taken, not free."""
+    raw_service["script"] = lambda conn: threading.Event().wait(1.5)
+    assert probe_health(raw_service["port"], timeout=0.3) == "not-spyglass"
+
+
+@pytest.fixture
 def redirect(monkeypatch):
     """Call redirect_output, then close the log files and restore sys.stdout and sys.stderr.
 
@@ -242,3 +310,30 @@ def test_check_data_dir_command_refuses_a_newer_folder(tmp_path, capsys) -> None
     record_data_version(tmp_path, "99.0.0")
     assert main(["--check-data-dir", str(tmp_path)]) == 4
     assert "99.0.0" in capsys.readouterr().out
+
+
+def test_redirect_output_keeps_appending_when_rotation_fails(tmp_path, redirect, monkeypatch) -> None:
+    """Another process holding the log open must not stop the launcher from starting."""
+    (tmp_path / "service.log").write_text("x" * 50, encoding="utf-8")
+
+    def refuse(*_args, **_kwargs):
+        raise PermissionError("held open by another process")
+
+    monkeypatch.setattr(os, "replace", refuse)
+    redirect(tmp_path, limit_bytes=10)
+    print("still logging")
+    sys.stdout.flush()
+    assert (tmp_path / "service.log").read_text(encoding="utf-8") == "x" * 50 + "still logging\n"
+    assert not (tmp_path / "service.log.1").exists()
+
+
+def test_redirect_output_falls_back_to_devnull_when_a_log_cannot_be_opened(
+        tmp_path, redirect) -> None:
+    """A log that cannot be opened drops its output; the other log still works."""
+    (tmp_path / "service.log").mkdir()  # opening a folder for appending fails
+    redirect(tmp_path)
+    print("lost")
+    print("kept", file=sys.stderr)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    assert (tmp_path / "service.err.log").read_text(encoding="utf-8") == "kept\n"
