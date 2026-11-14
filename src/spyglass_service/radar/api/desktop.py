@@ -2,7 +2,8 @@
 
 GET  /desktop/autostart         whether the switch is offered, and whether it is on
 PUT  /desktop/autostart         turn start-at-sign-in on or off
-GET  /desktop/browsers          the installed browsers that have an extensions page
+GET  /desktop/extension         the folder with this install's copy of the browser extension
+GET  /desktop/browsers         the installed browsers that have an extensions page
 POST /desktop/open-extensions   open one browser's extensions page
 
 These routes change the user's machine (a sign-in entry, a browser window), so every one is
@@ -12,11 +13,13 @@ must not write a sign-in entry that would start an installed copy.
 """
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from spyglass_service.desktop.platform_base import DesktopPlatform
+from spyglass_service.extension_copy import COPY_DIR
 from spyglass_service.radar.api.importer import same_origin_only
 from spyglass_service.request_guards import require_json
 
@@ -84,6 +87,12 @@ def put_autostart(body: AutostartBody, request: Request) -> dict[str, bool]:
             status_code=503, detail="Windows refused access to the start-up setting."
         ) from None
     return _autostart_state(platform)
+
+
+@router.get("/extension")
+def get_extension_folder(request: Request) -> dict[str, str]:
+    """The folder holding this install's copy of the browser extension, for "Load unpacked"."""
+    return {"folder": str(Path(request.app.state.settings.data_dir) / COPY_DIR)}
 
 
 @router.get("/browsers")

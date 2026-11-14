@@ -33,6 +33,7 @@ from sqlmodel import Session
 from starlette.datastructures import FormData, UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
 
+from spyglass_service.extension_copy import write_extension_config
 from spyglass_service.radar.import_files import MAX_FILE_BYTES, MAX_FILE_MB, file_kind, page_from_file
 from spyglass_service.radar.import_key import button_key, key_matches, rotate_button_key
 from spyglass_service.radar.import_staging import MAX_HTML_BYTES, PageTooLarge, StagingArea, StagingError
@@ -205,7 +206,15 @@ def get_button_key(request: Request) -> dict:
 @router.post("/import/button-key/rotate", dependencies=[Depends(same_origin_only)])
 def new_button_key(request: Request) -> dict:
     """Make a new secret; buttons built with the old one can no longer stage pages."""
-    return {"key": rotate_button_key(request.app.state.settings.data_dir)}
+    settings = request.app.state.settings
+    key = rotate_button_key(settings.data_dir)
+    # The extension's copy carries the key, so it gets the new one (and a new stamp) too. A
+    # failure to write it must not undo the rotation: the next start writes it again.
+    try:
+        write_extension_config(settings.data_dir, f"http://127.0.0.1:{settings.port}", key)
+    except OSError:
+        logger.warning("could not update the extension copy's config", exc_info=True)
+    return {"key": key}
 
 
 @router.post("/import/stage", response_model=None)

@@ -39,6 +39,8 @@ from spyglass_service.desktop.platform_base import DesktopPlatform
 from spyglass_service.db import backfill_rss_feed_urls, check_db_integrity, create_db_engine, init_db
 from spyglass_service.documents import set_yt_transcribe_cmd
 from spyglass_service.yt_discovery import discover_yt_transcribe
+from spyglass_service.extension_copy import sync_extension_copy
+from spyglass_service.radar.import_key import button_key
 from spyglass_service.embeddings import EmbeddingIndex, embed_pending_all
 from spyglass_service.enrich import enrich_item, run_scheduled_enrich
 from spyglass_service.claude_jobs import reset_interrupted as reset_interrupted_claude_jobs
@@ -105,6 +107,10 @@ _PLACEHOLDER = (
 
 
 logger = logging.getLogger(__name__)
+
+# The browser extension's source, two folders above the package (found the same way as the
+# bundled skills and the built frontend).
+_EXTENSION_SOURCE = Path(__file__).resolve().parents[2] / "browser-extension"
 
 
 def create_app(
@@ -318,6 +324,19 @@ def create_app(
             init_db(engine)
             # Note this version in the data folder so an older Spyglass refuses the folder later.
             record_data_version(settings.data_dir, __version__)
+            # Keep this install's copy of the browser extension, with its address and key, so
+            # the extension can adopt the key itself. Non-fatal: a failed copy must not stop the
+            # service from starting.
+            try:
+                await run_in_threadpool(
+                    sync_extension_copy,
+                    _EXTENSION_SOURCE,
+                    settings.data_dir,
+                    f"http://127.0.0.1:{settings.port}",
+                    button_key(settings.data_dir),
+                )
+            except OSError:
+                logger.warning("could not keep the browser extension's copy", exc_info=True)
             # One-time migration: reset any RECENT pre-publish-day-windowing
             # briefs (un-stamp their cards + delete the rows) so the compose trigger
             # below rebuilds them into proper per-day briefs. Guarded to run exactly

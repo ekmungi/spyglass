@@ -52,6 +52,48 @@ def test_start_never_pulls_a_database_from_the_old_data_folder(tmp_path: Path, m
     assert (legacy / "spyglass.db").read_bytes() == b"old"
 
 
+def _fake_extension(root: Path) -> Path:
+    """A one-file stand-in for the browser extension's source folder."""
+    source = root / "extension-source"
+    source.mkdir()
+    (source / "manifest.json").write_text('{"version": "1.0.0"}', encoding="utf-8")
+    return source
+
+
+def test_start_keeps_a_copy_of_the_extension_with_the_address_and_key(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Starting the service writes the extension's copy and its config into the data folder."""
+    import json
+
+    from spyglass_service import app as app_module
+    from spyglass_service.radar.import_key import button_key
+
+    monkeypatch.setattr(app_module, "_EXTENSION_SOURCE", _fake_extension(tmp_path))
+    settings = Settings(_env_file=None, data_dir=tmp_path / "data", port=7791)
+    app = create_app(settings, skip_claude_worker=True, skip_fetch_worker=True)
+    with TestClient(app):
+        pass
+    config = json.loads(
+        (tmp_path / "data" / "browser-extension" / "spyglass-config.json").read_text("utf-8")
+    )
+    assert config["address"] == "http://127.0.0.1:7791"
+    assert config["key"] == button_key(tmp_path / "data")
+
+
+def test_a_failed_extension_copy_does_not_stop_the_service(tmp_path: Path, monkeypatch) -> None:
+    """The copy is a convenience: an OSError while making it is logged and start-up goes on."""
+    from spyglass_service import app as app_module
+
+    def refuse(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(app_module, "sync_extension_copy", refuse)
+    app = create_app(make_settings(tmp_path), skip_claude_worker=True, skip_fetch_worker=True)
+    with TestClient(app) as client:
+        assert client.get("/api/health").json()["status"] == "ok"
+
+
 def test_teardown_stops_claude_runs_first(tmp_path: Path, monkeypatch) -> None:
     """The stop order and limits keep the whole shutdown inside eight seconds: the Claude job
     worker goes first (2 s), then the radar scheduler (2 s), then the fetch worker (1 s)."""

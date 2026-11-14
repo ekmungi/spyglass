@@ -156,3 +156,16 @@ def test_desktop_routes_refuse_cross_site_requests(desktop) -> None:
                        headers=FOREIGN).status_code == 403
     assert platform.autostart is False
     assert platform.opened == []
+
+
+def test_extension_folder_route_returns_the_copy(desktop) -> None:
+    client, _ = desktop
+    data = Path(client.app.state.settings.data_dir)
+    response = client.get(f"{BASE}/extension")
+    assert response.status_code == 200
+    assert Path(response.json()["folder"]) == data / "browser-extension"
+
+
+def test_extension_folder_route_refuses_cross_site_requests(desktop) -> None:
+    client, _ = desktop
+    assert client.get(f"{BASE}/extension", headers=FOREIGN).status_code == 403

@@ -57,7 +57,7 @@ def env(tmp_path):
     app.include_router(importer_api.router, prefix="/api/radar")
     app.add_middleware(CrossSiteGuard)
     app.state.engine = engine
-    app.state.settings = SimpleNamespace(data_dir=tmp_path / "data")
+    app.state.settings = SimpleNamespace(data_dir=tmp_path / "data", port=7777)
     app.state.radar_scheduler = FakeScheduler()
     with TestClient(app, follow_redirects=False) as client:
         yield SimpleNamespace(client=client, engine=engine, app=app, staging=tmp_path / "data" / "import_staging",
