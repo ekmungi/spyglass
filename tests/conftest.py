@@ -98,6 +98,18 @@ def _claude_worker_off(monkeypatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_child_registry(monkeypatch) -> None:
+    """Give each test its own child-process registry.
+
+    A service's shutdown closes the registry (a process registered afterwards is ended at
+    once), so a test that stops an app must not leave a closed registry for the next test.
+    """
+    from spyglass_service import child_processes
+
+    monkeypatch.setattr(child_processes, "CHILDREN", child_processes.ChildRegistry())
+
+
+@pytest.fixture(autouse=True)
 def _test_client_host_allowed(monkeypatch) -> None:
     """Let the service answer the test client, which addresses every request to "testserver".
 

@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from spyglass_service import child_processes
+from spyglass_service.child_processes import ChildRegistry
 from spyglass_service.radar.assist.engines import claude_code, codex_cli
 from spyglass_service.radar.assist.engines.base import StreamEvent
 from spyglass_service.radar.assist.engines.process import ChildProcess
@@ -261,3 +263,17 @@ def test_child_process_reports_stderr_tail(tmp_path):
     finally:
         child.close()
     assert "bad thing" in child.stderr_tail and child.returncode == 3
+
+
+def test_child_process_is_registered_for_a_stop_until_closed(tmp_path, monkeypatch):
+    """A stop ends every registered process, so a streaming reply's program is registered for
+    as long as it runs and leaves the registry when it is closed."""
+    registry = ChildRegistry(kill=lambda proc: None)
+    monkeypatch.setattr(child_processes, "CHILDREN", registry)
+    child = ChildProcess([sys.executable, "-c", "import time; time.sleep(60)"], cwd=tmp_path,
+                         env=dict(os.environ), stdin_text="")
+    try:
+        assert len(registry.live()) == 1
+    finally:
+        child.close()
+    assert registry.live() == ()

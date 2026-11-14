@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from spyglass_service import __version__
+from spyglass_service import __version__, child_processes
 from spyglass_service.api_briefs import router as briefs_router
 from spyglass_service.api_cards import router as cards_router
 from spyglass_service.api_content import router as content_router
@@ -316,6 +316,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # A service starting in this process accepts child processes again (a stop closes it).
+        child_processes.reopen()
         # Surface a corrupt DB via /api/health instead of crash-looping: check
         # integrity BEFORE init_db (init_db itself raises on a malformed file), and skip every
         # DB-dependent startup step when it fails.
@@ -401,6 +403,11 @@ def create_app(
         # The mounted MCP app needs its own lifespan run inside ours.
         async with mcp_app.lifespan(app):
             yield
+        # Claude processes outside the job worker (a judging call in a collection, a streaming
+        # reply) are ended first: their threads are abandoned at a stop, and on Windows the hard
+        # exit that ends the desktop app does not end child processes. One registered after this
+        # is ended at once.
+        child_processes.kill_all()
         # Stop the workers before disposing the engine -- they hold sessions against it. The
         # whole stop must fit in eight seconds (server 3 s + these 2 + 2 + 1), so the order and
         # the limits matter: a Claude run is the slowest thing to end and goes first.

@@ -35,6 +35,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from spyglass_service import child_processes
 from spyglass_service.claude_jobs import _kill_tree, find_claude, parse_result
 from spyglass_service.radar import usage
 from spyglass_service.radar.claude_env import quiet_env
@@ -131,7 +132,11 @@ USAGE = UsageTally()
 
 
 def default_runner(command: list[str], prompt: str, cwd: Path, timeout_s: float) -> RunResult:
-    """Run `command` with `prompt` on standard input; kill the whole process tree on timeout."""
+    """Run `command` with `prompt` on standard input; kill the whole process tree on timeout.
+
+    The process is registered for the service's stop while it runs: a collection's thread is
+    abandoned at a stop, and the process would otherwise outlive Spyglass.
+    """
     kwargs: dict = {}
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
@@ -143,6 +148,7 @@ def default_runner(command: list[str], prompt: str, cwd: Path, timeout_s: float)
             stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", **kwargs)
     except OSError as exc:
         raise LlmUnavailable(f"Claude Code could not be started: {exc}") from exc
+    child_processes.register(proc)
     try:
         out, err = proc.communicate(prompt, timeout=timeout_s)
         return RunResult(proc.returncode, out, err)
@@ -153,6 +159,8 @@ def default_runner(command: list[str], prompt: str, cwd: Path, timeout_s: float)
         except subprocess.TimeoutExpired:
             out, err = "", ""
         return RunResult(None, out or "", err or "", timed_out=True)
+    finally:
+        child_processes.unregister(proc)
 
 
 def schema_body(schema: dict) -> dict:

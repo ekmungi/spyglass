@@ -16,6 +16,7 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 
+from spyglass_service import child_processes
 from spyglass_service.claude_jobs import _kill_tree
 from spyglass_service.radar.assist.engines.safe_args import assert_cmd_safe
 
@@ -42,6 +43,8 @@ class ChildProcess:
         self._proc = subprocess.Popen(  # noqa: S603 -- a fixed command; the prompt goes on stdin
             command, cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", **kwargs)
+        # Until close(): the service's stop ends it if the reply is still streaming then.
+        child_processes.register(self._proc)
         self._lines: queue.Queue[str | None] = queue.Queue()
         self._stderr: list[str] = []
         self._threads = [
@@ -125,5 +128,6 @@ class ChildProcess:
             self._proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             logger.warning("An assistant child process did not exit after being killed")
+        child_processes.unregister(self._proc)
         for thread in self._threads:
             thread.join(timeout=1)

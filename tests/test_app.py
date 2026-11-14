@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from spyglass_service import __version__
+from spyglass_service import __version__, child_processes
 from spyglass_service.app import create_app
 from spyglass_service.config import Settings
 
@@ -121,6 +121,40 @@ def test_teardown_stops_claude_runs_first(tmp_path: Path, monkeypatch) -> None:
     with TestClient(app):
         app.state.radar_scheduler = FakeScheduler()
     assert calls == [("job", 2.0), ("scheduler", 2.0), ("fetch", 1.0)]
+
+
+def test_teardown_ends_registered_claude_processes_before_the_job_worker(
+        tmp_path: Path, monkeypatch) -> None:
+    """A judging call or a streaming reply runs Claude outside the job worker. The process ends
+    with a hard exit that does not end children on Windows, so the stop ends every registered
+    process first, before any worker is waited for."""
+    calls: list[str] = []
+
+    class FakeProc:
+        def poll(self) -> None:
+            return None
+
+    class FakeJobWorker:
+        def stop(self, timeout: float = 5.0) -> None:
+            calls.append("job")
+
+    class FakeFetchWorker:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self, timeout: float = 5.0) -> None:
+            calls.append("fetch")
+
+    registry = child_processes.ChildRegistry(kill=lambda proc: calls.append("kill"))
+    monkeypatch.setattr(child_processes, "CHILDREN", registry)
+    monkeypatch.setattr("spyglass_service.app.FetchWorker", FakeFetchWorker)
+    app = create_app(make_settings(tmp_path), claude_worker=FakeJobWorker(), skip_claude_worker=True,
+                     skip_fetch_worker=True)
+    with TestClient(app):
+        assert child_processes.register(FakeProc()) is True
+    assert calls == ["kill", "job", "fetch"]
+    assert child_processes.register(FakeProc()) is False  # a late one is ended at once
+    assert calls == ["kill", "job", "fetch", "kill"]
 
 
 def test_health_reports_degraded_on_corrupt_db(tmp_path: Path) -> None:

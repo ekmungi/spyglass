@@ -1,15 +1,19 @@
 """Tests for the Claude Code route: command, parsing, repair retry, failures and the process cap.
 
-A fake runner stands in for the `claude` process, so nothing here starts a program or calls a model.
+A fake runner (or a fake process) stands in for the `claude` process, so nothing here starts a
+program or calls a model.
 """
 
 import json
+import subprocess
 import threading
 import time
 from pathlib import Path
 
 import pytest
 
+from spyglass_service import child_processes
+from spyglass_service.child_processes import ChildRegistry
 from spyglass_service.config import Settings
 from spyglass_service.radar import llm_claude
 from spyglass_service.radar.llm_claude import (
@@ -205,3 +209,45 @@ def test_usage_tally_counts_calls_and_cost(tmp_path) -> None:
     claude_chat_json(MESSAGES, SCHEMA, model="haiku", settings=settings(tmp_path), runner=runner)
     snap = llm_claude.USAGE.snapshot()
     assert snap["calls"] == 1 and snap["cost_usd"] == 0.5 and snap["output_tokens"] == 5
+
+
+class TrackedProc:
+    """A stand-in `claude` process that notes, at each wait, whether the stop registry holds it."""
+
+    def __init__(self, registry, *, time_out_first: bool = False) -> None:
+        self.registry = registry
+        self.time_out_first = time_out_first
+        self.returncode = 0
+        self.seen_registered: list[bool] = []
+
+    def poll(self):
+        return None
+
+    def communicate(self, prompt=None, timeout=None):
+        self.seen_registered.append(self in self.registry.live())
+        if self.time_out_first and len(self.seen_registered) == 1:
+            raise subprocess.TimeoutExpired("claude", timeout)
+        return "out", ""
+
+
+@pytest.mark.parametrize("time_out", [False, True])
+def test_the_default_runner_registers_its_process_while_it_runs(
+        tmp_path, monkeypatch, time_out) -> None:
+    """A stop ends every registered Claude process, so a judging call stays registered while it
+    runs and leaves the registry when it ends, normally or after its time-out kill."""
+    killed: list = []
+    registry = ChildRegistry(kill=killed.append)
+    monkeypatch.setattr(child_processes, "CHILDREN", registry)
+    made: list[TrackedProc] = []
+
+    def fake_popen(command, **kwargs):
+        made.append(TrackedProc(registry, time_out_first=time_out))
+        return made[0]
+
+    monkeypatch.setattr(llm_claude.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(llm_claude, "_kill_tree", killed.append)
+    result = llm_claude.default_runner(["claude"], "hi", tmp_path, 5.0)
+    assert result.timed_out is time_out
+    assert made[0].seen_registered == ([True, True] if time_out else [True])
+    assert killed == ([made[0]] if time_out else [])
+    assert registry.live() == ()
