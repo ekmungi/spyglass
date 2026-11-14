@@ -10,8 +10,9 @@ import type { ItemDetail } from '../api/types'
 import { BringInHint } from '../import/BringInHint'
 import { openExternal, safeHttpUrl } from '../lib/safeUrl'
 import { PDF_PLACEHOLDER_HTML } from '../mock/images'
-import { Button, IconOpenOriginal, IconPartial, IconRetry, Skeleton } from '../ui'
+import { Button, IconOpenOriginal, IconPartial, IconRetry } from '../ui'
 import { embedUrl } from './embed'
+import { PreparingCopy } from './PreparingCopy'
 import { Prose } from './Prose'
 
 /** The address used by the built-in PDF viewer (a placeholder page in sample mode). */
@@ -79,20 +80,17 @@ export interface ReaderBodyProps {
   showPdf: boolean
   proseRef: Ref<HTMLDivElement>
   onRefreshed: () => void
+  /** True once the page has stopped polling for a copy that is still pending. */
+  slow?: boolean
+  /** Starts polling for a pending copy again. */
+  onRetry?: () => void
 }
 
 /** The document under the summary block. */
-export function ReaderBody({ detail, showPdf, proseRef, onRefreshed }: ReaderBodyProps) {
+export function ReaderBody({ detail, showPdf, proseRef, onRefreshed, slow, onRetry }: ReaderBodyProps) {
   const reader = detail.reader
-  if (reader?.status === 'pending') {
-    return (
-      <div className="r-reader-pending" role="status" aria-live="polite">
-        <p className="r-meta">Preparing a clean copy of this page…</p>
-        <Skeleton lines={5} height={15} />
-        <Skeleton lines={4} height={15} />
-      </div>
-    )
-  }
+  if (reader?.status === 'pending') return <PreparingCopy slow={slow} onRetry={onRetry} />
+
   if (!reader || reader.status === 'failed') return <Unavailable detail={detail} onRefreshed={onRefreshed} />
   if (reader.partial) {
     return (
@@ -110,7 +108,7 @@ export function ReaderBody({ detail, showPdf, proseRef, onRefreshed }: ReaderBod
 }
 
 /** A readable document by kind: the article, a PDF in the viewer, or a video with its text. */
-function ReaderDocument({ detail, showPdf, proseRef }: Omit<ReaderBodyProps, 'onRefreshed'>) {
+function ReaderDocument({ detail, showPdf, proseRef }: Pick<ReaderBodyProps, 'detail' | 'showPdf' | 'proseRef'>) {
   const reader = detail.reader
   if (!reader) return null
   const pdfFrame = <iframe className="r-pdf" src={pdfSource(detail.id)} title={`PDF of ${detail.headline}`} />

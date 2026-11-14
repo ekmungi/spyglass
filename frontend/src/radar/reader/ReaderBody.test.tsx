@@ -11,7 +11,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function detail(overrides: Partial<ItemDetail> & { readerKind?: 'video' | 'article'; status?: 'ok' | 'failed'; altUrl?: string | null }): ItemDetail {
+function detail(overrides: Partial<ItemDetail> & { readerKind?: 'video' | 'article'; status?: 'ok' | 'pending' | 'failed'; altUrl?: string | null }): ItemDetail {
   const { readerKind = 'video', status = 'ok', altUrl = null, ...rest } = overrides
   return {
     id: 9,
@@ -103,6 +103,28 @@ describe('ReaderBody failure', () => {
     const details = container.querySelector('details') as HTMLDetailsElement
     expect(details.textContent).toContain('failed at T0 (HTTP 401)')
     expect(screen.queryByText('failed at T0 (HTTP 401): HTTP 401', { ignore: 'details *' })).not.toBeInTheDocument()
+  })
+})
+
+describe('ReaderBody while the copy is prepared', () => {
+  const preparing = 'Preparing a clean copy and a summary of this article. The first time takes a few seconds.'
+
+  it('shows the preparing message while the copy is pending', () => {
+    render(<ReaderBody detail={detail({ readerKind: 'article', status: 'pending' })} showPdf={false} proseRef={null} onRefreshed={noop} />)
+    expect(screen.getByRole('status')).toHaveTextContent(preparing)
+  })
+
+  it('shows the unavailable view, not the preparing one, when the copy failed', () => {
+    render(<ReaderBody detail={detail({ readerKind: 'article', status: 'failed' })} showPdf={false} proseRef={null} onRefreshed={noop} />)
+    expect(screen.getByText('Spyglass could not make a clean copy of this page.')).toBeInTheDocument()
+    expect(screen.queryByText(preparing)).not.toBeInTheDocument()
+  })
+
+  it('passes a long wait through, with Try again', () => {
+    const onRetry = vi.fn()
+    render(<ReaderBody detail={detail({ readerKind: 'article', status: 'pending' })} showPdf={false} proseRef={null} onRefreshed={noop} slow onRetry={onRetry} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
 })
 

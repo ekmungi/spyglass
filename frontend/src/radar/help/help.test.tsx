@@ -69,6 +69,16 @@ describe('filterGroups', () => {
   })
 })
 
+describe('opening an item', () => {
+  it('explains the first-open wait under Reading', () => {
+    expect(findTask('open-an-item')?.title).toBe('Open an item in the reader')
+    const reading = filterGroups('slow').find((group) => group.id === 'reading')
+    expect(reading?.tasks.map((task) => task.id)).toContain('open-an-item')
+    const order = filterGroups('').find((group) => group.id === 'reading')?.tasks.map((task) => task.id) ?? []
+    expect(order.indexOf('open-an-item')).toBe(order.indexOf('read-todays-brief') + 1)
+  })
+})
+
 describe('tasks that need filing', () => {
   const FILING_TASKS = ['file-in-vault', 'file-now-and-approve-the-plan']
 

@@ -1,14 +1,28 @@
 // SaveButton: the bookmark toggle shown on a row (on hover, or always once saved).
 import type { ItemState } from '../api/types'
 import { toggleSave, useItemState } from '../state/itemState'
-import { IconButton, IconSaved, IconSaveForLater } from '../ui'
+import { IconButton, IconSaved, IconSaveForLater, type TooltipSide } from '../ui'
 
-/** Toggle "Save for later" for an item; reads and writes the shared optimistic item state. */
-export function SaveButton({ id, base, size = 'sm' }: { id: number; base: ItemState; size?: 'sm' | 'md' }) {
+/**
+ * Toggle "Save for later" for an item; reads and writes the shared optimistic item state.
+ * `tooltipSide` defaults to above the button, which suits rows; a bar at the top of the window passes `bottom`.
+ */
+export function SaveButton({
+  id,
+  base,
+  size = 'sm',
+  tooltipSide = 'top',
+}: {
+  id: number
+  base: ItemState
+  size?: 'sm' | 'md'
+  tooltipSide?: TooltipSide
+}) {
   const state = useItemState(id, base)
   return (
     <IconButton
       size={size}
+      tooltipSide={tooltipSide}
       className={`r-save${state.saved ? ' is-saved' : ''}`}
       label={state.saved ? 'Remove from saved' : 'Save for later'}
       pressed={state.saved}

@@ -41,9 +41,10 @@
   font-size: var(--text-sm);
   color: var(--muted);
 }
+/* The opening and the notice span the whole column, as the story rows and the Feed's rows do; the
+   column itself (--measure) already keeps lines to a readable length. */
 .r-masthead__opening {
   margin: var(--space-6) 0 0;
-  max-width: 60ch;
   font-family: var(--font-serif);
   font-size: var(--text-lede);
   line-height: 1.5;
@@ -54,7 +55,6 @@
 /* A brief made with part of the judging missing says so in one quiet line, never in an alarm colour. */
 .r-masthead__notice {
   margin: var(--space-3) 0 0;
-  max-width: 60ch;
   color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-ui);

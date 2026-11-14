@@ -365,9 +365,33 @@
 }
 
 /* Pending and failed states */
-.r-reader-pending {
+/* The wait for a reader copy: a static icon and one message above the moving placeholder bars. */
+.r-preparing {
   display: grid;
   gap: var(--space-5);
+}
+.r-preparing__message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: var(--leading-ui);
+}
+.r-preparing__icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--muted);
+}
+.r-preparing__slow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 .r-reader-unavailable {
   padding: var(--space-6) 0;

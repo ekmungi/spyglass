@@ -123,7 +123,7 @@ export function ReaderTopBar({ detail, showPdf, onTogglePdf }: ReaderTopBarProps
           </Button>
         )}
         {filingOn && <FileButton itemId={detail.id} filing={detail.filing} filed={detail.filed} />}
-        <SaveButton id={detail.id} base={detail.state} size="md" />
+        <SaveButton id={detail.id} base={detail.state} size="md" tooltipSide="bottom" />
         <Button variant="quiet" size="sm" icon={<IconFollow size={14} />} onClick={() => setFollowing(true)} title="Follow topics from this article">
           Follow
         </Button>

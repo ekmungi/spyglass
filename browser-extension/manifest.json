@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Send to Spyglass",
   "description": "Send the page you are reading, or the text you selected, to Spyglass on this computer. Only acts when you click.",
-  "version": "0.40.0",
+  "version": "0.40.1",
   "minimum_chrome_version": "110",
   "permissions": ["activeTab", "scripting", "contextMenus", "storage", "notifications"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],

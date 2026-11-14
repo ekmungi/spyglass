@@ -7,6 +7,17 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/); this pro
 
 ## [Unreleased]
 
+## [0.40.1] - 2026-11-14
+
+Interface fixes from the first test pass of 0.40.0.
+
+### Fixed
+- The reader's Save for later tooltip opens below the button, so it is no longer cut off at the top of the window.
+- File now in the To file view is a filled button, because it is the view's main action; See the request stays quiet beside it.
+- Today's opening sentences and its notice span the same column as Today's stories and the Feed's rows, at every reading width. The Feed keeps its denser 18-pixel rows on purpose.
+- The Help search field and the Find papers field show focus as the Feed search does, with a thin accent border, instead of a thick blue ring on a mouse click.
+- Opening an item for the first time shows an icon and the message "Preparing a clean copy and a summary of this article. The first time takes a few seconds." until the article appears, instead of grey bars only. The message waits a moment, so an item whose copy is ready opens without it; a wait that runs past ten seconds says so; and the Help page explains the wait.
+
 ## [0.40.0] - 2026-11-12
 
 A redesign of the product layer. Spyglass is now a personal research radar that runs by itself and

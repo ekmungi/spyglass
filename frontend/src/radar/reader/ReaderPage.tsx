@@ -11,16 +11,36 @@ import { useResource } from '../hooks/useResource'
 import { plainText } from '../lib/plainText'
 import { goBack } from '../router'
 import { markOpened } from '../state/itemState'
-import { Button, EmptyState, SectionHeading, Skeleton } from '../ui'
+import { Button, EmptyState, SectionHeading } from '../ui'
+import { PreparingCopy } from './PreparingCopy'
 import { ReaderBody } from './ReaderBody'
 import { ReaderTopBar } from './ReaderTopBar'
 import { SelectionToolbar } from './SelectionToolbar'
 import { SummaryBlock } from './SummaryBlock'
+import { useAfterDelay } from './useAfterDelay'
 import { useReaderSignals } from './useReaderSignals'
 import './reader.css'
 
+// While the server reports the copy as pending, ask again every 3 seconds, up to 20 times (one
+// minute); after that the page says the wait is long and offers Try again.
 const PENDING_POLL_MS = 3000
 const PENDING_MAX_POLLS = 20
+
+// On a first open the item request itself builds the copy. A copy built earlier answers in well
+// under a tenth of a second, so the message waits 400 ms and never flashes by on a ready item; a
+// successful first build takes a few seconds, so after 10 seconds the wait is called long.
+const PREPARING_MESSAGE_DELAY_MS = 400
+const LOADING_SLOW_AFTER_MS = 10_000
+
+/**
+ * The wait while the item request builds the copy: bars at once, the message after a moment, and a
+ * "taking longer" line once the wait is clearly long. No Try again: the server keeps building the
+ * copy while the request waits, so a second request would only wait on the same build.
+ */
+function LoadingCopy() {
+  const slow = useAfterDelay(LOADING_SLOW_AFTER_MS)
+  return <PreparingCopy delayMs={PREPARING_MESSAGE_DELAY_MS} slow={slow} />
+}
 
 /** The reader's title: the headline the reader clicked, except for papers, which keep their own title. */
 function readerTitle(detail: ItemDetail): string {
@@ -56,7 +76,11 @@ export function ReaderPage({ id }: { id: number }) {
   const layerRef = useRef<HTMLDivElement>(null)
   const proseRef = useRef<HTMLDivElement>(null)
   const [showPdf, setShowPdf] = useState(false)
-  const polls = useRef(0)
+  // The poll count lives in state, tagged with the item it belongs to: each poll then re-runs the
+  // polling effect even when the server sends the same "pending" answer again (an identical answer
+  // does not re-render), and opening another item starts from zero without an extra effect.
+  const [pollCount, setPollCount] = useState({ id, count: 0 })
+  const polls = pollCount.id === id ? pollCount.count : 0
 
   useReaderSignals(id)
 
@@ -72,13 +96,18 @@ export function ReaderPage({ id }: { id: number }) {
   // Poll while the server is still building the reader document.
   const pending = detail?.reader?.status === 'pending'
   useEffect(() => {
-    if (!pending || polls.current >= PENDING_MAX_POLLS) return
+    if (!pending || polls >= PENDING_MAX_POLLS) return
     const timer = setTimeout(() => {
-      polls.current += 1
+      setPollCount({ id, count: polls + 1 })
       reload()
     }, PENDING_POLL_MS)
     return () => clearTimeout(timer)
-  }, [pending, detail, reload])
+  }, [pending, polls, id, reload])
+  const slow = pending && polls >= PENDING_MAX_POLLS
+  const retryPending = () => {
+    setPollCount({ id, count: 0 })
+    reload()
+  }
 
   // Esc returns to where the reader came from (unless typing, or a menu/dialog takes it first).
   useEffect(() => {
@@ -100,20 +129,17 @@ export function ReaderPage({ id }: { id: number }) {
             {detail.reader?.byline && <p className="r-reader__byline">{detail.reader.byline}</p>}
           </header>
           <SummaryBlock detail={detail} />
-          <ReaderBody detail={detail} showPdf={showPdf} proseRef={proseRef} onRefreshed={reload} />
+          <ReaderBody detail={detail} showPdf={showPdf} proseRef={proseRef} onRefreshed={reload} slow={slow} onRetry={retryPending} />
           <Related detail={detail} />
         </article>
         <SelectionToolbar docRef={proseRef} layerRef={layerRef} watchKey={`${detail.id}:${detail.reader?.status}:${showPdf}`} />
       </>
     )
   } else if (loading) {
+    // The item request itself builds the copy on a first open, so this is where most of the wait is.
     content = (
-      <div className="r-reader" role="status" aria-label="Loading the article">
-        <Skeleton width="30%" height={12} />
-        <div style={{ height: 24 }} />
-        <Skeleton width="90%" height={34} />
-        <div style={{ height: 32 }} />
-        <Skeleton lines={6} height={15} />
+      <div className="r-reader">
+        <LoadingCopy />
       </div>
     )
   } else {

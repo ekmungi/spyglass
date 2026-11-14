@@ -16,6 +16,7 @@ import {
   Copy,
   Ellipsis,
   ExternalLink,
+  FileClock,
   FileSearch,
   FileText,
   FolderCheck,
@@ -66,6 +67,7 @@ export const ICON_GLYPHS = {
   saved: BookmarkCheck, // the saved state of the same control
   fileInVault: FolderInput, // file a note into the vault: into a folder, unlike the bookmark
   queued: Hourglass, // waiting in the filing queue: not filed yet
+  preparing: FileClock, // the reader's clean copy is being made: a page with a clock
   filed: FolderCheck, // the quiet confirmed state after filing
   follow: Radar, // keep scanning for more like this
   openOriginal: ExternalLink, // open the original page in the browser

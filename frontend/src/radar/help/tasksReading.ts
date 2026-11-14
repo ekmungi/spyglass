@@ -19,6 +19,18 @@ export const READING_GROUP: HelpGroup = {
       keywords: ['brief', 'today', 'earlier', 'day'],
     },
     {
+      id: 'open-an-item',
+      title: 'Open an item in the reader',
+      purpose: 'Read an item as clean text, with its summary on top.',
+      steps: [
+        'Click an item on {{Today}} or in the {{Feed}}.',
+        'The first time you open an item, the reader shows a short message while it prepares a clean copy and a summary; then the article appears.',
+      ],
+      next: 'Spyglass fetches the article and writes its summary the first time the item is opened, and keeps that copy, so later opens are immediate.',
+      target: { name: 'today' },
+      keywords: ['open', 'reader', 'wait', 'slow', 'loading', 'summary', 'first time'],
+    },
+    {
       id: 'use-the-feed-filters',
       title: 'Use the Feed and its filters',
       purpose: 'Find older items, or items the brief left out.',

@@ -1,6 +1,7 @@
-// FileNowControl: the manual route, kept as a quiet secondary control in the To file view. File now
-// opens ONE visible Claude Code session in the vault that proposes a table and waits for a yes; See
-// the request shows that request word for word without opening anything.
+// FileNowControl: the manual route in the To file view. File now is the only way to file while
+// background filing is off, so it is the view's main action, drawn as a filled button. It opens ONE
+// visible Claude Code session in the vault that proposes a table and waits for a yes; See the
+// request stays quiet and shows that request word for word without opening anything.
 import { useState } from 'react'
 import { openFiling, previewFiling } from '../api/client'
 import { errorMessage, isMissing, NOT_AVAILABLE_YET } from '../api/errors'
@@ -48,7 +49,7 @@ export function FileNowControl() {
   return (
     <div className="r-filing__manual">
       <div className="r-filing__manual-actions">
-        <Button variant="quiet" size="sm" disabled={opening} onClick={() => void fileNow()} title="Open one Claude Code session in your vault that proposes where each item goes and waits for your yes">
+        <Button variant="primary" size="sm" disabled={opening} onClick={() => void fileNow()} title="Open one Claude Code session in your vault that proposes where each item goes and waits for your yes">
           {opening ? 'Opening…' : 'File now'}
         </Button>
         <Button variant="quiet" size="sm" aria-expanded={seeing} onClick={() => void seeRequest()}>

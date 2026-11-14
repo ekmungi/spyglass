@@ -107,4 +107,10 @@ describe('ReaderTopBar', () => {
     expect(screen.getByRole('menuitem', { name: 'Narrower text' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('menuitem', { name: 'Wider text' })).not.toHaveAttribute('aria-disabled')
   })
+
+  it('opens the Save for later tooltip below the button', () => {
+    // The bar sits at the top of the window, so a tooltip above the button would be cut off.
+    renderBar()
+    expect(screen.getByRole('button', { name: 'Save for later' }).closest('.r-tip')).toHaveClass('r-tip--bottom')
+  })
 })

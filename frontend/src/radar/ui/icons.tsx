@@ -40,6 +40,7 @@ export const IconSaveForLater = (props: IconProps) => <Icon glyph={ICON_GLYPHS.s
 export const IconSaved = (props: IconProps) => <Icon glyph={ICON_GLYPHS.saved} {...props} />
 export const IconFileInVault = (props: IconProps) => <Icon glyph={ICON_GLYPHS.fileInVault} {...props} />
 export const IconQueued = (props: IconProps) => <Icon glyph={ICON_GLYPHS.queued} {...props} />
+export const IconPreparing = (props: IconProps) => <Icon glyph={ICON_GLYPHS.preparing} {...props} />
 export const IconFiled =(props: IconProps) => <Icon glyph={ICON_GLYPHS.filed} {...props} />
 export const IconFollow = (props: IconProps) => <Icon glyph={ICON_GLYPHS.follow} {...props} />
 export const IconOpenOriginal = (props: IconProps) => <Icon glyph={ICON_GLYPHS.openOriginal} {...props} />

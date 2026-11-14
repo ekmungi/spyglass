@@ -20,6 +20,10 @@
   font-size: var(--text-h3);
   padding: var(--space-3) var(--space-4);
 }
+/* Every search field shows focus the same way: the thin accent border alone, as in the Feed. */
+.rpp-search__input:focus-visible {
+  box-shadow: none;
+}
 .rpp-chips {
   display: flex;
   flex-wrap: wrap;

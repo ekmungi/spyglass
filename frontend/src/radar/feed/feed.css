@@ -131,6 +131,8 @@
   inset: -2px; /* the ring sits 2px outside the row, off the text */
   box-shadow: var(--focus-ring);
 }
+/* The Feed is denser than Today on purpose: compact 18-pixel rows fit more items on a screen, while
+   Today keeps a ladder of sizes for a brief that is read from top to bottom. */
 .r-feedrow__headline {
   /* Very long titles stop at four lines in lists. */
   display: -webkit-box;
