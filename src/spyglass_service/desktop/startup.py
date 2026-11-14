@@ -13,8 +13,9 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Literal, TextIO
@@ -153,8 +154,9 @@ def port_busy_message(port: int) -> str:
 
 NO_CONFIG_MESSAGE = ("Spyglass is not set up on this computer yet. Run the Spyglass installer, "
                      "then open Spyglass again.")
-LOCK_TAKEN_MESSAGE = ("Another Spyglass is starting from the same data folder. Wait a moment, "
-                      "then open Spyglass again.")
+# Shown when another live launcher holds this folder's lock but its service did not answer.
+PEER_NOT_ANSWERING_MESSAGE = ("Spyglass is still starting or is not responding. Wait a moment, "
+                              "then open it again.")
 
 
 def bad_config_message(error: Exception) -> str:
@@ -205,10 +207,13 @@ def redirect_output(data_dir: Path, limit_bytes: int = LOG_LIMIT_BYTES) -> None:
     sys.stdout, sys.stderr = streams
 
 
-def single_instance_lock(data_dir: Path) -> CycleFileLock:
+def single_instance_lock(data_dir: Path,
+                         pid_started_at: Callable[[int], datetime | None] | None = None,
+                         ) -> CycleFileLock:
     """The lock that lets one launcher run per data folder.
 
-    max_age=None: the lock is held for as long as the app stays open, which can be weeks, so
-    only a dead holder process may make it stale.
+    max_age=None: the lock is held for as long as the app stays open, which can be weeks, so it
+    is stale only when its holder is gone, or when `pid_started_at` shows that the process now
+    holding that pid was created after the lock was written (Windows reuses process ids).
     """
-    return CycleFileLock(data_dir / "desktop.lock", max_age=None)
+    return CycleFileLock(data_dir / "desktop.lock", max_age=None, pid_started_at=pid_started_at)

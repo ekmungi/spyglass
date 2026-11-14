@@ -8,6 +8,7 @@ import json
 import os
 import threading
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,13 @@ import spyglass_service.desktop.launcher as launcher_mod
 from spyglass_service import __version__
 from spyglass_service.desktop.__main__ import main
 from spyglass_service.desktop.datadir import DesktopConfig, record_data_version, save_config
-from spyglass_service.desktop.launcher import Health, Launcher, port_busy_message, refusal_message
+from spyglass_service.desktop.launcher import (
+    PEER_NOT_ANSWERING_MESSAGE,
+    Health,
+    Launcher,
+    port_busy_message,
+    refusal_message,
+)
 from spyglass_service.radar.cycle_lock import CycleFileLock
 
 PORT = 7790
@@ -97,6 +104,12 @@ class FakePlatform:
     def __init__(self) -> None:
         self.messages: list[tuple[str, str]] = []
         self.autostart = False
+        self.born = None  # what process_started_at answers for every pid
+        self.asked: list[int] = []
+
+    def process_started_at(self, pid: int):
+        self.asked.append(pid)
+        return self.born
 
     def autostart_enabled(self) -> bool:
         return self.autostart
@@ -135,6 +148,7 @@ class Rig:
         monkeypatch.setattr(launcher_mod, "HEALTH_WAIT_S", 2.0)
         monkeypatch.setattr(launcher_mod, "POLL_S", 0.01)
         self.behaviour = behaviour
+        self.stop_during_build = False
         self.health = health  # a fixed answer for the probe; None means "ask the fakes"
         self.order: list[str] = []
         self.servers: list[FakeServer] = []
@@ -164,6 +178,8 @@ class Rig:
         server = FakeServer(self.behaviour)
         server.on_stop = on_stop
         self.servers.append(server)
+        if self.stop_during_build:
+            on_stop()  # a stop (the page, the tray) that lands while the server is being built
         return server
 
     def make_tray(self, **kwargs) -> FakeTray:
@@ -327,21 +343,29 @@ def test_port_busy_message_covers_a_hung_spyglass() -> None:
         "Close it, then open Spyglass again.")
 
 
-def _peer_lock(rig: Rig, monkeypatch) -> str:
-    """Leave a lock as a live launcher would, and make every holder pid look alive."""
-    text = json.dumps({"pid": 4242, "started_at": "2026-11-14T08:00:00+00:00"})
+PEER_LOCKED_AT = datetime(2026, 11, 14, 8, 0, 0, tzinfo=UTC)
+GENUINE = PEER_LOCKED_AT - timedelta(seconds=10)  # the holder's process predates its lock
+REUSED = PEER_LOCKED_AT + timedelta(hours=1)  # a process created after the lock: a reused pid
+
+
+def _peer_lock(rig: Rig, monkeypatch, born) -> str:
+    """Leave a lock as a launcher would; every holder pid looks alive, and the platform reports
+    `born` as the holder process's start."""
+    text = json.dumps({"pid": 4242, "started_at": PEER_LOCKED_AT.isoformat()})
     (rig.data / "desktop.lock").write_text(text, encoding="utf-8")
+    rig.platform.born = born
     monkeypatch.setattr(
         launcher_mod, "single_instance_lock",
-        lambda data_dir: CycleFileLock(data_dir / "desktop.lock", max_age=None,
-                                       pid_alive=lambda pid: True))
+        lambda data_dir, pid_started_at=None: CycleFileLock(
+            data_dir / "desktop.lock", max_age=None, pid_alive=lambda pid: True,
+            pid_started_at=pid_started_at))
     return text
 
 
 def test_a_running_peer_gets_its_dashboard_opened(make_rig, monkeypatch) -> None:
     """A second start on the same folder opens the first one's interface and exits."""
     rig = make_rig(health=Health(__version__, "desktop"))
-    text = _peer_lock(rig, monkeypatch)
+    text = _peer_lock(rig, monkeypatch, GENUINE)
     assert rig.launcher.run(background=False) == 0
     assert rig.opened == [URL] and rig.order == [] and rig.trays == []
     assert (rig.data / "desktop.lock").read_text(encoding="utf-8") == text
@@ -349,24 +373,49 @@ def test_a_running_peer_gets_its_dashboard_opened(make_rig, monkeypatch) -> None
 
 def test_a_running_peer_with_background_opens_nothing(make_rig, monkeypatch) -> None:
     rig = make_rig(health=Health(__version__, "desktop"))
-    _peer_lock(rig, monkeypatch)
+    _peer_lock(rig, monkeypatch, GENUINE)
     assert rig.launcher.run(background=True) == 0
     assert rig.opened == [] and rig.order == []
 
 
-def test_a_silent_lock_holder_is_treated_as_stale_and_replaced(make_rig, monkeypatch) -> None:
-    """Windows reuses pids, so a crash-left lock can name a live, unrelated process. When no
-    Spyglass answers within the wait, the lock is taken over and the normal start goes on."""
+def test_a_lock_holding_a_reused_pid_is_taken_at_once(make_rig, monkeypatch) -> None:
+    """Windows reuses pids, so a crash-left lock can name a live, unrelated process. Its process
+    started after the lock was written, so the lock is stale: taken without any wait."""
     rig = make_rig()
-    old = _peer_lock(rig, monkeypatch)
+    monkeypatch.setattr(launcher_mod, "PEER_WAIT_S", 30.0)  # would show if it waited
+    old = _peer_lock(rig, monkeypatch, REUSED)
+    began = time.monotonic()
     rig.start(background=True)
     tray = rig.wait_for_tray()
-    holder = json.loads((rig.data / "desktop.lock").read_text(encoding="utf-8"))
-    assert (rig.data / "desktop.lock").read_text(encoding="utf-8") != old
-    assert holder["pid"] == os.getpid()
+    assert time.monotonic() - began < 3.0
+    assert 4242 in rig.platform.asked
+    lock_text = (rig.data / "desktop.lock").read_text(encoding="utf-8")
+    assert lock_text != old and json.loads(lock_text)["pid"] == os.getpid()
     assert rig.order == ["redirect", "server"]
     tray.kwargs["on_quit"]()
     assert rig.finish() == 0
+
+
+def test_a_genuine_holder_is_never_taken_over(make_rig, monkeypatch) -> None:
+    """A live launcher that is slow to start (or shows a message box) keeps its lock. After the
+    wait the second start says so and exits; it neither starts nor deletes anything."""
+    rig = make_rig()
+    old = _peer_lock(rig, monkeypatch, GENUINE)
+    assert rig.launcher.run(background=False) == 0
+    assert rig.platform.messages == [("Spyglass", PEER_NOT_ANSWERING_MESSAGE)]
+    assert PEER_NOT_ANSWERING_MESSAGE == (
+        "Spyglass is still starting or is not responding. Wait a moment, then open it again.")
+    assert rig.order == [] and rig.trays == [] and rig.opened == []
+    assert (rig.data / "desktop.lock").read_text(encoding="utf-8") == old
+
+
+def test_a_holder_of_unknown_age_is_treated_as_genuine(make_rig, monkeypatch) -> None:
+    """When the platform cannot tell when the holder started, nothing is taken over."""
+    rig = make_rig()
+    old = _peer_lock(rig, monkeypatch, None)
+    assert rig.launcher.run(background=True) == 0
+    assert rig.platform.messages == [("Spyglass", PEER_NOT_ANSWERING_MESSAGE)]
+    assert (rig.data / "desktop.lock").read_text(encoding="utf-8") == old
 
 
 def test_stop_is_idempotent_across_threads(make_rig) -> None:
@@ -400,6 +449,30 @@ def test_stuck_service_thread_triggers_the_hard_exit(make_rig) -> None:
     assert rig.finish() == 0
     assert rig.exits == [0]
     assert tray.stopped.is_set()
+
+
+def test_stop_returns_at_once_even_when_the_service_is_stuck(make_rig) -> None:
+    """stop() runs inside the /api/shutdown request, which must answer 202 without waiting."""
+    rig = make_rig(behaviour="stuck", join_timeout=5.0)
+    rig.start(background=True)
+    rig.wait_for_tray()
+    began = time.monotonic()
+    rig.launcher.stop()
+    assert time.monotonic() - began < 0.5
+    rig.servers[0].release.set()  # the service ends within join_timeout: no hard exit
+    assert rig.finish() == 0
+    assert rig.exits == []
+
+
+def test_a_stop_while_the_server_is_built_keeps_it_from_starting(make_rig) -> None:
+    """A stop that lands before the service thread exists must still win: nothing starts."""
+    rig = make_rig()
+    rig.stop_during_build = True
+    rig.start(background=False)
+    assert rig.finish() == 0
+    server = rig.servers[0]
+    assert server.should_exit is True and not server.started.is_set()
+    assert rig.trays == [] and rig.opened == [] and rig.exits == []
 
 
 def test_stop_never_raises_and_still_finishes(make_rig) -> None:
@@ -466,3 +539,38 @@ def test_main_default_path_builds_and_runs_a_launcher(monkeypatch) -> None:
     assert main([]) == 7
     assert main(["--background"]) == 7
     assert calls == [("init", {}), ("run", False), ("init", {}), ("run", True)]
+
+
+def test_the_process_ends_hard_after_run_with_its_logs_flushed(monkeypatch) -> None:
+    """pystray's setup thread is not a daemon, so after run() the process ends with os._exit;
+    the log streams are flushed first so nothing written is lost."""
+    from spyglass_service.desktop import __main__ as desktop_main
+
+    events: list = []
+
+    class Stream:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def flush(self) -> None:
+            events.append(("flush", self.name))
+
+    monkeypatch.setattr(desktop_main.sys, "stdout", Stream("out"))
+    monkeypatch.setattr(desktop_main.sys, "stderr", Stream("err"))
+    desktop_main.end_process(3, exit_now=lambda code: events.append(("exit", code)))
+    assert events == [("flush", "out"), ("flush", "err"), ("exit", 3)]
+
+
+def test_ending_the_process_survives_missing_or_broken_streams(monkeypatch) -> None:
+    """Under pythonw the streams may be None, or a log file may be gone; the exit still happens."""
+    from spyglass_service.desktop import __main__ as desktop_main
+
+    class Broken:
+        def flush(self) -> None:
+            raise OSError("the disk went away")
+
+    exits: list[int] = []
+    monkeypatch.setattr(desktop_main.sys, "stdout", None)
+    monkeypatch.setattr(desktop_main.sys, "stderr", Broken())
+    desktop_main.end_process(1, exit_now=exits.append)
+    assert exits == [1]

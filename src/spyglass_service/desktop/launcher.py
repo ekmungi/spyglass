@@ -16,6 +16,7 @@ import threading
 import time
 import webbrowser
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -30,8 +31,8 @@ from spyglass_service.desktop.datadir import (
 )
 from spyglass_service.desktop.platform_base import DesktopPlatform, default_platform
 from spyglass_service.desktop.startup import (
-    LOCK_TAKEN_MESSAGE,
     NO_CONFIG_MESSAGE,
+    PEER_NOT_ANSWERING_MESSAGE,
     Health,
     StartAction,
     bad_config_message,
@@ -88,14 +89,6 @@ def _system_tray(**callbacks: Any) -> TrayLike:
     return build_tray(**callbacks)
 
 
-def _lock_text(path: Path) -> str | None:
-    """The lock file's text, or None when it is gone or unreadable."""
-    try:
-        return path.read_text(encoding="utf-8")
-    except OSError:
-        return None
-
-
 class Launcher:
     """Starts Spyglass as a tray app and owns its one stop path.
 
@@ -131,8 +124,8 @@ class Launcher:
 
         Order: settings, environment, lock, start decision, folder check, logs, service thread,
         health wait, the browser unless `background`, then the tray on this (the main) thread.
-        0 after a normal stop or after opening a running peer; a refused folder returns its
-        verdict (3, 4 or 5); every other failure returns 1.
+        0 after a normal stop, or when another live launcher holds this folder; a refused
+        folder returns its verdict (3, 4 or 5); every other failure returns 1.
         """
         config = self._read_config()
         if config is None:
@@ -147,12 +140,12 @@ class Launcher:
             self._show(bad_config_message(exc))
             return EXIT_FAILED
         self._url = f"http://127.0.0.1:{settings.port}/"
-        lock = single_instance_lock(settings.data_dir)
+        lock = single_instance_lock(settings.data_dir, pid_started_at=self._process_started_at)
         try:
             outcome = self._claim(lock, settings.port, background)
             return outcome if outcome is not None else self._start(settings, background)
         finally:
-            lock.release()  # removes the file only if it is ours
+            lock.release()  # deletes the file only if this process wrote it, never a holder's
 
     def stop(self) -> None:
         """The one stop path. Idempotent, thread-safe, and it never raises.
@@ -197,25 +190,17 @@ class Launcher:
     def _claim(self, lock: CycleFileLock, port: int, background: bool) -> int | None:
         """Take the lock and decide whether to start; an exit code means "stop here".
 
-        Without the lock another launcher on this folder is running or starting, so wait for
-        its service and open it. If no Spyglass answers within PEER_WAIT_S the lock is stale:
-        Windows reuses process ids, so a lock left by a crash can name a live, unrelated
-        process. It is then removed and taken, and the normal start goes on.
-        """
+        The lock takes a crash-left lock at once: its holder is gone, or the process now holding
+        that pid is newer than the lock (Windows reuses pids). A lock still refused belongs to a
+        live launcher, perhaps slow to start or showing a message, and is never taken over:
+        wait for its service and open it, or say that it is not answering."""
         if not lock.acquire():
-            seen = _lock_text(lock.path)
             if self._wait_for_health(port, PEER_WAIT_S, lambda: True):
                 if not background:
                     self._open_dashboard()
-                return 0
-            if _lock_text(lock.path) == seen:  # still the same silent holder
-                try:
-                    lock.path.unlink(missing_ok=True)
-                except OSError:
-                    pass  # the acquire below then fails and says so
-            if not lock.acquire():
-                self._show(LOCK_TAKEN_MESSAGE)
-                return EXIT_FAILED
+            else:
+                self._show(PEER_NOT_ANSWERING_MESSAGE)
+            return 0
         health = probe_health(port)
         action = decide_start(True, health)
         if action is StartAction.REFUSE_OTHER_SPYGLASS and isinstance(health, Health):
@@ -259,12 +244,18 @@ class Launcher:
         return self._run_tray()
 
     def _start_service(self, settings: Settings) -> None:
-        """Build the server and run it in a non-daemon thread, watched for a crash."""
+        """Build the server and run it in a non-daemon thread, watched for a crash. A stop that
+        came during the build is applied here and nothing starts; starting inside the guard
+        means a later stop sees no thread or a running one, never one about to start."""
         server = self._server_factory(settings, self.stop)
         thread = threading.Thread(target=self._serve, args=(server,), name="spyglass-service")
         with self._guard:
-            self._server, self._thread = server, thread
-        thread.start()
+            self._server = server
+            if self._stopping:
+                server.should_exit = True
+                return
+            self._thread = thread
+            thread.start()
         threading.Thread(target=self._watch, args=(thread,), name="spyglass-watch",
                          daemon=True).start()
 
@@ -366,6 +357,16 @@ class Launcher:
             self._open_browser(self._url)
         except Exception:
             logger.exception("Could not open %s", self._url)
+
+    def _process_started_at(self, pid: int) -> datetime | None:
+        """When process `pid` was created, for the lock's reused-pid check; None if unknown."""
+        if self._platform is None:
+            return None
+        try:
+            return self._platform.process_started_at(pid)
+        except Exception:
+            logger.exception("Could not read when process %s started", pid)
+            return None
 
     def _autostart_enabled(self) -> bool:
         """Whether the start-up entry exists; False when it cannot be read."""

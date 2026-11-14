@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
@@ -45,6 +46,10 @@ class DesktopPlatform(Protocol):
 
     def show_message(self, title: str, text: str) -> None:
         """Show a blocking message box to the user."""
+        ...
+
+    def process_started_at(self, pid: int) -> datetime | None:
+        """When the process with this id was created (aware UTC); None if it cannot be read."""
         ...
 
 

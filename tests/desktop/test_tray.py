@@ -4,6 +4,7 @@ No icon is shown: pystray.Icon is replaced, so nothing registers a window or tou
 notification area.
 """
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -103,3 +104,21 @@ def test_installer_icon_is_used_when_present(monkeypatch, tmp_path: Path) -> Non
     icon = tray_mod.build_tray(lambda: None, lambda: None, lambda: False, lambda: None, "0.41.0")
     assert icon.icon.size == (32, 32)
     assert icon.icon.getpixel((5, 5)) == (10, 20, 30, 255)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="pystray's Windows backend")
+def test_pystray_windows_backend_still_routes_clicks_through_on_notify() -> None:
+    """The menu refresh overrides a private pystray method; this fails loudly if a pystray update
+    renames it or stops routing the icon's messages through it."""
+    from pystray import _win32
+    from pystray._util import win32
+
+    assert hasattr(_win32.Icon, "_on_notify")
+    icon_class = tray_mod._icon_class()
+    assert issubclass(icon_class, _win32.Icon)
+    # Building the icon registers a window class only: no window, nothing in the tray.
+    icon = icon_class("spyglass-guard", icon=tray_mod._icon_image(), title="guard")
+    try:
+        assert icon._message_handlers[win32.WM_NOTIFY].__func__ is icon_class._on_notify
+    finally:
+        icon._unregister_class(icon._atom)

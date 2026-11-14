@@ -69,11 +69,21 @@ class TrayRunner:
         return self._closed.wait(timeout)
 
     def _setup(self, icon: TrayLike) -> None:
-        """pystray's setup callback, run once the loop is live: show the icon, then apply a
-        close that came before the loop could take it."""
-        icon.visible = True
+        """pystray's setup callback, run once the loop is live: apply a close that came before
+        the loop could take it, otherwise show the icon.
+
+        The loop is marked live first, so close() works whatever happens next. An icon that
+        cannot be shown ends the loop, and the launcher then stops the service, so the process
+        never lingers with no icon to quit it from.
+        """
         with self._guard:
             self._live = True
             close_now = self._close_asked
         if close_now:
+            icon.stop()
+            return
+        try:
+            icon.visible = True
+        except Exception:
+            logger.exception("The tray icon could not be shown")
             icon.stop()

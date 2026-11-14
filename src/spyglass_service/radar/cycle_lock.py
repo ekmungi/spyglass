@@ -4,7 +4,8 @@ The in-process lock only protects one process. If the service is restarted while
 process is still finishing a cycle, both would otherwise judge the same items and pay twice.
 The lock file is created with an exclusive open and holds the owner's pid and start time. A
 lock whose owner is no longer running, or that is far older than any cycle could take, is
-stale and taken over. A tiny window remains in which two processes that both found the same
+stale and taken over (the desktop lock has no age limit, and instead checks that the process
+holding the pid is not newer than the lock). A tiny window remains in which two processes that both found the same
 stale lock could race; each re-reads the file just before removing it, which narrows it.
 """
 
@@ -23,8 +24,12 @@ logger = logging.getLogger(__name__)
 MAX_LOCK_AGE = timedelta(hours=12)
 # An empty or unreadable lock this young is probably being written by its owner right now.
 UNREADABLE_GRACE = timedelta(minutes=1)
+# A real holder's process was created before it wrote the lock; this much slack absorbs clock
+# rounding between the process start time and the time written in the file.
+PID_REUSE_TOLERANCE = timedelta(seconds=2)
 
 PidAlive = Callable[[int], bool]
+PidStartedAt = Callable[[int], datetime | None]
 
 
 def pid_alive(pid: int) -> bool:
@@ -78,13 +83,18 @@ class CycleFileLock:
         max_age: A lock older than this counts as stale even if its holder runs. None means
             only a dead holder makes it stale, for a lock that is held for as long as an
             application stays open (the desktop app's one-instance lock).
+        pid_started_at: When the process now holding a pid was created, or None if unknown.
+            Used only with max_age=None: process ids are reused, so a live holder whose process
+            was created after the lock was written is a stranger, and the lock is stale.
     """
 
     def __init__(self, path: Path, *, pid_alive: PidAlive = pid_alive,
-                 pid: int | None = None, max_age: timedelta | None = MAX_LOCK_AGE) -> None:
+                 pid: int | None = None, max_age: timedelta | None = MAX_LOCK_AGE,
+                 pid_started_at: PidStartedAt | None = None) -> None:
         self.path = Path(path)
         self._max_age = max_age
         self._alive = pid_alive
+        self._started_at = pid_started_at
         self._pid = pid if pid is not None else os.getpid()
         self._mine: str | None = None
 
@@ -143,7 +153,16 @@ class CycleFileLock:
             return True  # left by this very process; the in-process lock guards it now
         if self._max_age is not None and datetime.now(UTC) - started > self._max_age:
             return True
-        return not self._alive(pid)
+        if not self._alive(pid):
+            return True
+        return self._pid_was_reused(pid, started)
+
+    def _pid_was_reused(self, pid: int, locked_at: datetime) -> bool:
+        """True when the live process with this pid was created after the lock was written."""
+        if self._max_age is not None or self._started_at is None:
+            return False
+        born = self._started_at(pid)
+        return born is not None and born > locked_at + PID_REUSE_TOLERANCE
 
     def _age_of_file(self) -> timedelta:
         """How long ago the lock file was last written."""

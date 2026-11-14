@@ -61,6 +61,30 @@ def test_close_between_run_and_live_is_applied_once_live() -> None:
     assert tray.stopped.is_set()
 
 
+def test_a_tray_that_cannot_show_still_closes(caplog) -> None:
+    """If showing the icon fails, the loop is ended (the launcher then stops the service) and a
+    later close() still works, so the process can never linger with no icon."""
+
+    class NoShowTray(FakeTray):
+        @property
+        def visible(self) -> bool:
+            return False
+
+        @visible.setter
+        def visible(self, value: bool) -> None:
+            if value:
+                raise OSError("no notification area")
+
+    runner, tray = TrayRunner(), NoShowTray()
+    thread = threading.Thread(target=runner.run, args=(tray,))
+    thread.start()
+    thread.join(WAIT)
+    assert not thread.is_alive()
+    assert "could not be shown" in caplog.text
+    runner.close()
+    assert runner.wait_closed(0)
+
+
 def test_a_failing_stop_is_logged_not_raised(caplog) -> None:
     class BrokenTray(FakeTray):
         def stop(self) -> None:

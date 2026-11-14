@@ -1,6 +1,7 @@
-"""The Windows adapter: the sign-in start-up entry, installed browsers and message boxes.
+"""The Windows adapter: the sign-in start-up entry, installed browsers, message boxes and
+process start times.
 
-Every Windows-only call (`winreg`, `ctypes.windll`) is imported inside the method that needs
+Every Windows-only call (`winreg`, `ctypes.windll`) is imported inside the function that needs
 it, so this module imports on any system and tests can inject a fake registry and launcher.
 """
 
@@ -10,10 +11,18 @@ import os
 import subprocess
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
 from spyglass_service.desktop.platform_base import Browser, no_window_flags
+
+# Windows process times count 100-nanosecond steps from the start of 1601 (UTC).
+_FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=UTC)
+# The least access that lets GetProcessTimes read another user's or a protected process.
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+# Process ids are DWORDs; anything outside that range cannot name a process.
+_MAX_PID = 0xFFFFFFFF
 
 # The per-user key Windows reads at sign-in; a value here starts a program without admin rights.
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -103,6 +112,32 @@ def _default_candidates() -> dict[str, list[Path]]:
     }
 
 
+def _process_creation_filetime(pid: int) -> int | None:
+    """The creation time of process `pid` as a raw FILETIME; None if it cannot be opened."""
+    if pid <= 0 or pid > _MAX_PID:
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.GetProcessTimes.restype = wintypes.BOOL
+    kernel32.GetProcessTimes.argtypes = (wintypes.HANDLE,) + (ctypes.POINTER(wintypes.FILETIME),) * 4
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return None
+    try:
+        created, exited, kernel, user = (wintypes.FILETIME() for _ in range(4))
+        if not kernel32.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(exited),
+                                        ctypes.byref(kernel), ctypes.byref(user)):
+            return None
+        return (created.dwHighDateTime << 32) | created.dwLowDateTime
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _start_program(args: list[str]) -> subprocess.Popen:
     """Start a program and leave it running, with no console window under pythonw."""
     return subprocess.Popen(args, creationflags=no_window_flags())  # noqa: S603 -- no shell
@@ -117,10 +152,12 @@ class WindowsPlatform:
         launch: Callable[[list[str]], object] | None = None,
         candidates: dict[str, list[Path]] | None = None,
         pythonw: Path | None = None,
+        process_times: Callable[[int], int | None] | None = None,
     ) -> None:
         """Build the adapter; each argument defaults to the real thing for this machine."""
         self._registry: RegistryAdapter = registry if registry is not None else _WinregRegistry()
         self._launch = launch if launch is not None else _start_program
+        self._process_times = process_times or _process_creation_filetime
         self._candidates = candidates if candidates is not None else _default_candidates()
         self._pythonw = pythonw or Path(sys.executable).with_name("pythonw.exe")
 
@@ -158,3 +195,10 @@ class WindowsPlatform:
         import ctypes
 
         ctypes.windll.user32.MessageBoxW(None, text, title, _MB_STYLE)
+
+    def process_started_at(self, pid: int) -> datetime | None:
+        """When process `pid` was created, in aware UTC; None when it cannot be opened."""
+        filetime = self._process_times(pid)
+        if filetime is None:
+            return None
+        return _FILETIME_EPOCH + timedelta(microseconds=filetime // 10)

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from spyglass_service import __version__
@@ -37,5 +39,21 @@ def main(argv: list[str] | None = None) -> int:
     return Launcher().run(background=args.background)
 
 
+def end_process(code: int, exit_now: Callable[[int], object] = os._exit) -> None:
+    """Flush the log streams, then end the process at once with `code`.
+
+    By the time main() returns, the service has stopped (or never started), but a leftover
+    thread could still keep a normal exit waiting: pystray's setup thread is not a daemon. A
+    stream that is missing (pythonw) or cannot be flushed must not stop the exit.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None:
+                stream.flush()
+        except (OSError, ValueError):
+            pass
+    exit_now(code)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    end_process(main())

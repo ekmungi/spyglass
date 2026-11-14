@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -171,3 +173,27 @@ def test_show_message_comes_to_the_front(monkeypatch: pytest.MonkeyPatch) -> Non
     WindowsPlatform(registry=FakeRegistry(), candidates={}).show_message("Spyglass", "Hello")
     information, set_foreground, topmost = 0x40, 0x10000, 0x40000
     assert shown == [(None, "Hello", "Spyglass", information | set_foreground | topmost)]
+
+
+def test_process_started_at_converts_the_creation_time() -> None:
+    """Windows counts process times in 100 ns steps from 1601; this value is the Unix epoch."""
+    platform = WindowsPlatform(registry=FakeRegistry(), candidates={},
+                               process_times=lambda pid: 116_444_736_000_000_000)
+    assert platform.process_started_at(4242) == datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def test_process_started_at_is_none_when_the_process_cannot_be_read() -> None:
+    platform = WindowsPlatform(registry=FakeRegistry(), candidates={}, process_times=lambda pid: None)
+    assert platform.process_started_at(4242) is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="GetProcessTimes exists only on Windows")
+def test_process_started_at_reads_a_real_process() -> None:
+    """This process started in the past (aware UTC); a free pid has no start time."""
+    platform = WindowsPlatform(registry=FakeRegistry(), candidates={})
+    started = platform.process_started_at(os.getpid())
+    now = datetime.now(UTC)
+    assert started is not None and started.tzinfo is not None
+    assert now - timedelta(days=1) < started <= now
+    assert platform.process_started_at(2**31 - 3) is None
+    assert platform.process_started_at(0) is None

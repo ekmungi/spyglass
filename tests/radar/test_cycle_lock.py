@@ -4,6 +4,8 @@ import json
 import os
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from spyglass_service.radar.cycle_lock import CycleFileLock
 from spyglass_service.radar.scheduler import RadarScheduler
 
@@ -60,6 +62,45 @@ def test_lock_with_no_max_age_is_not_stale_after_twelve_hours(tmp_path) -> None:
     _write_holder(path, OTHER_PID, datetime.now(UTC) - timedelta(days=2))
     assert CycleFileLock(path, pid_alive=lambda _pid: True, max_age=None).acquire() is False
     assert CycleFileLock(path, pid_alive=lambda _pid: False, max_age=None).acquire() is True
+
+
+LOCKED_AT = datetime(2026, 11, 14, 8, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(("born", "taken"), [
+    (LOCKED_AT + timedelta(minutes=5), True),    # created after the lock: a reused pid
+    (LOCKED_AT + timedelta(seconds=3), True),    # past the rounding tolerance
+    (LOCKED_AT + timedelta(seconds=1), False),   # within the tolerance: the real holder
+    (LOCKED_AT - timedelta(seconds=4), False),   # created before it wrote the lock
+    (None, False),                               # unknown: never guess a takeover
+])
+def test_a_live_pid_is_judged_by_when_its_process_started(tmp_path, born, taken) -> None:
+    """Windows reuses pids. The real holder's process existed before it wrote the lock; a process
+    created after that holds the pid by chance, so the lock is stale and taken at once."""
+    path = tmp_path / "desktop.lock"
+    _write_holder(path, OTHER_PID, LOCKED_AT)
+    asked: list[int] = []
+
+    def started_at(pid: int):
+        asked.append(pid)
+        return born
+
+    lock = CycleFileLock(path, pid_alive=lambda _pid: True, max_age=None,
+                         pid_started_at=started_at)
+    assert lock.acquire() is taken
+    assert asked and set(asked) == {OTHER_PID}
+    holder = json.loads(path.read_text(encoding="utf-8"))
+    assert (holder["pid"] == os.getpid()) is taken
+
+
+def test_the_cycle_lock_keeps_its_age_rule_and_ignores_process_start(tmp_path) -> None:
+    """Only the desktop lock (no age limit) asks when the holder started; existing callers keep
+    their behaviour."""
+    path = tmp_path / "cycle.lock"
+    _write_holder(path, OTHER_PID, datetime.now(UTC) - timedelta(hours=1))
+    lock = CycleFileLock(path, pid_alive=lambda _pid: True,
+                         pid_started_at=lambda _pid: datetime.now(UTC))
+    assert lock.acquire() is False
 
 
 def test_an_unreadable_fresh_lock_counts_as_held(tmp_path) -> None:
