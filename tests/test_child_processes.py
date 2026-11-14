@@ -142,11 +142,13 @@ def _python(code: str) -> subprocess.Popen:
 
 
 def test_the_real_kill_ends_a_running_process() -> None:
+    """kill_all's count holds only the kills finished inside its 1 s cap, which a loaded machine
+    can exceed; the kill still goes on, so what is checked is that the process ends."""
     registry = ChildRegistry()
     proc = _python("import time; time.sleep(60)")
     try:
         registry.register(proc)
-        assert registry.kill_all() == 1
+        registry.kill_all()
         assert proc.wait(timeout=10) is not None
     finally:
         if proc.poll() is None:

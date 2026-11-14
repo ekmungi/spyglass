@@ -404,18 +404,21 @@ def create_app(
         async with mcp_app.lifespan(app):
             yield
         # Claude processes outside the job worker (a judging call in a collection, a streaming
-        # reply) are ended first: their threads are abandoned at a stop, and on Windows the hard
-        # exit that ends the desktop app does not end child processes. One registered after this
-        # is ended at once.
-        child_processes.kill_all()
+        # reply) are told to end first: their threads are abandoned at a stop, and on Windows the
+        # hard exit that ends the desktop app does not end child processes. The kills run while
+        # the workers stop, and one registered after this is ended at once.
+        kills = child_processes.start_kill_all()
         # Stop the workers before disposing the engine -- they hold sessions against it. The
-        # whole stop must fit in eight seconds (server 3 s + these 2 + 2 + 1), so the order and
-        # the limits matter: a Claude run is the slowest thing to end and goes first.
+        # whole stop must fit in eight seconds: the server 3 s, then the job worker 2 s (a Claude
+        # run is the slowest thing to end, so it goes first), the scheduler 2 s and the fetch
+        # worker 1 s. The kills' join below waits only for what is left of their 1 s cap counted
+        # from their start, so the worst case stays 3 + 2 + 2 + 1 = 8 seconds.
         job_worker.stop(timeout=2.0)
         radar_scheduler = getattr(app.state, "radar_scheduler", None)
         if radar_scheduler is not None:
             radar_scheduler.stop(wait_seconds=2.0)
         fetch_worker.stop(timeout=1.0)
+        kills.join()
         engine.dispose()
 
     app = FastAPI(title="Spyglass", version=__version__, lifespan=lifespan)

@@ -2,6 +2,7 @@
 
 import importlib.util
 import shutil
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -155,6 +156,68 @@ def test_teardown_ends_registered_claude_processes_before_the_job_worker(
     assert calls == ["kill", "job", "fetch"]
     assert child_processes.register(FakeProc()) is False  # a late one is ended at once
     assert calls == ["kill", "job", "fetch", "kill"]
+
+
+def test_teardown_overlaps_the_child_kills_with_the_worker_stops(tmp_path: Path, monkeypatch) -> None:
+    """The kills start first and run while the job worker, the scheduler and the fetch worker
+    stop; they are joined last, before the engine is disposed. A slow kill (0.9 s) therefore
+    adds nothing to the workers' waits, and the shutdown stays inside eight seconds."""
+    events: list[tuple[str, float]] = []
+
+    def note(name: str) -> None:
+        events.append((name, time.monotonic()))
+
+    class FakeProc:
+        def poll(self) -> None:
+            return None
+
+    def slow_kill(proc: FakeProc) -> None:
+        time.sleep(0.9)
+        note("kill done")
+
+    class RecordingRegistry(child_processes.ChildRegistry):
+        def start_kill_all(self):
+            note("kills started")
+            run = super().start_kill_all()
+
+            class Join:
+                def join(self) -> int:
+                    note("join")
+                    ended = run.join()
+                    note("joined")
+                    return ended
+
+            return Join()
+
+    class FakeJobWorker:
+        def stop(self, timeout: float = 5.0) -> None:
+            note("job")
+
+    class FakeScheduler:
+        def stop(self, wait_seconds: float = 15) -> bool:
+            note("scheduler")
+            return True
+
+    class FakeFetchWorker:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def stop(self, timeout: float = 5.0) -> None:
+            note("fetch")
+
+    monkeypatch.setattr(child_processes, "CHILDREN", RecordingRegistry(kill=slow_kill))
+    monkeypatch.setattr("spyglass_service.app.FetchWorker", FakeFetchWorker)
+    app = create_app(make_settings(tmp_path), claude_worker=FakeJobWorker(), skip_claude_worker=True,
+                     skip_fetch_worker=True)
+    with TestClient(app):
+        app.state.radar_scheduler = FakeScheduler()
+        child_processes.register(FakeProc())
+    names = [name for name, _ in events]
+    assert [n for n in names if n != "kill done"] == [
+        "kills started", "job", "scheduler", "fetch", "join", "joined"]
+    at = dict(events)
+    assert at["fetch"] - at["kills started"] < 0.5  # the workers did not wait for the kill
+    assert at["joined"] >= at["kill done"]  # the join waited for it, inside its 1 s cap
 
 
 def test_health_reports_degraded_on_corrupt_db(tmp_path: Path) -> None:

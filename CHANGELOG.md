@@ -37,9 +37,9 @@ notification area, and stops completely when you quit it. The developer route,
 
 ### Changed
 - Quitting stops everything within 10 seconds, also during a collection: every Claude process that
-  Spyglass started (a background job, a judging call, an assistant reply) is ended first, and a
-  running collection is abandoned after 2 seconds and redone at the next one. The service itself
-  stops within 8 seconds, in the app and in the developer route.
+  Spyglass started (a background job, a judging call, an assistant reply) is ended at the start of
+  the stop, and a running collection is abandoned after 2 seconds and redone at the next one. The
+  service itself stops within 8 seconds, in the app and in the developer route.
 - When the last collection is older than the collection interval, a collection starts about a minute
   after Spyglass opens, instead of one interval later.
 - The reading browser for pages that need one can be an installed Edge or Chrome. The app uses Edge,

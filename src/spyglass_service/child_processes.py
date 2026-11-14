@@ -68,14 +68,14 @@ class ChildRegistry:
         with self._lock:
             return tuple(self._live)
 
-    def kill_all(self) -> int:
-        """End every tracked process that still runs, close the registry, and return how many
-        kills were sent within the wait.
+    def start_kill_all(self) -> KillRun:
+        """Close the registry and start ending every tracked process that still runs; returns
+        at once, so the caller can stop other things while the kills run.
 
-        The kills run in parallel and are waited for at most `wait_s`, so they fit the stop's
-        time budget however many processes run (one taskkill takes about 0.4 s). A process that
-        already exited is left alone (its pid may be reused) and a kill that fails is logged;
-        neither stops the others from being ended.
+        The kills run in parallel (one taskkill takes about 0.4 s). A process that already
+        exited is left alone (its pid may be reused) and a kill that fails is logged; neither
+        stops the others from being ended. `KillRun.join` waits for them, up to `wait_s` counted
+        from this call.
         """
         with self._lock:
             self._closed = True
@@ -86,10 +86,12 @@ class ChildRegistry:
                                     name="spyglass-kill-child", daemon=True) for proc in procs]
         for thread in threads:
             thread.start()
-        deadline = time.monotonic() + self._wait_s
-        for thread in threads:
-            thread.join(max(0.0, deadline - time.monotonic()))
-        return sum(ended)
+        return KillRun(threads, ended, time.monotonic() + self._wait_s)
+
+    def kill_all(self) -> int:
+        """End every tracked process, close the registry, and return how many kills were sent
+        within the wait; `start_kill_all` followed at once by its join."""
+        return self.start_kill_all().join()
 
     def reopen(self) -> None:
         """Accept processes again (a service starting in this process)."""
@@ -106,6 +108,22 @@ class ChildRegistry:
         except Exception:
             logger.exception("Could not end a child process")
             return False
+
+
+class KillRun:
+    """Kills under way. join() waits for them until the deadline set when they started."""
+
+    def __init__(self, threads: list[threading.Thread], ended: list[bool], deadline: float) -> None:
+        """`ended` collects one result per finished kill; `deadline` is a monotonic time."""
+        self._threads = threads
+        self._ended = ended
+        self._deadline = deadline
+
+    def join(self) -> int:
+        """Wait for the kills, at most until the deadline; how many were sent without error."""
+        for thread in self._threads:
+            thread.join(max(0.0, self._deadline - time.monotonic()))
+        return sum(self._ended)
 
 
 # The service's registry. The functions below look it up on every call, so tests can replace it.
@@ -125,6 +143,11 @@ def unregister(proc: Proc) -> None:
 def kill_all() -> int:
     """End every tracked process and close the service's registry; see `ChildRegistry.kill_all`."""
     return CHILDREN.kill_all()
+
+
+def start_kill_all() -> KillRun:
+    """Start ending every tracked process and close the service's registry; join the result."""
+    return CHILDREN.start_kill_all()
 
 
 def reopen() -> None:
