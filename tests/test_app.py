@@ -1,5 +1,7 @@
 """Tests for the FastAPI application factory: health, shutdown, SPA stub, lifespan."""
 
+import importlib.util
+import shutil
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -32,16 +34,21 @@ def test_health_reports_desktop_when_built_by_the_launcher(tmp_path: Path) -> No
 
 
 def test_start_never_pulls_a_database_from_the_old_data_folder(tmp_path: Path, monkeypatch) -> None:
-    """Starting the service must not move a database out of the pre-0.10 data folder: a later
-    data-folder check would otherwise be bypassed by a silent move into a folder with no database.
-    Every legacy path here is under tmp_path, so the real old folder is never read."""
+    """Starting the service moves no database into its data folder. The old relocation code is
+    gone (so a later data-folder check cannot be bypassed by a silent move), start-up makes no
+    file move into an empty data folder, and a database sitting beside it stays untouched. The
+    assertions are structural because the old code bound its folder lookup at import time, which
+    a patched lookup could not reach."""
+    assert importlib.util.find_spec("spyglass_service.migrate_data_dir") is None
     legacy = tmp_path / "legacy"
     legacy.mkdir()
     (legacy / "spyglass.db").write_bytes(b"old")
-    monkeypatch.setattr("platformdirs.user_data_dir", lambda *a, **k: str(legacy))
-    app = create_app(make_settings(tmp_path))
+    moves: list[tuple] = []
+    monkeypatch.setattr(shutil, "move", lambda *args, **kwargs: moves.append(args))
+    app = create_app(make_settings(tmp_path / "data"))
     with TestClient(app):
         pass
+    assert moves == []
     assert (legacy / "spyglass.db").read_bytes() == b"old"
 
 
