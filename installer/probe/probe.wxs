@@ -19,7 +19,7 @@
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsDir" Name="Programs">
         <Directory Id="INSTALLFOLDER" Name="Spyglass MSI Probe">
-          <Component Id="ProbeProgram">
+          <Component Id="ProbeProgram" Guid="EAF30B0E-90C7-4DAB-9909-5ADBE52FD3EC">
             <File Id="ProbeExe" Source="installer\probe\SpyglassMsiProbe.exe" />
             <!-- A per-user component keeps its key path in HKCU and removes its folders. -->
             <RegistryValue Root="HKCU" Key="Software\ekmungi\SpyglassMsiProbe" Name="program"
@@ -32,7 +32,7 @@
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
-      <Component Id="ProbeShortcut">
+      <Component Id="ProbeShortcut" Guid="7AEA4831-0ECD-4EE7-A0B4-1B556E229A50">
         <Shortcut Id="ProbeStartMenu" Name="Spyglass MSI Probe" Target="[INSTALLFOLDER]SpyglassMsiProbe.exe"
                   WorkingDirectory="INSTALLFOLDER" Icon="probe.ico" />
         <RegistryValue Root="HKCU" Key="Software\ekmungi\SpyglassMsiProbe" Name="shortcut"
