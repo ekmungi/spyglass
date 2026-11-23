@@ -7,6 +7,31 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/); this pro
 
 ## [Unreleased]
 
+## [0.41.1] - 2026-11-23
+
+The installed Spyglass gets a program of its own, and two small fixes from the first test of the
+Windows app.
+
+### Added
+- **Spyglass.exe.** The install folder now holds `Spyglass.exe`, a small launcher with the Spyglass
+  name, icon and version. The Start-menu entry, the Start with Windows entry, "Open Spyglass now" at
+  the end of setup and the Start with Windows switch in the tray and Settings all open it, so Task
+  Manager shows Spyglass with the Python processes under it instead of two `pythonw.exe` processes.
+  When Spyglass's Python is missing, it says which file is missing and asks you to run the installer
+  again. An upgrade rewrites a Start with Windows entry from 0.41.0. The launcher is a short C#
+  program compiled with the .NET Framework compiler that Windows includes; the release job builds it
+  before the installer.
+- **Setup waits for Spyglass to close.** When Spyglass still runs from the install folder after Setup
+  tried to stop it, Setup asks you to quit it and run Setup again, instead of failing while it copies
+  files.
+
+### Fixed
+- **Back from Find papers and Watch.** Opening a paper from Find papers, or an item from an
+  organisation or topic on Watch, and pressing Back now returns to that page instead of another one.
+- **The note in File as.** The note for the filing session is a box that grows with its text, can be
+  dragged taller and holds 2,000 characters with line breaks kept, and the filing session receives
+  it whole. Enter starts a new line; Ctrl+Enter adds the item to the queue.
+
 ## [0.41.0] - 2026-11-14
 
 Spyglass becomes a Windows app with a one-file installer. It opens from the Start menu, runs in the

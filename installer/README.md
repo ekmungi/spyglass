@@ -47,8 +47,12 @@ with Windows entry and "Open Spyglass now" all open. It is a short C# program,
 `installer\launcher\Spyglass.cs`, that starts `.venv\Scripts\pythonw.exe -m spyglass_service.desktop`
 in the install folder with the arguments it was given (`--background` for Start with Windows),
 shows no console window and waits until Spyglass ends, so Task Manager shows Spyglass with the
-Python processes under it. When the Python environment is missing it says which file is missing
-and asks you to run the installer again.
+Python processes under it. When the venv's `pythonw.exe`, or the Python that `.venv\pyvenv.cfg`
+names, is missing, it says which file is missing and asks you to run the installer again. Other
+faults inside Python are reported by Spyglass itself, as before.
+
+The script stops when `installer\Spyglass.exe` is missing or carries another version than
+`/DAppVersion`, so a local build cannot ship the launcher of an earlier version.
 
 `build_launcher.ps1` compiles it to `installer\Spyglass.exe` with the Spyglass icon and the given
 version; the file is ignored by git, and `spyglass.iss` stops with an error when it is missing. The
@@ -117,7 +121,7 @@ Setup's exit codes:
 | Code | Meaning |
 |------|---------|
 | 0 | Installed and set up. |
-| 7 | Nothing was installed: the install folder holds other files and is not an earlier install. |
+| 7 | Nothing was installed: the install folder holds other files and is not an earlier install, or Spyglass still runs from it after Setup tried to stop it. |
 | 103 | The data folder holds an older Spyglass; nothing in it was changed. |
 | 104 | A newer Spyglass has used the data folder; nothing in it was changed. |
 | 110 | The files are installed, but Python, the check or the settings file failed; see `install.log`. |

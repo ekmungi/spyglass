@@ -116,7 +116,9 @@ work, but no item is judged. See [Choosing an AI engine](#choosing-an-ai-engine)
    log to `install.log` in the install folder.
 4. Spyglass opens in your browser. It keeps running in the notification area after you close the
    tab; Windows 11 may hide its icon behind the ^ arrow. Open it again from the Start menu or with a
-   click on the icon, and quit it from the icon's menu or from **Settings**.
+   click on the icon, and quit it from the icon's menu or from **Settings**. The program itself is
+   `Spyglass.exe` in the install folder (`%LOCALAPPDATA%\Programs\Spyglass` by default); Task
+   Manager shows it as Spyglass, with the Python processes that do the work under it.
 5. Set up Spyglass in the app, as described [below](#set-up-spyglass-in-the-app).
 
 To upgrade, run the newer installer; it keeps your data folder. To uninstall, use **Settings >
@@ -381,7 +383,8 @@ setting anything up.
   and Find papers.
 - `frontend/` is the React interface. The current app is in `frontend/src/radar/`.
 - `browser-extension/` is the Send to Spyglass extension.
-- `installer/` holds the Windows installer script and its icon; its README says how to build it.
+- `installer/` holds the Windows installer script, its icon and the `Spyglass.exe` launcher
+  (`installer/launcher/`); its README says how to build them.
 - `tests/` holds the Python tests.
 - `docs/` holds the user guide and the privacy and safety description.
 - `plugin/` and `skills/` hold the legacy Obsidian plugin and its Claude skills.
