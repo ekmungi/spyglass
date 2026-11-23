@@ -13,6 +13,20 @@
   display: grid;
   gap: var(--space-1);
 }
+/* The note for the filing session: starts at three lines, grows with its text up to about twelve
+   (Chromium browsers; elsewhere it keeps three lines and scrolls) and the reader can drag it taller. */
+.rfq-note {
+  field-sizing: content;
+  min-height: calc(3lh + 18px);
+  max-height: calc(12lh + 18px);
+  resize: vertical;
+  line-height: 1.45;
+}
+.rfq-note-hint {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--faint);
+}
 
 /* The split control: a main button and a small menu button side by side. */
 .r-filebtn,

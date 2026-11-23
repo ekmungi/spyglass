@@ -42,6 +42,8 @@ afterEach(async () => {
 })
 
 const writes = () => calls.filter((call) => call.method !== 'GET')
+// A note written over two lines, as a reader gives detailed instructions to the filing session.
+const TWO_LINES = 'File under competitors.\nQuote the two figures.'
 
 describe('one click', () => {
   it('queues the item with kind resource and no project, opens nothing, and offers Undo', async () => {
@@ -75,7 +77,7 @@ describe('one click', () => {
 })
 
 describe('File as…', () => {
-  it('sends the kind, the project and the note, and Enter confirms', async () => {
+  it('sends the kind, the project and the note, and Ctrl+Enter in the note confirms', async () => {
     render(<FileButton itemId={101} filing={null} filed={null} />)
     fireEvent.click(screen.getByRole('button', { name: 'More ways to file' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'File as…' }))
@@ -87,7 +89,7 @@ describe('File as…', () => {
     fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'Imaging AI' } })
     const note = screen.getByLabelText(/Note for the filing session/)
     fireEvent.change(note, { target: { value: '  try it for triage  ' } })
-    fireEvent.keyDown(note, { key: 'Enter' })
+    fireEvent.keyDown(note, { key: 'Enter', ctrlKey: true })
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await waitFor(() => expect(writes()).toEqual([{ method: 'POST', path: '/items/101/file', body: { kind: 'feature idea', project: 'Imaging AI', note: 'try it for triage' } }]))
     expect(await screen.findByRole('button', { name: 'Waiting to be filed' })).toBeInTheDocument()
@@ -100,6 +102,44 @@ describe('File as…', () => {
     await waitFor(() => expect(screen.getByRole('option', { name: 'Regulation notes' })).toBeInTheDocument())
     const options = Array.from((screen.getByLabelText('Project') as HTMLSelectElement).options).map((option) => option.text)
     expect(options).toEqual(['No project', 'Imaging AI', 'Agent harness', 'Regulation notes'])
+  })
+
+  it('the note is a box of up to 2,000 characters where Enter starts a new line', async () => {
+    render(<FileButton itemId={101} filing={null} filed={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'More ways to file' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File as…' }))
+    await screen.findByRole('dialog', { name: 'File as…' })
+    const note = screen.getByLabelText(/Note for the filing session/) as HTMLTextAreaElement
+    expect(note.tagName).toBe('TEXTAREA')
+    expect(note.maxLength).toBe(2000)
+    expect(note).toHaveAccessibleDescription(/Ctrl\+Enter/)
+    fireEvent.change(note, { target: { value: TWO_LINES } })
+    fireEvent.keyDown(note, { key: 'Enter' })
+    fireEvent.keyDown(note, { key: 'Enter', shiftKey: true })
+    fireEvent.keyDown(note, { key: 'Enter', ctrlKey: true, isComposing: true })
+    expect(screen.getByRole('dialog', { name: 'File as…' })).toBeInTheDocument()
+    expect(writes()).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the queue' }))
+    await waitFor(() => expect(writes()).toEqual([{ method: 'POST', path: '/items/101/file', body: { kind: 'resource', note: TWO_LINES } }]))
+  })
+
+  it('Enter in the other fields still confirms, and Cmd+Enter in the note too', async () => {
+    render(<FileButton itemId={101} filing={null} filed={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'More ways to file' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File as…' }))
+    await screen.findByRole('dialog', { name: 'File as…' })
+    fireEvent.keyDown(screen.getByLabelText('File it as'), { key: 'Enter' })
+    await waitFor(() => expect(writes()).toEqual([{ method: 'POST', path: '/items/101/file', body: { kind: 'resource' } }]))
+    cleanup()
+    calls = []
+    render(<FileButton itemId={102} filing={null} filed={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'More ways to file' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File as…' }))
+    await screen.findByRole('dialog', { name: 'File as…' })
+    const note = screen.getByLabelText(/Note for the filing session/)
+    fireEvent.change(note, { target: { value: 'for Friday' } })
+    fireEvent.keyDown(note, { key: 'Enter', metaKey: true })
+    await waitFor(() => expect(writes()).toEqual([{ method: 'POST', path: '/items/102/file', body: { kind: 'resource', note: 'for Friday' } }]))
   })
 
   it('Cancel closes without queuing', async () => {

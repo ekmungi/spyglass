@@ -1,5 +1,6 @@
 // FileAsDialog: "File as…" for one item. The reader picks the kind of note, optionally a project and
-// a one-line note, and the item joins the To file queue. Nothing is opened and nothing is written.
+// a note of several lines for the filing session, and the item joins the To file queue. Nothing is
+// opened and nothing is written.
 import { useEffect, useRef, useState } from 'react'
 import { getFilingQueue } from '../api/client'
 import type { FilingKind } from '../api/types'
@@ -9,8 +10,8 @@ import { KIND_CHOICES } from './kinds'
 import { useProjectNames } from './useProjectNames'
 import './filing.css'
 
-/** The note is cut to this many characters by the service; the field stops there too. */
-const NOTE_MAX = 500
+/** The service keeps notes of up to this many characters, line breaks included; the field stops there too. */
+const NOTE_MAX = 2000
 
 export interface FileAsDialogProps {
   itemId: number
@@ -77,10 +78,14 @@ export function FileAsDialog({ itemId, changing = false, onClose }: FileAsDialog
       <div
         className="rfq-fields"
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault()
-            confirm()
-          }
+          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+          // In the note, Enter starts a new line; only Ctrl+Enter (Cmd+Enter on a Mac) confirms.
+          // In the other fields a plain Enter confirms, as before.
+          const inNote = event.target instanceof HTMLTextAreaElement
+          const confirms = inNote ? event.ctrlKey || event.metaKey : !event.shiftKey
+          if (!confirms) return
+          event.preventDefault()
+          confirm()
         }}
       >
         <Select
@@ -103,18 +108,22 @@ export function FileAsDialog({ itemId, changing = false, onClose }: FileAsDialog
         />
         <div className="r-field">
           <label htmlFor="rfq-note">Note for the filing session (optional)</label>
-          <input
+          <textarea
             id="rfq-note"
-            className="r-input"
-            type="text"
+            className="r-textarea rfq-note"
+            rows={3}
             maxLength={NOTE_MAX}
             value={note}
+            aria-describedby="rfq-note-hint"
             placeholder="For example: useful for the next project review"
             onChange={(event) => {
               touched.current = true
               setNote(event.target.value)
             }}
           />
+          <p id="rfq-note-hint" className="rfq-note-hint">
+            Enter starts a new line. Ctrl+Enter adds the item to the queue.
+          </p>
         </div>
       </div>
     </Dialog>

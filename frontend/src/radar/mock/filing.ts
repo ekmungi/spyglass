@@ -94,7 +94,14 @@ export function filingRoute(method: string, parts: string[], id: number, body: R
     queue.set(id, {
       kind: choice.kind ?? 'resource',
       project: choice.project?.trim() || null,
-      note: (choice.note ?? '').replace(/\s+/g, ' ').trim().slice(0, 500),
+      // As the service does: line breaks kept, spaces collapsed within a line, at most 2,000 characters.
+      note: (choice.note ?? '')
+        .split(/\r\n|\r|\n/)
+        .map((line) => line.replace(/\s+/g, ' ').trim())
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+        .slice(0, 2000),
       requested_at: earlier?.requested_at ?? new Date().toISOString(),
     })
     patchItem(id, { filing: 'waiting' })
