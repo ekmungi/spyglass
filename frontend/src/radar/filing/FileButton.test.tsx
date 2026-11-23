@@ -172,6 +172,8 @@ describe('waiting and filed', () => {
     await screen.findByRole('dialog', { name: 'Change how this is filed' })
     await waitFor(() => expect((screen.getByLabelText('File it as') as HTMLSelectElement).value).toBe('learning'))
     expect((screen.getByLabelText(/Note for the filing session/) as HTMLInputElement).value).toBe('for Friday')
+    // The hint names what Ctrl+Enter does here: save, not add to the queue.
+    expect(screen.getByLabelText(/Note for the filing session/)).toHaveAccessibleDescription(/Ctrl\+Enter saves the changes/)
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(writes()).toEqual([{ method: 'POST', path: '/items/101/file', body: { kind: 'learning', note: 'for Friday' } }]))
   })

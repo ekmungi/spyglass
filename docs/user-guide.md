@@ -100,8 +100,10 @@ There are three steps, and each needs your click.
 3. **To file.** Press **File in vault** on an item to add it to your filing queue. Nothing opens
    and nothing is written; the button then reads **Waiting to be filed**, and a message lets you
    undo it. The small arrow beside the button offers **File as…**, where you choose the kind of
-   note (resource, to explore, learning or feature idea), a project and a one-line note. On a
-   waiting item you can remove it from the queue or change those choices.
+   note (resource, to explore, learning or feature idea), a project and a note for the filing
+   session of up to 2,000 characters, which can run over several lines: Enter starts a new line,
+   and Ctrl+Enter adds the item to the queue. On a waiting item you can remove it from the queue or
+   change those choices.
 
    When you have queued a few items, open the **Feed** and press **To file**. A status line shows
    the state of filing, and the waiting items are listed under **Waiting**. **File now** opens one

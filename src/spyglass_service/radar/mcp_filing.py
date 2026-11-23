@@ -103,7 +103,7 @@ def filing_queue_view(engine: Engine, settings=None, run: dict | None = None) ->
     """The waiting items, oldest first, at most 40 per call, with a `remaining` count.
 
     `kind` is one of the four fixed kinds; `project` and `note` are the reader's own words
-    (cleaned to one line). Items that were filed or deleted meanwhile are not listed. With `run`
+    (the project cleaned to one line, the note keeping its line breaks). Items that were filed or deleted meanwhile are not listed. With `run`
     (the status of the background run in progress) only that run's items are listed, and the
     run's facts, the project list and (for a filing run) the answers to apply are added.
     """

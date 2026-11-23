@@ -11,7 +11,7 @@ export interface FilingChoice {
   kind?: FilingKind
   /** One of the reader's listed projects; absent leaves the project to the filing session. */
   project?: string
-  /** A one-line note for the filing session. */
+  /** A note for the filing session: up to 2,000 characters, line breaks kept. */
   note?: string
 }
 

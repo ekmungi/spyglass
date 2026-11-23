@@ -122,7 +122,7 @@ export function FileAsDialog({ itemId, changing = false, onClose }: FileAsDialog
             }}
           />
           <p id="rfq-note-hint" className="rfq-note-hint">
-            Enter starts a new line. Ctrl+Enter adds the item to the queue.
+            Enter starts a new line. {changing ? 'Ctrl+Enter saves the changes.' : 'Ctrl+Enter adds the item to the queue.'}
           </p>
         </div>
       </div>
