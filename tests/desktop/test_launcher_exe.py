@@ -157,6 +157,28 @@ def test_launcher_carries_the_version_and_name(programs: dict[str, Path]) -> Non
                     "description": "Spyglass"}
 
 
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="needs Windows PowerShell 5.1")
+def test_build_script_runs_in_windows_powershell(tmp_path: Path) -> None:
+    """installer/README.md builds with `powershell -File` and the default output path.
+
+    Windows PowerShell 5.1 leaves $PSScriptRoot empty in param() defaults, so the defaults must be
+    worked out in the script body. A copy of the build files keeps the real installer\\Spyglass.exe
+    untouched.
+    """
+    installer = tmp_path / "installer"
+    (installer / "launcher").mkdir(parents=True)
+    shutil.copy2(BUILD_SCRIPT, installer / BUILD_SCRIPT.name)
+    shutil.copy2(BUILD_SCRIPT.parent / "spyglass.ico", installer / "spyglass.ico")
+    shutil.copy2(BUILD_SCRIPT.parent / "launcher" / "Spyglass.cs", installer / "launcher" / "Spyglass.cs")
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(installer / BUILD_SCRIPT.name), "-Version", TEST_VERSION],
+        capture_output=True, text=True, timeout=RUN_TIMEOUT_S, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (installer / "Spyglass.exe").is_file()
+
+
 def test_build_script_names_a_missing_compiler(tmp_path: Path) -> None:
     """On a machine without the compiler the build stops and says where it looked."""
     missing = tmp_path / "nothing" / "csc.exe"

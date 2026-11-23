@@ -6,12 +6,16 @@ param(
     # The release version, digits only (x.y.z); it becomes the program's file and product version.
     [Parameter(Mandatory = $true)][string]$Version,
     # Where to write the program; by default installer\Spyglass.exe, where spyglass.iss looks.
-    [string]$OutFile = (Join-Path $PSScriptRoot "Spyglass.exe"),
-    # The compiler; the default is where the .NET Framework 4.x puts its 64-bit compiler.
-    [string]$CscPath = (Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe")
+    [string]$OutFile = "",
+    # The compiler; by default where the .NET Framework 4.x puts its 64-bit compiler.
+    [string]$CscPath = ""
 )
 
 $ErrorActionPreference = "Stop"
+# Defaults are filled in here, not in param(): Windows PowerShell 5.1 leaves $PSScriptRoot empty there.
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not $OutFile) { $OutFile = Join-Path $here "Spyglass.exe" }
+if (-not $CscPath) { $CscPath = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe" }
 
 # Say why the build stopped, on standard error, and end the script with a non-zero code.
 function Stop-Build([string]$Message, [int]$Code = 1) {
@@ -27,8 +31,8 @@ if (-not (Test-Path -LiteralPath $CscPath -PathType Leaf)) {
         "which Windows 10 and 11 include; on another machine, pass its path with -CscPath.")
 }
 
-$source = Join-Path $PSScriptRoot "launcher\Spyglass.cs"
-$icon = Join-Path $PSScriptRoot "spyglass.ico"
+$source = Join-Path $here "launcher\Spyglass.cs"
+$icon = Join-Path $here "spyglass.ico"
 # The compiler turns these attributes into the version details Explorer and Task Manager show.
 $versionInfo = @"
 using System.Reflection;
