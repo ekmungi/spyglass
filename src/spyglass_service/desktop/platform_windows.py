@@ -31,6 +31,8 @@ _LOCK_BUSY_ERRNOS = frozenset({errno.EACCES, errno.EDEADLK})
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 # The name Spyglass gives its value, so it can find and remove only its own entry.
 RUN_VALUE = "Spyglass"
+# The launcher program the installer puts at the root of the install folder.
+LAUNCHER_NAME = "Spyglass.exe"
 
 # MessageBoxW style: an information icon with a single OK button, brought to the front and kept
 # above other windows. A pythonw process owns no window, so without the last two flags Windows
@@ -101,8 +103,24 @@ class _WinregRegistry:
             return
 
 
-def autostart_command(pythonw: Path) -> str:
-    """The command line stored in the Run key: the windowless interpreter, quoted for spaces."""
+def launcher_path(pythonw: Path) -> Path | None:
+    """The installed Spyglass.exe for this interpreter, or None when there is none.
+
+    The installer puts the launcher at the root of the install folder, two folders above the
+    venv's `Scripts\\pythonw.exe`. A repository clone has a .venv but no launcher beside it.
+    """
+    candidate = pythonw.parent.parent.parent / LAUNCHER_NAME
+    return candidate if candidate.is_file() else None
+
+
+def autostart_command(pythonw: Path, launcher: Path | None = None) -> str:
+    """The command line stored in the Run key, with paths quoted for spaces.
+
+    The installed app starts through its launcher, as the installer's own entry does; without
+    one (a run from a clone) the entry starts the windowless interpreter directly.
+    """
+    if launcher is not None:
+        return f'"{launcher}" --background'
     return f'"{pythonw}" -m spyglass_service.desktop --background'
 
 
@@ -221,7 +239,8 @@ class WindowsPlatform:
     def set_autostart(self, enabled: bool) -> None:
         """Write the Run value (replacing an older one) or remove it."""
         if enabled:
-            self._registry.set(RUN_KEY, RUN_VALUE, autostart_command(self._pythonw))
+            command = autostart_command(self._pythonw, launcher_path(self._pythonw))
+            self._registry.set(RUN_KEY, RUN_VALUE, command)
         else:
             self._registry.delete(RUN_KEY, RUN_VALUE)
 

@@ -16,10 +16,12 @@ import pytest
 from spyglass_service.desktop import platform_base
 from spyglass_service.desktop.platform_base import UNSUPPORTED, Browser, default_platform
 from spyglass_service.desktop.platform_windows import (
+    LAUNCHER_NAME,
     RUN_KEY,
     RUN_VALUE,
     WindowsPlatform,
     autostart_command,
+    launcher_path,
 )
 
 
@@ -82,6 +84,46 @@ def test_autostart_command_wraps_the_interpreter_in_quotes() -> None:
     command = autostart_command(Path("pythonw.exe"))
     assert command.startswith('"')
     assert command.endswith('" -m spyglass_service.desktop --background')
+
+
+def _installed(tmp_path: Path) -> tuple[Path, Path]:
+    """An install folder laid out as the installer leaves it: the launcher beside the venv."""
+    pythonw = _exe(tmp_path, "Spyglass", ".venv", "Scripts", "pythonw.exe")
+    launcher = _exe(tmp_path, "Spyglass", LAUNCHER_NAME)
+    return pythonw, launcher
+
+
+def test_launcher_path_finds_the_program_beside_the_venv(tmp_path: Path) -> None:
+    pythonw, launcher = _installed(tmp_path)
+    assert launcher_path(pythonw) == launcher
+
+
+def test_launcher_path_is_none_in_a_checkout(tmp_path: Path) -> None:
+    """A repository clone has a .venv but no Spyglass.exe beside it."""
+    pythonw = _exe(tmp_path, "spyglass", ".venv", "Scripts", "pythonw.exe")
+    assert launcher_path(pythonw) is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows path rendering")
+def test_autostart_command_starts_the_launcher_in_the_background() -> None:
+    command = autostart_command(Path("pythonw.exe"), Path("C:/Program Files/Spyglass/Spyglass.exe"))
+    assert command == '"C:\\Program Files\\Spyglass\\Spyglass.exe" --background'
+
+
+def test_switching_on_writes_the_launcher_when_installed(tmp_path: Path) -> None:
+    """The installed app writes the same start-up entry as the installer: Spyglass.exe."""
+    pythonw, launcher = _installed(tmp_path)
+    registry = FakeRegistry()
+    WindowsPlatform(registry=registry, pythonw=pythonw).set_autostart(True)
+    assert registry.values[(RUN_KEY, RUN_VALUE)] == f'"{launcher}" --background'
+
+
+def test_switching_on_writes_python_from_a_checkout(tmp_path: Path) -> None:
+    """Run from a clone, with no launcher, the entry starts Python as before."""
+    pythonw = _exe(tmp_path, "spyglass", ".venv", "Scripts", "pythonw.exe")
+    registry = FakeRegistry()
+    WindowsPlatform(registry=registry, pythonw=pythonw).set_autostart(True)
+    assert registry.values[(RUN_KEY, RUN_VALUE)] == autostart_command(pythonw)
 
 
 def test_installed_browsers_lists_only_existing_executables(tmp_path: Path) -> None:
