@@ -166,15 +166,40 @@ def test_installer_stops_only_a_spyglass_the_app_started() -> None:
     assert "'\"started_by\":\"desktop\"'" in _routine("IsStartedByDesktop")
 
 
-def test_start_menu_entry_and_startup_value_match_the_app() -> None:
-    """The Start-menu entry opens the windowless app; the Run value is the one the app manages."""
+def test_installer_ships_the_launcher_and_cannot_build_without_it() -> None:
+    """Spyglass.exe lands at the install root; a build without it stops and says how to make it."""
+    assert _files_entry(platform_windows.LAUNCHER_NAME).split("DestDir:")[1].startswith(' "{app}";')
+    assert re.search(r'^#if !FileExists\(.*"Spyglass\.exe"\)', ISS, re.MULTILINE)
+    assert re.search(r"^\s*#error .*build_launcher\.ps1", ISS, re.MULTILINE)
+    assert r"Result := ExpandConstant('{app}\Spyglass.exe');" in _routine("Launcher")
+
+
+def test_every_starter_opens_spyglass_through_the_launcher() -> None:
+    """Start menu, start-up entry and "Open Spyglass now" start Spyglass.exe, never Python."""
     shortcut = _routine("CreateStartMenuEntry")
-    assert r"\.venv\Scripts\pythonw.exe" in ISS
-    assert "'-m spyglass_service.desktop'" in shortcut
+    assert "Launcher," in shortcut
+    assert "spyglass_service.desktop" not in shortcut
+    run_line = _section("Run").strip()
+    assert run_line.startswith(r'Filename: "{app}\Spyglass.exe";')
+    assert "Parameters:" not in run_line
     assert f"RunKey = '{platform_windows.RUN_KEY}';" in ISS
     assert f"RunValue = '{platform_windows.RUN_VALUE}';" in ISS
     # The same command line the app writes when Start with Windows is switched on.
-    assert '" -m spyglass_service.desktop --background' in _routine("ApplyAutostart")
+    assert "'\"' + Launcher + '\" --background'" in _routine("ApplyAutostart")
+
+
+def test_a_start_up_entry_from_0_41_0_still_counts_as_spyglass_own() -> None:
+    """The old entry ran the install folder's pythonw.exe; anything inside {app} is ours."""
+    body = _routine("RemoveAutostartIfOurs")
+    assert "AddBackslash(ExpandConstant('{app}'))" in body
+    assert "RegDeleteValue(HKCU, RunKey, RunValue)" in body
+
+
+def test_the_installers_own_steps_still_call_python() -> None:
+    """The data-folder check and the warm-up need Python itself, not the launcher."""
+    assert "Launcher" not in _routine("RunFolderCheck")
+    assert "Launcher" not in _routine("WarmUpFirstStart")
+    assert "PythonW" in _routine("WarmUpFirstStart")
 
 
 def test_installer_removes_the_old_scheduled_task() -> None:
@@ -209,6 +234,14 @@ def test_release_job_builds_and_uploads_the_installer() -> None:
     assert r"installer\spyglass.iss" in RELEASE
     assert "gh release upload" in RELEASE
     assert "Spyglass-Setup-" in RELEASE
+
+
+def test_release_job_compiles_the_launcher_before_inno_setup() -> None:
+    """GitHub builds Spyglass.exe with the same script as a local build, before ISCC runs."""
+    build = RELEASE.index(r"installer\build_launcher.ps1 -Version $env:VERSION")
+    assert build < RELEASE.index("& $iscc")
+    step = RELEASE[build:RELEASE.index("- name:", build)]
+    assert "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }" in step
 
 
 def test_the_tag_check_runs_before_anything_is_published() -> None:

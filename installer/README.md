@@ -5,10 +5,10 @@ installer. The release job in `.github/workflows/release.yml` builds it for ever
 adds it to the GitHub release. These are the steps to build and try it on your own PC.
 
 To try the GitHub build without publishing anything, push a test tag: the code's version plus
-`-testN`, for example `0.41.0-test1`. The job builds the plugin and the installer exactly as for a
+`-testN`, for example `0.41.1-test1`. The job builds the plugin and the installer exactly as for a
 release, creates no release, and attaches `Spyglass-Setup-<version>.exe` to the workflow run, where
 it can be downloaded from the run's page for seven days. Delete the test tag afterwards with
-`git push origin :refs/tags/0.41.0-test1`.
+`git push origin :refs/tags/0.41.1-test1`.
 
 ## What you need
 
@@ -19,6 +19,8 @@ it can be downloaded from the run's page for seven days. Delete the test tag aft
 - The pinned `uv.exe`. The release job downloads uv 0.10.9 and checks it against the SHA-256 in
   `release.yml`. For a local build, copy a `uv.exe` of that version into this folder. The file is
   listed in `.gitignore` and is never committed.
+- The C# compiler of the .NET Framework 4.x, which Windows 10 and 11 include at
+  `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`. It compiles `Spyglass.exe` (below).
 
 ## Build
 
@@ -30,11 +32,28 @@ npm ci
 npm run build
 cd ..
 copy %USERPROFILE%\.local\bin\uv.exe installer\uv.exe
-iscc /DAppVersion=0.41.0 installer\spyglass.iss
+powershell -ExecutionPolicy Bypass -File installer\build_launcher.ps1 -Version 0.41.1
+iscc /DAppVersion=0.41.1 installer\spyglass.iss
 ```
 
-The installer is written to `installer\Output\Spyglass-Setup-0.41.0.exe`, which is also ignored by
-git. `/DAppVersion` is required; without it the compiler stops.
+The installer is written to `installer\Output\Spyglass-Setup-0.41.1.exe`, which is also ignored by
+git. `/DAppVersion` is required; without it the compiler stops. Give the launcher and the installer
+the same version.
+
+### Spyglass.exe, the launcher
+
+`Spyglass.exe` is the program at the root of the install folder that the Start-menu entry, the Start
+with Windows entry and "Open Spyglass now" all open. It is a short C# program,
+`installer\launcher\Spyglass.cs`, that starts `.venv\Scripts\pythonw.exe -m spyglass_service.desktop`
+in the install folder with the arguments it was given (`--background` for Start with Windows),
+shows no console window and waits until Spyglass ends, so Task Manager shows Spyglass with the
+Python processes under it. When the Python environment is missing it says which file is missing
+and asks you to run the installer again.
+
+`build_launcher.ps1` compiles it to `installer\Spyglass.exe` with the Spyglass icon and the given
+version; the file is ignored by git, and `spyglass.iss` stops with an error when it is missing. The
+release job runs the same script before Inno Setup. `-CscPath` points the script at another
+compiler.
 
 The icon, `spyglass.ico`, is committed. Make it again only when the extension's icon changes:
 
@@ -60,7 +79,10 @@ uv run python installer/make_icon.py
 5. It runs the data folder check of the installed Spyglass. When the folder holds an older
    Spyglass, or a newer Spyglass has used it, Setup shows the reason and writes no `desktop.json`.
 6. It writes `desktop.json`, creates the Start-menu entry "Spyglass", writes the Start with Windows
-   entry when it is ticked, and removes the old "Spyglass" scheduled task if one exists.
+   entry when it is ticked, and removes the old "Spyglass" scheduled task if one exists. Both
+   entries open `Spyglass.exe`. An entry that an earlier version wrote, which runs the install
+   folder's `pythonw.exe` directly, counts as Spyglass's own: it is rewritten when Start with
+   Windows stays ticked and removed when it is not.
 7. It runs the installed Python once to load every module, so that the first start is quick.
 
 Every step's output goes to `install.log` in the install folder.
@@ -80,7 +102,7 @@ A silent install takes the folder, data folder and port on its command line. Use
 scratch folders, so a Spyglass you run from the repository stays up:
 
 ```
-Spyglass-Setup-0.41.0.exe /VERYSILENT /SUPPRESSMSGBOXES /DIR="C:\scratch\app" /DATADIR="C:\scratch\data" /PORT=7790 /LOG="C:\scratch\setup.log"
+Spyglass-Setup-0.41.1.exe /VERYSILENT /SUPPRESSMSGBOXES /DIR="C:\scratch\app" /DATADIR="C:\scratch\data" /PORT=7790 /LOG="C:\scratch\setup.log"
 ```
 
 `/AUTOSTART=1` or `/AUTOSTART=0` sets Start with Windows; without it, an upgrade keeps the current

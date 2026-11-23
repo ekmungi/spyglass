@@ -122,6 +122,14 @@ jobs:
           $uv = Get-ChildItem -Path $unpacked -Recurse -Filter uv.exe | Select-Object -First 1
           Copy-Item -Path $uv.FullName -Destination installer\uv.exe
 
+      - name: Build Spyglass.exe
+        run: |
+          # The launcher every starter opens, compiled with the .NET Framework 4.x compiler that
+          # Windows includes. The script stops with a message naming the compiler's path when the
+          # compiler is missing, and spyglass.iss will not compile without the launcher.
+          & installer\build_launcher.ps1 -Version $env:VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Install Inno Setup when it is missing
         run: |
           $default = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"

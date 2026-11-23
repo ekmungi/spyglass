@@ -1,12 +1,17 @@
 ; Inno Setup 6 script for the one-file, per-user Spyglass installer for Windows.
 ; Build from the repository root after `npm run build` in frontend, with a pinned uv.exe copied to
-; installer\uv.exe:  iscc /DAppVersion=0.41.0 installer\spyglass.iss   (see installer\README.md)
+; installer\uv.exe and the launcher compiled by installer\build_launcher.ps1 -Version 0.41.1:
+;   iscc /DAppVersion=0.41.1 installer\spyglass.iss   (see installer\README.md)
 
 #ifndef AppVersion
   #error Pass the version on the command line: iscc /DAppVersion=0.41.0 installer\spyglass.iss
 #endif
 #if VER < EncodeVer(6, 3, 0)
   #error Inno Setup 6.3 or newer is needed, for its UTF-8 file functions.
+#endif
+; Spyglass.exe, the program every starter opens, is compiled before this script runs.
+#if !FileExists(SourcePath + "Spyglass.exe")
+  #error Build Spyglass.exe first: powershell -ExecutionPolicy Bypass -File installer\build_launcher.ps1 -Version <version>
 #endif
 ; A fixed id, so that a newer installer finds the installed version and replaces it in place.
 #define AppGuid "47FEF1B5-716C-4F96-8B91-F0DFA8A5C7F5"
@@ -61,6 +66,7 @@ Source: "..\uv.lock"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uv.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Spyglass.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "spyglass.ico"; DestDir: "{app}\installer"; Flags: ignoreversion
 
 [UninstallDelete]
@@ -77,7 +83,7 @@ Type: files; Name: "{userprograms}\Spyglass.lnk"
 Type: dirifempty; Name: "{app}"
 
 [Run]
-Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: "-m spyglass_service.desktop"; WorkingDir: "{app}"; Description: "Open Spyglass now"; Flags: postinstall nowait skipifsilent; Check: SetupSucceeded
+Filename: "{app}\Spyglass.exe"; WorkingDir: "{app}"; Description: "Open Spyglass now"; Flags: postinstall nowait skipifsilent; Check: SetupSucceeded
 
 [Code]
 const
@@ -124,6 +130,13 @@ end;
 function PythonW: String;
 begin
   Result := ExpandConstant('{app}\.venv\Scripts\pythonw.exe');
+end;
+
+{ The launcher every starter opens; it runs PythonW with the desktop app and waits for it. The
+  installer's own steps (the folder check and the warm-up) call Python directly. }
+function Launcher: String;
+begin
+  Result := ExpandConstant('{app}\Spyglass.exe');
 end;
 
 { Where the desktop app reads its settings: the per-user config folder, under Spyglass. }
@@ -527,8 +540,8 @@ end;
 procedure CreateStartMenuEntry;
 begin
   try
-    CreateShellLink(ExpandConstant('{userprograms}\Spyglass.lnk'), 'Open Spyglass', PythonW,
-      '-m spyglass_service.desktop', ExpandConstant('{app}'),
+    CreateShellLink(ExpandConstant('{userprograms}\Spyglass.lnk'), 'Open Spyglass', Launcher,
+      '', ExpandConstant('{app}'),
       ExpandConstant('{app}\installer\spyglass.ico'), 0, SW_SHOWNORMAL);
     AppendLog('Created the Start-menu entry.');
   except
@@ -536,7 +549,8 @@ begin
   end;
 end;
 
-{ Remove the start-up entry, but only when it starts this installed copy. }
+{ Remove the start-up entry, but only when it starts this installed copy: the launcher, or the
+  install folder's pythonw.exe that versions before the launcher wrote. }
 procedure RemoveAutostartIfOurs;
 var
   Value: String;
@@ -557,8 +571,7 @@ begin
     RemoveAutostartIfOurs;
     Exit;
   end;
-  if RegWriteStringValue(HKCU, RunKey, RunValue,
-      '"' + PythonW + '" -m spyglass_service.desktop --background') then
+  if RegWriteStringValue(HKCU, RunKey, RunValue, '"' + Launcher + '" --background') then
     AppendLog('Start with Windows is on.')
   else
     AppendLog('Could not switch on Start with Windows.');
@@ -577,7 +590,7 @@ end;
 { Run the windowless Python once, loading every Spyglass and uvicorn module, while Setup still
   runs. Windows inspects a new program closely the first time it runs, which made the first start
   after an install take over 30 seconds; later starts take a few. It must be pythonw.exe, the
-  program the Start-menu entry runs. The script only imports and writes its summary to OutFile:
+  program Spyglass.exe starts. The script only imports and writes its summary to OutFile:
   nothing is started and no data is touched. -I keeps the install folder off the module path. A
   failure only costs time at the first start. }
 procedure WarmUpFirstStart;
