@@ -20,6 +20,8 @@ plugin/dist/
 
 # Installer build: the pinned uv.exe is copied in at build time, and the compiler writes Output/
 installer/uv.exe
+# The launcher that installer\build_launcher.ps1 compiles for every build.
+installer/Spyglass.exe
 installer/Output/
 
 # Local plan files are never committed (user rule)
