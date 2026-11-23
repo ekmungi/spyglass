@@ -1,5 +1,6 @@
 // WatchRow: one name in the register (or one suggestion): what it is, why it is followed, and its latest items.
 import type { ReactNode } from 'react'
+import { ItemLink } from '../../components/ItemLink'
 import { plainText } from '../../lib/plainText'
 import { IconButton, IconMore, Menu, type MenuItem } from '../../ui'
 import { formatDay } from '../sources/format'
@@ -35,7 +36,7 @@ export function WatchRow({ entry, busy, menu, actions }: WatchRowProps) {
           <ul className="rw-recent" aria-label={`Latest from ${entry.name}`}>
             {recent.slice(0, 3).map((item) => (
               <li key={item.id}>
-                <a href={`#/item/${item.id}`}>{plainText(item.headline) || plainText(item.title)}</a>
+                <ItemLink id={item.id}>{plainText(item.headline) || plainText(item.title)}</ItemLink>
                 {(item.published_at || item.fetched_at) && (
                   <span className="r-meta"> {formatDay(item.published_at ?? item.fetched_at)}</span>
                 )}

@@ -1,6 +1,7 @@
 // TrackRow: one followed topic: its name (a link to the Feed searched for it), its section, when
 // it was last checked and how many items it found, its latest items, and a menu.
 import type { Track } from '../../api/types'
+import { ItemLink } from '../../components/ItemLink'
 import { plainText } from '../../lib/plainText'
 import { buildHash } from '../../router'
 import { IconButton, IconMore, Menu, type MenuItem } from '../../ui'
@@ -31,7 +32,7 @@ export function TrackRow({ track, busy, menu }: TrackRowProps) {
           <ul className="rw-recent" aria-label={`Latest for ${track.label}`}>
             {recent.slice(0, 3).map((item) => (
               <li key={item.id}>
-                <a href={`#/item/${item.id}`}>{plainText(item.headline) || plainText(item.title)}</a>
+                <ItemLink id={item.id}>{plainText(item.headline) || plainText(item.title)}</ItemLink>
                 {(item.published_at || item.fetched_at) && <span className="r-meta"> {formatDay(item.published_at ?? item.fetched_at)}</span>}
               </li>
             ))}

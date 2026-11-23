@@ -1,7 +1,8 @@
 // Tests for PaperRow: a paper's addresses become links only when they are plain web addresses.
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PaperResult } from '../../api/types'
+import { readerOrigin } from '../../router'
 import { PaperRow } from './PaperRow'
 
 afterEach(cleanup)
@@ -15,6 +16,23 @@ const row = (p: PaperResult) => (
     <PaperRow paper={p} itemId={null} adding={false} addError={null} onAdd={() => undefined} />
   </ul>
 )
+
+describe('PaperRow Open for a paper already in the feed', () => {
+  it('opens the reader with Find papers as its origin, so Back returns to the results', () => {
+    window.history.replaceState(null, '', '/#/papers')
+    render(
+      <ul>
+        <PaperRow paper={paper({})} itemId={77} adding={false} addError={null} onAdd={() => undefined} />
+      </ul>,
+    )
+    const open = screen.getByRole('link', { name: 'Open' })
+    expect(open).toHaveAttribute('href', '#/item/77')
+    expect(open).toHaveClass('r-btn', 'r-btn--secondary', 'r-btn--sm')
+    fireEvent.click(open)
+    expect(window.location.hash).toBe('#/item/77')
+    expect(readerOrigin()).toEqual({ name: 'papers' })
+  })
+})
 
 describe('PaperRow addresses', () => {
   it('links web addresses', () => {

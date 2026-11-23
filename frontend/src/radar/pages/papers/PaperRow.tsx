@@ -2,6 +2,7 @@
 import type { PaperResult } from '../../api/types'
 import { plainText } from '../../lib/plainText'
 import { safeHttpUrl } from '../../lib/safeUrl'
+import { ItemLink } from '../../components/ItemLink'
 import { Button } from '../../ui'
 import { formatDay } from '../sources/format'
 import { formatAuthors } from './authors'
@@ -42,9 +43,9 @@ export function PaperRow({ paper, itemId, adding, addError, onAdd }: PaperRowPro
       )}
       <div className="rpp-actions">
         {itemId !== null ? (
-          <a className="r-btn r-btn--secondary r-btn--sm" href={`#/item/${itemId}`}>
+          <ItemLink id={itemId} className="r-btn r-btn--secondary r-btn--sm">
             Open
-          </a>
+          </ItemLink>
         ) : (
           pageUrl && (
             <a className="r-btn r-btn--secondary r-btn--sm" href={pageUrl} target="_blank" rel="noopener noreferrer">
