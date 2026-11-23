@@ -39,7 +39,8 @@ There are three ways in. The request says which one: a visible session ("File no
   or as a learning note when its kind is "learning". With a project, bring it in with the ingest
   skill, then make the matching project record with the manage skill: a "feature idea"
   becomes a feature record, "to explore" a research record or a task, and "resource" a link from
-  the project to the note. Use the user's note as their intent. Call `radar_get_item(<id>)` for
+  the project to the note. Use the user's note as their intent: it may run over several lines,
+  such as where to file the item and what to quote, so follow all of it. Call `radar_get_item(<id>)` for
   the full text only when the summary, key points and questions are not enough.
 
 ## Visible session (File now)

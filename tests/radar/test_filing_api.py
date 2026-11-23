@@ -110,7 +110,8 @@ def test_queueing_with_a_kind_a_project_and_a_note(env):
         "kind": "feature idea", "project": "imaging radar", "note": "  try\nit  "})
     assert res.status_code == 200
     [entry] = filing_queue.waiting(engine)
-    assert (entry.kind, entry.project, entry.note) == ("feature idea", "Imaging Radar", "try it")
+    # The note keeps its line break; only the spaces around it go.
+    assert (entry.kind, entry.project, entry.note) == ("feature idea", "Imaging Radar", "try\nit")
 
 
 def test_queueing_twice_changes_the_row_and_the_count_stays(env):

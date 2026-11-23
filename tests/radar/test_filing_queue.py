@@ -58,12 +58,21 @@ def test_enqueue_twice_updates_the_row_instead_of_adding_one(engine):
     assert (entry.kind, entry.project, entry.note) == ("feature idea", "Imaging", "later")
 
 
-def test_note_is_one_clean_line_of_at_most_500_characters(engine):
+def test_note_keeps_its_lines_and_up_to_2000_characters(engine):
+    """A detailed instruction for the filing session arrives whole, with its line breaks."""
     item_id = add_item(engine)
-    filing_queue.enqueue(engine, item_id, note="line one\nline two\t" + "x" * 600)
+    note = "File under competitors.\r\nQuote the two figures.\t" + "x" * 1400
+    filing_queue.enqueue(engine, item_id, note=note)
     [entry] = filing_queue.waiting(engine)
-    assert "\n" not in entry.note and "\t" not in entry.note
-    assert len(entry.note) <= 500
+    assert entry.note == "File under competitors.\nQuote the two figures. " + "x" * 1400
+    assert filing_queue.NOTE_MAX == 2000
+
+
+def test_a_note_longer_than_2000_characters_is_cut(engine):
+    item_id = add_item(engine)
+    filing_queue.enqueue(engine, item_id, note="y" * 2500)
+    [entry] = filing_queue.waiting(engine)
+    assert len(entry.note) == 2000
 
 
 def test_unknown_kind_is_refused(engine):

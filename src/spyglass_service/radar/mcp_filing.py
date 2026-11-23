@@ -19,8 +19,16 @@ from sqlmodel import Session
 from spyglass_service.radar.filing_config import skill_names
 from spyglass_service.radar.filing_plan import approved_rows
 from spyglass_service.radar.filing_questions import answered_unapplied
-from spyglass_service.radar.filing_queue import QueueEntry, waiting
-from spyglass_service.radar.mcp_fence import NOTICE, date_text, fence, material_text, one_line, token
+from spyglass_service.radar.filing_queue import NOTE_MAX, QueueEntry, waiting
+from spyglass_service.radar.mcp_fence import (
+    NOTICE,
+    date_text,
+    fence,
+    material_text,
+    one_line,
+    own_text,
+    token,
+)
 from spyglass_service.radar.mcp_views import item_block
 from spyglass_service.radar.projects import project_directory
 from spyglass_service.radar.serialize import radar_items
@@ -66,7 +74,7 @@ def _view(entry: QueueEntry, item: dict, qa: str, approved: dict | None = None) 
         "published_at": date_text(item.get("published_at")),
         "kind": entry.kind,
         "project": one_line(entry.project, 80) or None,
-        "note": one_line(entry.note, 500) or None,
+        "note": own_text(entry.note, NOTE_MAX) or None,
         "section": token(item.get("section")),
         "material": item_block(item["id"], item, extra=_extra_lines(item, qa, approved)),
     }

@@ -4,7 +4,7 @@ One click in Spyglass puts an item here; nothing is written to the vault. Later,
 session opened in the vault reads the queue (the `radar_filing_queue` tool) and files the whole
 batch with the vault's own skills after one approval, or a hidden background run does it by
 itself (`filing_run`, when the reader switched that on). Each row holds the reader's choices for the
-item: the kind of note, an optional project and a one-line note. A row leaves the queue when the
+item: the kind of note, an optional project and a note that may run over several lines. A row leaves the queue when the
 item is recorded as filed (see `filed.record_filed`) or when the reader removes it.
 """
 
@@ -21,7 +21,7 @@ from spyglass_service.models import Item
 from spyglass_service.radar.filing_tables import FilingProposal
 from spyglass_service.radar.models import utcnow
 from spyglass_service.radar.projects import project_directory
-from spyglass_service.radar.text_clean import clean_line
+from spyglass_service.radar.text_clean import clean_line, clean_text
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 # serializer imports this module, and claude_bridge imports the serializer.
 FILE_KINDS = ("resource", "to explore", "learning", "feature idea")
 DEFAULT_KIND = "resource"
-NOTE_MAX = 500
+# The note for the filing session: room for detailed instructions, the same limit as the API's.
+NOTE_MAX = 2000
 PROJECT_MAX = 80
 
 
@@ -80,13 +81,13 @@ def enqueue(engine: Engine, item_id: int, *, kind: str = DEFAULT_KIND,
             project: str | None = None, note: str | None = None) -> QueueEntry:
     """Queue the item, or change its row when it is already queued; returns the row.
 
-    `kind` must be one of `FILE_KINDS` (ValueError otherwise). The note is cleaned to one line of
-    at most 500 characters. A repeated call keeps the original queue position.
+    `kind` must be one of `FILE_KINDS` (ValueError otherwise). The note keeps its line breaks and
+    at most 2,000 characters (`clean_text`). A repeated call keeps the original queue position.
     """
     if kind not in FILE_KINDS:
         raise ValueError("Unknown filing kind.")
     project_name = clean_line(project, PROJECT_MAX) or None
-    choices = (kind, project_name, clean_line(note, NOTE_MAX))
+    choices = (kind, project_name, clean_text(note, NOTE_MAX))
     with Session(engine) as session:
         row = session.exec(select(FilingRow).where(FilingRow.item_id == item_id)).first()
         if row is None:

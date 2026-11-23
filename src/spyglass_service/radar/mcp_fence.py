@@ -20,7 +20,7 @@ import re
 import secrets
 import unicodedata
 
-from spyglass_service.radar.text_clean import clean_line
+from spyglass_service.radar.text_clean import clean_line, clean_text
 
 # The same tag the assistant uses to fence web material.
 FENCE_TAG = "spyglass_material"
@@ -90,6 +90,17 @@ def one_line(value: object, limit: int) -> str:
     if value is None:
         return ""
     return defuse(clean_line(unicodedata.normalize("NFKC", str(value)), limit))
+
+
+def own_text(value: object, limit: int) -> str:
+    """The reader's own note of several lines: cleaned like `one_line` but keeping its line breaks.
+
+    The note stays outside the material block, because the reader wrote it; it is defused all the
+    same, as the very last step, so it can never close or imitate a block.
+    """
+    if value is None:
+        return ""
+    return defuse(clean_text(unicodedata.normalize("NFKC", str(value)), limit))
 
 
 def material_text(value: object, limit: int) -> str:
