@@ -13,6 +13,10 @@
 #if !FileExists(SourcePath + "Spyglass.exe")
   #error Build Spyglass.exe first: powershell -ExecutionPolicy Bypass -File installer\build_launcher.ps1 -Version <version>
 #endif
+; A launcher left from an earlier build would carry the wrong version into this installer.
+#if GetVersionNumbersString(SourcePath + "Spyglass.exe") != AppVersion + ".0"
+  #error Spyglass.exe is from another version: build it again with installer\build_launcher.ps1 -Version <this version>
+#endif
 ; A fixed id, so that a newer installer finds the installed version and replaces it in place.
 #define AppGuid "47FEF1B5-716C-4F96-8B91-F0DFA8A5C7F5"
 
@@ -190,6 +194,14 @@ function ForeignFolderMessage(Dir: String): String;
 begin
   Result := 'The folder ' + Dir + ' already holds other files. Choose an empty folder, or the '
     + 'folder of an earlier Spyglass install.';
+end;
+
+{ Shown when a program from the install folder still runs after Setup tried to stop Spyglass. }
+function StillRunningMessage(Dir: String): String;
+begin
+  Result := 'Spyglass is still running from ' + Dir + ', so Setup cannot replace it. Quit Spyglass '
+    + 'from its icon in the notification area (Windows may hide it behind the ^ arrow), close any '
+    + 'Spyglass message that is open, then run Setup again.';
 end;
 
 function FolderIsEmpty(Dir: String): Boolean;
@@ -872,6 +884,11 @@ begin
   end;
   StopDesktopSpyglass(ConfiguredPort, not WizardSilent, StopNote);
   Log(StopNote);
+  { Windows will not replace a program that is running, and Spyglass.exe runs for as long as
+    Spyglass does: one this script could not stop (hung, on another port, or showing its own
+    message) would make the copy fail half-way. Ask for it to be closed first. }
+  if CountProcessesUnder(Dir) > 0 then
+    Result := StillRunningMessage(Dir);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

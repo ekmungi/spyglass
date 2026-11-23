@@ -145,6 +145,35 @@ def test_launcher_reports_a_missing_interpreter(tmp_path: Path, programs: dict[s
     assert "installer again" in result.stderr
 
 
+def test_launcher_reports_a_missing_base_python(tmp_path: Path, programs: dict[str, Path]) -> None:
+    """The venv's pythonw.exe only redirects to the Python named in pyvenv.cfg; that one is checked too."""
+    folder = _install_folder(tmp_path, programs)
+    gone = tmp_path / "python" / "cpython-gone"
+    (folder / ".venv" / "pyvenv.cfg").write_text(f"home = {gone}\nimplementation = CPython\n", encoding="utf-8")
+    result = _launch(folder, [], SPYGLASS_LAUNCHER_NO_DIALOG="1")
+    assert result.returncode == 2
+    assert str(gone / "pythonw.exe") in result.stderr
+    assert "installer again" in result.stderr
+    assert not (folder / ".venv" / "Scripts" / "args.txt").exists()
+
+
+def test_launcher_runs_when_the_base_python_is_there(tmp_path: Path, programs: dict[str, Path]) -> None:
+    folder = _install_folder(tmp_path, programs)
+    base = tmp_path / "python" / "cpython-here"
+    base.mkdir(parents=True)
+    shutil.copy2(programs["standin"], base / "pythonw.exe")
+    (folder / ".venv" / "pyvenv.cfg").write_text(f"home = {base}\nuv = 0.10.9\n", encoding="utf-8")
+    assert _launch(folder, ["--background"]).returncode == 0
+    assert _recorded(folder)[0] == "-m spyglass_service.desktop --background"
+
+
+def test_launcher_message_comes_to_the_front() -> None:
+    """A program with no window may open its message behind others; at sign-in no one would see it."""
+    source = (ROOT / "installer" / "launcher" / "Spyglass.cs").read_text(encoding="utf-8")
+    assert "MessageBoxW" in source
+    assert "MB_TOPMOST = 0x40000" in source and "MB_SETFOREGROUND = 0x10000" in source
+
+
 def test_launcher_carries_the_version_and_name(programs: dict[str, Path]) -> None:
     """Explorer and Task Manager read the release version and the name Spyglass from the file."""
     script = (f"$v = (Get-Item -LiteralPath '{programs['launcher']}').VersionInfo; "

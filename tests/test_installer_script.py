@@ -25,7 +25,7 @@ from spyglass_service.desktop import platform_windows, tray
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "installer"
-EXPECTED_VERSION = "0.41.0"
+EXPECTED_VERSION = "0.41.1"
 ICON_SIZES = {(16, 16), (32, 32), (48, 48), (256, 256)}
 
 
@@ -172,6 +172,23 @@ def test_installer_ships_the_launcher_and_cannot_build_without_it() -> None:
     assert re.search(r'^#if !FileExists\(.*"Spyglass\.exe"\)', ISS, re.MULTILINE)
     assert re.search(r"^\s*#error .*build_launcher\.ps1", ISS, re.MULTILINE)
     assert r"Result := ExpandConstant('{app}\Spyglass.exe');" in _routine("Launcher")
+
+
+def test_a_launcher_of_another_version_stops_the_build() -> None:
+    """A local build after a version bump must not ship last version's Spyglass.exe."""
+    assert 'GetVersionNumbersString(SourcePath + "Spyglass.exe")' in ISS
+    assert re.search(r'^#if .*GetVersionNumbersString\(SourcePath \+ "Spyglass\.exe"\) != AppVersion \+ "\.0"',
+                     ISS, re.MULTILINE)
+
+
+def test_setup_stops_while_spyglass_still_runs_from_the_install_folder() -> None:
+    """A running Spyglass.exe cannot be replaced; Setup says so instead of failing mid-copy."""
+    body = _routine("PrepareToInstall")
+    assert body.index("StopDesktopSpyglass(") < body.index("CountProcessesUnder(Dir) > 0")
+    assert "Result := StillRunningMessage(Dir)" in body
+    message = _routine("StillRunningMessage")
+    assert "notification area" in message
+    assert "run Setup again" in message
 
 
 def test_every_starter_opens_spyglass_through_the_launcher() -> None:

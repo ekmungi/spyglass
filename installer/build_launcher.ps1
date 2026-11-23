@@ -54,7 +54,7 @@ try {
         New-Item -ItemType Directory -Path $outDir | Out-Null
     }
     & $CscPath /nologo /target:winexe /optimize+ "/win32icon:$icon" `
-        /reference:System.Windows.Forms.dll "/out:$OutFile" $source $versionFile
+        "/out:$OutFile" $source $versionFile
     if ($LASTEXITCODE -ne 0) {
         Stop-Build "The C# compiler stopped with exit code $LASTEXITCODE." $LASTEXITCODE
     }
