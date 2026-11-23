@@ -1,0 +1,49 @@
+# A one-off test build, only on the branch test/msi-probe: a tiny per-user Windows Installer
+# (.msi) package, to check whether Windows lists MSI-installed apps in the Start menu and in
+# Settings > Installed apps. It publishes nothing; the package is attached to the workflow run.
+name: MSI probe
+
+on:
+  push:
+    branches: [test/msi-probe]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      # WiX 5 is the last release under the plain open-source licence (MS-RL).
+      WIX_VERSION: "5.0.2"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install WiX
+        run: |
+          dotnet tool install --global wix --version $env:WIX_VERSION
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Build the probe program
+        run: |
+          $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $csc /nologo /target:winexe /win32icon:installer\spyglass.ico /out:installer\probe\SpyglassMsiProbe.exe installer\probe\SpyglassMsiProbe.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build the MSI
+        run: |
+          wix extension add -g "WixToolset.UI.wixext/$env:WIX_VERSION"
+          wix build -arch x64 -ext WixToolset.UI.wixext -o installer\probe\out\SpyglassMsiProbe.msi installer\probe\probe.wxs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-Item installer\probe\out\SpyglassMsiProbe.msi | Select-Object Name, Length
+
+      - name: Attach the MSI to the workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpyglassMsiProbe
+          path: installer/probe/out/SpyglassMsiProbe.msi
+          if-no-files-found: error
+          retention-days: 7

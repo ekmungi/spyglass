@@ -1,0 +1,48 @@
+<!-- A throwaway Windows Installer package for one test: does Windows list an app that a per-user
+     .msi installs (Start menu, Settings > Installed apps)? It installs one small program and a
+     Start-menu entry, for the current user only, without administrator rights. Built with WiX 5. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Spyglass MSI Probe" Manufacturer="ekmungi" Version="0.0.1"
+           UpgradeCode="57BB3C48-BDD1-4AA7-A139-8BE0D1F88D23" Scope="perUser">
+    <MajorUpgrade DowngradeErrorMessage="A newer Spyglass MSI Probe is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="probe.ico" SourceFile="installer\spyglass.ico" />
+    <Property Id="ARPPRODUCTICON" Value="probe.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ekmungi/spyglass" />
+
+    <!-- The standard minimal wizard: welcome with the licence text, progress, finish. -->
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="installer\probe\probe-license.rtf" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsDir" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Spyglass MSI Probe">
+          <Component Id="ProbeProgram">
+            <File Id="ProbeExe" Source="installer\probe\SpyglassMsiProbe.exe" />
+            <!-- A per-user component keeps its key path in HKCU and removes its folders. -->
+            <RegistryValue Root="HKCU" Key="Software\ekmungi\SpyglassMsiProbe" Name="program"
+                           Type="integer" Value="1" KeyPath="yes" />
+            <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+            <RemoveFolder Id="RemoveProgramsDir" Directory="ProgramsDir" On="uninstall" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="ProbeShortcut">
+        <Shortcut Id="ProbeStartMenu" Name="Spyglass MSI Probe" Target="[INSTALLFOLDER]SpyglassMsiProbe.exe"
+                  WorkingDirectory="INSTALLFOLDER" Icon="probe.ico" />
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\SpyglassMsiProbe" Name="shortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Spyglass MSI Probe">
+      <ComponentRef Id="ProbeProgram" />
+      <ComponentRef Id="ProbeShortcut" />
+    </Feature>
+  </Package>
+</Wix>
