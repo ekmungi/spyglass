@@ -16,8 +16,10 @@ internal sealed class OldInstall
     private const string KeyOverrideVariable = "SPYGLASS_SETUP_INNO_KEY";
     // Tests set a short wait here, in seconds.
     private const string WaitOverrideVariable = "SPYGLASS_SETUP_WAIT_S";
-    // How long to wait for the old install to disappear: a slow disk and antivirus can take a while.
-    private const int DefaultWaitSeconds = 120;
+    // How long to wait for the old install to disappear. Its uninstaller deletes the whole Python
+    // environment, many thousands of files, which a slow disk with antivirus scanning can take
+    // minutes over; stopping it half-way would be worse than waiting.
+    private const int DefaultWaitSeconds = 600;
     private const int PollMs = 250;
     private const string SilentArguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART";
 

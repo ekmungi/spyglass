@@ -85,10 +85,13 @@ internal static class SpyglassSetup
                 {
                     steps.RunPythonStep(dir, "uninstall");
                 }
+                // Python removes it too; this covers an environment that is broken or gone.
+                StartupEntry.RemoveIfOurs(dir, log);
                 steps.RemoveEnvironment(dir);
                 return Done;
             default:
-                steps.RemoveEnvironment(dir);
+                // remove-environment is the rollback of environment.
+                steps.RemoveNewEnvironment(dir);
                 return Done;
         }
     }

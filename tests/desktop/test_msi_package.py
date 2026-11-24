@@ -114,7 +114,8 @@ def test_one_browser_choice_per_supported_browser_shown_only_when_found(package)
         assert _feature_value(package, feature_id) == f"browser.{browser}"
         hidden = _by_id(package, "Feature", feature_id).find("w:Level", NS)
         assert hidden.get("Value") == "0"
-        assert hidden.get("Condition") == f"NOT {browser.upper()}_FOUND"
+        # Only on a first install: in Modify, a ticked browser that is gone must stay removable.
+        assert hidden.get("Condition") == f"NOT {browser.upper()}_FOUND AND NOT Installed"
         assert _by_id(package, "Property", f"{browser.upper()}_FOUND").find(
             "w:DirectorySearch", NS) is not None
 
@@ -130,16 +131,18 @@ def _scheduled(package: ET.Element, action: str) -> ET.Element:
     return found
 
 
-def test_prepare_runs_before_costing_and_never_on_uninstall_or_upgrade_removal(package) -> None:
+def test_prepare_runs_before_costing_and_not_when_a_newer_version_removes_this_one(package) -> None:
     """Removing the old Inno install changes the files on disk, so it must come before costing."""
     action = _by_id(package, "CustomAction", "PrepareSpyglass")
     assert action.get("Execute") == "immediate" and action.get("Return") == "check"
     assert action.get("BinaryRef") == "SetupHelperBinary"
-    assert action.get("ExeCommand").startswith('prepare --install-dir "[INSTALLFOLDER]."')
+    # INSTALLFOLDER is empty before CostFinalize in a silent install; this folder is known at once.
+    assert action.get("ExeCommand").startswith(
+        r'prepare --install-dir "[LocalAppDataFolder]Programs\Spyglass"')
     scheduled = _scheduled(package, "PrepareSpyglass")
     assert scheduled.get("Before") == "CostInitialize"
-    assert "NOT UPGRADINGPRODUCTCODE" in scheduled.get("Condition")
-    assert 'NOT (REMOVE~="ALL")' in scheduled.get("Condition")
+    # Also on uninstall, so Spyglass is stopped before Windows Installer checks for files in use.
+    assert scheduled.get("Condition") == "NOT UPGRADINGPRODUCTCODE"
 
 
 def test_python_is_prepared_after_the_feature_values_are_written(package) -> None:
@@ -165,8 +168,16 @@ def test_every_helper_call_passes_the_folder_safely_quoted(package) -> None:
     """A path ending in a backslash would escape the closing quote; the dot prevents that."""
     for action in package.iter(f"{W}CustomAction"):
         command = action.get("ExeCommand")
-        if command is not None:
+        if command is not None and action.get("Id") != "PrepareSpyglass":
             assert '"[INSTALLFOLDER]."' in command, action.get("Id")
+
+
+def test_a_failed_upgrade_keeps_the_old_version_and_a_rebuild_replaces_itself(package) -> None:
+    """Removing the old version inside the transaction lets a failed upgrade roll back to it; a
+    second build of the same version (a test tag, then the release) replaces the first."""
+    upgrade = package.find("w:MajorUpgrade", NS)
+    assert upgrade.get("Schedule") == "afterInstallInitialize"
+    assert upgrade.get("AllowSameVersionUpgrades") == "yes"
 
 
 def test_the_last_page_offers_to_open_spyglass(package: ET.Element) -> None:

@@ -1,6 +1,7 @@
 // SetupMessages.cs: the texts SpyglassSetup.exe shows the user, and how they are shown. Every
 // message goes to the log. It also opens a topmost message box, but only when Windows Installer runs
-// with its reduced or full interface (or when no level was given); a silent install shows nothing.
+// with an interface: basic (as Settings uninstalls), reduced or full, or when no level was given.
+// A silent install shows nothing.
 // SPYGLASS_LAUNCHER_NO_DIALOG=1, the test switch the launcher also honours, writes to stderr instead.
 using System;
 using System.Runtime.InteropServices;
@@ -18,8 +19,8 @@ internal sealed class SetupMessages
     private const uint MB_SETFOREGROUND = 0x10000;
     private const uint MB_TOPMOST = 0x40000;
 
-    // The MSI UILevel values that allow a message box (reduced and full); -1 means "not given".
-    private const int UiReduced = 4;
+    // The MSI UILevel values that allow a message box (basic, reduced and full); -1 means "not given".
+    private const int UiBasic = 3;
     private const int UiFull = 5;
     public const int UiNotGiven = -1;
 
@@ -55,7 +56,7 @@ internal sealed class SetupMessages
         {
             Console.Error.WriteLine(text);
         }
-        else if (ui == UiNotGiven || ui == UiReduced || ui == UiFull)
+        else if (ui == UiNotGiven || (ui >= UiBasic && ui <= UiFull))
         {
             MessageBoxW(IntPtr.Zero, text, Caption, icon | MB_SETFOREGROUND | MB_TOPMOST);
         }
@@ -89,6 +90,8 @@ internal sealed class SetupMessages
     /// <summary>Shown when uv could not build Python and the libraries.</summary>
     public static string EnvironmentFailed(string logPath)
     {
-        return "Setup could not prepare Python and the libraries Spyglass needs. The details are in " + logPath + ".";
+        return "Setup could not prepare Python and the libraries Spyglass needs, so it undid the install. "
+            + "The details are in " + logPath + ". Your data folder and settings are kept. Run setup "
+            + "again once the cause is solved, for example when the PC is online.";
     }
 }

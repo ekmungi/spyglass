@@ -17,6 +17,10 @@ internal sealed class EnvironmentSteps
     // How long the Python setup step may run before Setup stops waiting for it.
     private const int PythonStepTimeoutMs = 15 * 60 * 1000;
     private const string PythonRelative = @".venv\Scripts\pythonw.exe";
+    // Written while uv builds an environment that did not exist before, and deleted once it is
+    // built. Only then may undoing setup delete the environment: a failed or cancelled Modify or
+    // upgrade must keep the Python that already worked.
+    public const string NewEnvironmentMarker = ".venv-being-built";
 
     private readonly SetupLog log;
     private readonly ProgramRunner runner;
@@ -52,6 +56,11 @@ internal sealed class EnvironmentSteps
     /// </summary>
     public bool InstallEnvironment(string dir)
     {
+        string marker = Path.Combine(dir, NewEnvironmentMarker);
+        if (!Directory.Exists(Path.Combine(dir, ".venv")))
+        {
+            WriteMarker(marker);
+        }
         string cache = Path.Combine(Path.GetTempPath(), "spyglass-uv-" + Guid.NewGuid().ToString("N"));
         ProcessStartInfo start = ProgramRunner.Describe(Path.Combine(dir, "uv.exe"),
             "sync --frozen --no-dev --python 3.13" + ExtraArguments(), dir);
@@ -71,7 +80,55 @@ internal sealed class EnvironmentSteps
         start.EnvironmentVariables["UV_COMPILE_BYTECODE"] = "1";
         int code = runner.Run(start, Timeout.Infinite, true);
         runner.RemoveDeepFolder(cache);
+        if (code == 0)
+        {
+            DeleteMarker(marker);
+        }
         return code == 0;
+    }
+
+    /// <summary>Note that this run is building a new environment; a failure to write it is logged.</summary>
+    private void WriteMarker(string marker)
+    {
+        try
+        {
+            File.WriteAllText(marker, "Setup is building Python here. Undoing setup deletes it.");
+        }
+        catch (Exception problem)
+        {
+            log.Line("Could not write " + marker + ": " + problem.Message);
+        }
+    }
+
+    /// <summary>Delete the marker when it exists; a failure is logged.</summary>
+    private void DeleteMarker(string marker)
+    {
+        try
+        {
+            if (File.Exists(marker))
+            {
+                File.Delete(marker);
+            }
+        }
+        catch (Exception problem)
+        {
+            log.Line("Could not delete " + marker + ": " + problem.Message);
+        }
+    }
+
+    /// <summary>
+    /// Undo `environment`: delete the environment only when this setup was building a new one (the
+    /// marker is there). An environment that existed before is kept, so a failed or cancelled
+    /// Modify or upgrade leaves the Spyglass that worked.
+    /// </summary>
+    public void RemoveNewEnvironment(string dir)
+    {
+        if (!File.Exists(Path.Combine(dir, NewEnvironmentMarker)))
+        {
+            log.Line("Kept the Python environment that was there before this setup.");
+            return;
+        }
+        RemoveEnvironment(dir);
     }
 
     /// <summary>
@@ -97,7 +154,42 @@ internal sealed class EnvironmentSteps
         {
             start.EnvironmentVariables.Remove(name);
         }
+        // Windows Installer may start setup steps with another environment than the user's. These
+        // folders come from the signed-in account itself, and Spyglass's code finds Claude Code
+        // and uv's tool folder through them.
+        SetFolder(start, "USERPROFILE", Environment.SpecialFolder.UserProfile);
+        SetFolder(start, "APPDATA", Environment.SpecialFolder.ApplicationData);
+        SetFolder(start, "LOCALAPPDATA", Environment.SpecialFolder.LocalApplicationData);
         runner.Run(start, PythonStepTimeoutMs, true);
+    }
+
+    /// <summary>
+    /// Set one environment variable to the signed-in user's folder. Windows keeps the session's own
+    /// values under HKCU\Volatile Environment, which a different process environment cannot change;
+    /// GetFolderPath, which follows the process environment, is the fallback.
+    /// </summary>
+    private static void SetFolder(ProcessStartInfo start, string name, Environment.SpecialFolder folder)
+    {
+        string path = null;
+        try
+        {
+            using (RegistryKey session = Registry.CurrentUser.OpenSubKey("Volatile Environment"))
+            {
+                path = session == null ? null : session.GetValue(name) as string;
+            }
+        }
+        catch (Exception)
+        {
+            path = null;
+        }
+        if (string.IsNullOrEmpty(path))
+        {
+            path = Environment.GetFolderPath(folder);
+        }
+        if (!string.IsNullOrEmpty(path))
+        {
+            start.EnvironmentVariables[name] = path;
+        }
     }
 
     /// <summary>Whether the install folder holds the environment's Python.</summary>
@@ -112,6 +204,7 @@ internal sealed class EnvironmentSteps
         runner.RemoveDeepFolder(Path.Combine(dir, ".venv"));
         runner.RemoveDeepFolder(Path.Combine(dir, "python"));
         RemoveCaches(Path.Combine(dir, "src"));
+        DeleteMarker(Path.Combine(dir, NewEnvironmentMarker));
     }
 
     /// <summary>Delete the __pycache__ folders below `folder`, which Python made after the files were installed.</summary>

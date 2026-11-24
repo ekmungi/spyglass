@@ -25,8 +25,12 @@
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="Spyglass" Manufacturer="ekmungi" Version="$(var.Version)" Language="1033"
            UpgradeCode="2B3EE94C-873E-4560-9FAC-5A44D08C7F29" Scope="perUser">
-    <!-- A newer version removes the older one first, so no file of it lingers. -->
-    <MajorUpgrade DowngradeErrorMessage="A newer Spyglass is already installed. Uninstall it first to install this older version." />
+    <!-- A newer version removes the older one inside the same transaction, so no file of it
+         lingers and a failed or cancelled upgrade rolls back to the older version. A second build of
+         the same version (a test tag, then the release) replaces the first instead of installing
+         beside it. -->
+    <MajorUpgrade Schedule="afterInstallInitialize" AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer Spyglass is already installed. Uninstall it first to install this older version." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Icon Id="spyglass.ico" SourceFile="installer\spyglass.ico" />
@@ -236,25 +240,27 @@
       <Feature Id="BrowserExtension" Title="Browser extension setup"
                Description="After setup, Spyglass shows how to add its extension to each browser you tick, without any store."
                Level="1" AllowAdvertise="no" Display="expand">
-        <Level Value="0" Condition="NOT (CHROME_FOUND OR EDGE_FOUND OR BRAVE_FOUND OR VIVALDI_FOUND OR OPERA_FOUND)" />
+        <!-- Browsers are looked for on a first install only: in Modify, a ticked browser that has
+             since gone must stay visible so it can be unticked. -->
+        <Level Value="0" Condition="NOT (CHROME_FOUND OR EDGE_FOUND OR BRAVE_FOUND OR VIVALDI_FOUND OR OPERA_FOUND) AND NOT Installed" />
         <Feature Id="BrowserChrome" Title="Google Chrome" Level="1000" AllowAdvertise="no">
-          <Level Value="0" Condition="NOT CHROME_FOUND" />
+          <Level Value="0" Condition="NOT CHROME_FOUND AND NOT Installed" />
           <ComponentRef Id="FeatureChrome" />
         </Feature>
         <Feature Id="BrowserEdge" Title="Microsoft Edge" Level="1000" AllowAdvertise="no">
-          <Level Value="0" Condition="NOT EDGE_FOUND" />
+          <Level Value="0" Condition="NOT EDGE_FOUND AND NOT Installed" />
           <ComponentRef Id="FeatureEdge" />
         </Feature>
         <Feature Id="BrowserBrave" Title="Brave" Level="1000" AllowAdvertise="no">
-          <Level Value="0" Condition="NOT BRAVE_FOUND" />
+          <Level Value="0" Condition="NOT BRAVE_FOUND AND NOT Installed" />
           <ComponentRef Id="FeatureBrave" />
         </Feature>
         <Feature Id="BrowserVivaldi" Title="Vivaldi" Level="1000" AllowAdvertise="no">
-          <Level Value="0" Condition="NOT VIVALDI_FOUND" />
+          <Level Value="0" Condition="NOT VIVALDI_FOUND AND NOT Installed" />
           <ComponentRef Id="FeatureVivaldi" />
         </Feature>
         <Feature Id="BrowserOpera" Title="Opera" Level="1000" AllowAdvertise="no">
-          <Level Value="0" Condition="NOT OPERA_FOUND" />
+          <Level Value="0" Condition="NOT OPERA_FOUND AND NOT Installed" />
           <ComponentRef Id="FeatureOpera" />
         </Feature>
       </Feature>
@@ -263,10 +269,11 @@
     <!-- ===== The setup steps that are programs (installer\setup) ===== -->
     <!-- The helper as part of the package, for the step before any file exists. -->
     <Binary Id="SetupHelperBinary" SourceFile="installer\SpyglassSetup.exe" />
-    <!-- Each folder argument ends in "." because a backslash before the closing quote would
-         escape the quote. -->
+    <!-- Each INSTALLFOLDER argument ends in "." because a backslash before the closing quote
+         would escape the quote. The step before costing names the folder itself: INSTALLFOLDER is
+         only set by CostFinalize, so a silent install would pass an empty folder. -->
     <CustomAction Id="PrepareSpyglass" BinaryRef="SetupHelperBinary"
-                  ExeCommand="prepare --install-dir &quot;[INSTALLFOLDER].&quot; --ui [UILevel]"
+                  ExeCommand="prepare --install-dir &quot;[LocalAppDataFolder]Programs\Spyglass&quot; --ui [UILevel]"
                   Execute="immediate" Return="check" />
     <CustomAction Id="RollbackEnvironment" FileRef="SetupHelperExe"
                   ExeCommand="remove-environment --install-dir &quot;[INSTALLFOLDER].&quot;"
@@ -278,10 +285,10 @@
                   ExeCommand="uninstall --install-dir &quot;[INSTALLFOLDER].&quot; --ui [UILevel]"
                   Execute="deferred" Return="check" />
     <InstallExecuteSequence>
-      <!-- Before costing, because removing the old Inno install changes the files on disk. Not
-           when this version is removed, and not when a newer version removes it. -->
-      <Custom Action="PrepareSpyglass" Before="CostInitialize"
-              Condition='NOT UPGRADINGPRODUCTCODE AND NOT (REMOVE~="ALL")' />
+      <!-- Before costing, because removing the old Inno install changes the files on disk. Also
+           on uninstall, so Spyglass is stopped before Windows Installer looks for files in use; not
+           when a newer version removes this one, whose own step has already run. -->
+      <Custom Action="PrepareSpyglass" Before="CostInitialize" Condition="NOT UPGRADINGPRODUCTCODE" />
       <!-- After the feature values are written, which the steps read; also on Modify and repair. -->
       <Custom Action="RollbackEnvironment" Before="BuildEnvironment" Condition='NOT (REMOVE~="ALL")' />
       <Custom Action="BuildEnvironment" After="WriteRegistryValues" Condition='NOT (REMOVE~="ALL")' />

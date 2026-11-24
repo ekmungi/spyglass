@@ -72,6 +72,8 @@ class StandIn
             if (key.StartsWith("UV_", StringComparison.OrdinalIgnoreCase))
                 text.AppendLine("ENV:" + key + "=" + item.Value);
         }
+        foreach (string folder in new[] { "USERPROFILE", "APPDATA", "LOCALAPPDATA" })
+            text.AppendLine("HOME:" + folder + "=" + Env(folder));
         string recordFolder = Env("STANDIN_REC_DIR") != "" ? Env("STANDIN_REC_DIR") : Path.GetDirectoryName(self);
         File.WriteAllText(Path.Combine(recordFolder, stem + ".rec"), text.ToString());
         Console.WriteLine("standin " + stem + " says hi");
@@ -152,7 +154,8 @@ class World:
         self.env = {**os.environ, "SPYGLASS_DESKTOP_CONFIG": str(self.config),
                     "SPYGLASS_LAUNCHER_NO_DIALOG": "1",
                     "SPYGLASS_SETUP_FEATURES_KEY": self.registry_root + "\\Features",
-                    "SPYGLASS_SETUP_INNO_KEY": self.registry_root + "\\inno"}
+                    "SPYGLASS_SETUP_INNO_KEY": self.registry_root + "\\inno",
+                    "SPYGLASS_SETUP_RUN_KEY": self.registry_root + "\\Run"}
 
     def place(self, relative: str) -> Path:
         """Copy the stand-in to `relative` under the install folder and return its path."""
@@ -209,11 +212,14 @@ def world(programs: dict[str, Path], tmp_path: Path):
 def _record(program: Path) -> dict:
     """What a stand-in recorded: its arguments, working folder and UV_ variables."""
     lines = program.with_suffix(".rec").read_text(encoding="utf-8").splitlines()
-    result: dict = {"env": {}}
+    result: dict = {"env": {}, "home": {}}
     for line in lines:
         if line.startswith("ENV:"):
             name, _, value = line[4:].partition("=")
             result["env"][name.upper()] = value
+        elif line.startswith("HOME:"):
+            name, _, value = line[5:].partition("=")
+            result["home"][name.upper()] = value
         else:
             name, _, value = line.partition("=")
             result[name.lower()] = value
@@ -324,6 +330,7 @@ def test_bad_command_line_prints_usage_and_exits_2(world: World, args: list[str]
 def test_trailing_backslash_inside_quotes_is_kept_out_of_the_folder(world: World) -> None:
     """The MSI passes the install folder with a trailing backslash, which swallows a closing quote."""
     world.place(".venv/Scripts/pythonw.exe")
+    (world.install / ".venv-being-built").write_text("x")  # undoing a first install
     result = subprocess.run(
         f'"{world.helper}" remove-environment --install-dir "{world.install}\\"',
         capture_output=True, text=True, timeout=RUN_TIMEOUT_S, env=world.env, check=False)
@@ -511,8 +518,10 @@ def _make_environment(world: World) -> None:
 
 
 def test_remove_environment_deletes_the_environment_and_caches_only(world: World) -> None:
-    """.venv, python and every __pycache__ under src go; other files stay; missing folders are fine."""
+    """Undoing a first install: .venv, python and every __pycache__ under src go; other files stay;
+    missing folders are fine."""
     _make_environment(world)
+    (world.install / ".venv-being-built").write_text("x")  # this setup was building it
     result = world.command("remove-environment")
     assert result.returncode == 0, result.stderr
     assert not (world.install / ".venv").exists() and not (world.install / "python").exists()
@@ -538,3 +547,64 @@ def test_uninstall_stops_a_desktop_service(world: World, service_factory) -> Non
     world.set_port(service.port)
     assert world.command("uninstall").returncode == 0
     assert service.posts == ["/api/shutdown"]
+
+
+# ---- what a failed or cancelled setup leaves -------------------------------------------------
+
+def test_rolling_back_keeps_an_environment_that_was_there_before(world: World) -> None:
+    """A Modify or upgrade that fails (offline, or cancelled) must not delete a working Spyglass."""
+    _make_environment(world)
+    world.place("uv.exe")
+    assert world.command("environment", STANDIN_EXIT_UV="3").returncode == 1
+    assert world.command("remove-environment").returncode == 0
+    assert (world.install / ".venv").is_dir() and (world.install / "python").is_dir()
+
+
+def test_rolling_back_a_first_install_deletes_the_half_built_environment(world: World) -> None:
+    world.place("uv.exe")
+    assert world.command("environment", STANDIN_EXIT_UV="3").returncode == 1
+    (world.install / ".venv" / "Lib").mkdir(parents=True)  # what uv left before it failed
+    assert world.command("remove-environment").returncode == 0
+    assert not (world.install / ".venv").exists()
+    assert not any(p.name.startswith(".venv-") for p in world.install.iterdir())
+
+
+def test_a_successful_build_is_kept_by_a_later_rollback(world: World) -> None:
+    world.place("uv.exe")
+    world.place(".venv/Scripts/pythonw.exe")
+    assert world.command("environment").returncode == 0
+    assert world.command("remove-environment").returncode == 0
+    assert (world.install / ".venv" / "Scripts" / "pythonw.exe").is_file()
+
+
+def test_the_python_step_gets_the_signed_in_users_folders(world: World) -> None:
+    """Setup may run with another environment; Spyglass's code finds Claude Code and uv's tool
+    folder through these variables, so the helper sets them from the user's own folders."""
+    world.place("uv.exe")
+    pythonw = world.place(".venv/Scripts/pythonw.exe")
+    result = world.command("environment", USERPROFILE=r"C:\wrong", APPDATA=r"C:\wrong")
+    assert result.returncode == 0, result.stderr
+    home = _record(pythonw)["home"]
+    assert home["USERPROFILE"] == str(Path.home())
+    assert home["APPDATA"] == os.environ["APPDATA"] and home["LOCALAPPDATA"] == os.environ["LOCALAPPDATA"]
+
+
+def test_uninstall_without_python_still_removes_this_installs_start_up_entry(world: World) -> None:
+    import winreg
+
+    world.set_port(1)
+    world.create_key("Run", Spyglass=f'"{world.install / "Spyglass.exe"}" --background')
+    assert world.command("uninstall").returncode == 0
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, world.registry_root + r"\Run") as key:
+        with pytest.raises(FileNotFoundError):
+            winreg.QueryValueEx(key, "Spyglass")
+
+
+def test_uninstall_keeps_a_start_up_entry_of_another_copy(world: World) -> None:
+    import winreg
+
+    world.set_port(1)
+    world.create_key("Run", Spyglass=r'"D:\dev\spyglass\.venv\Scripts\pythonw.exe" -m x')
+    assert world.command("uninstall").returncode == 0
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, world.registry_root + r"\Run") as key:
+        assert winreg.QueryValueEx(key, "Spyglass")[0].startswith('"D:')
