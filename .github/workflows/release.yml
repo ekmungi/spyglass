@@ -1,9 +1,9 @@
 # Builds the Obsidian plugin and publishes a GitHub release whose assets BRAT
-# installs, then adds the Windows installer to it. Trigger: push a tag equal to the
+# installs, then adds the Windows installer (an MSI package) to it. Trigger: push a tag equal to the
 # manifest version (e.g. 0.1.0).
 #
-# Test tags: a tag such as 0.41.0-test1 (the code's version plus -testN) runs the same build
-# but publishes nothing. The installer is attached to the workflow run instead, downloadable
+# Test tags: a tag such as 0.42.0-test1 (the code's version plus -testN) runs the same build
+# but publishes nothing. The installer files are attached to the workflow run instead, downloadable
 # from the run's page for a week, so the release path can be tried without a release that
 # BRAT would install. Delete the test tag afterwards.
 name: Release plugin
@@ -78,8 +78,11 @@ jobs:
           fi
           gh release upload "$tag" manifest.json plugin/dist/main.js --clobber
 
-  # Builds the one-file Windows installer (installer/spyglass.iss) and adds it to the same
-  # release. Runs after `release`, which creates the release when it does not exist yet.
+  # Builds the Windows installer, a per-user Windows Installer package (installer/spyglass.wxs),
+  # and the setup .exe around it (installer/bundle.wxs) with WiX 5.0.2, then adds the package to
+  # the same release. Runs after `release`, which creates the release when it does not exist yet.
+  # The setup .exe is attached to the workflow run only: it is published once a test install has
+  # shown that it, too, puts Spyglass in the Start menu at once.
   installer:
     needs: release
     runs-on: windows-latest
@@ -87,6 +90,8 @@ jobs:
       # uv is pinned and checked: the installer ships this exact uv.exe to every user.
       UV_VERSION: "0.10.9"
       UV_ZIP_SHA256: "f58dc40896000229db7c52b8bdd931394040ef2ad59abd1eda841f6d70b13d7a"
+      # WiX 5 is the last release under the plain open-source licence (MS-RL).
+      WIX_VERSION: "5.0.2"
       TAG: ${{ github.ref_name }}
       VERSION: ${{ needs.release.outputs.version }}
     defaults:
@@ -101,8 +106,8 @@ jobs:
 
       - name: Check the version is digits
         run: |
-          # The version becomes the installer's version number, which Windows needs as digits.
-          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$env:VERSION' from tag '$env:TAG' is not a version such as 0.41.0" }
+          # The version becomes the package's version number, which Windows needs as digits.
+          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$env:VERSION' from tag '$env:TAG' is not a version such as 0.42.0" }
 
       - name: Build the interface
         working-directory: frontend
@@ -122,41 +127,55 @@ jobs:
           $uv = Get-ChildItem -Path $unpacked -Recurse -Filter uv.exe | Select-Object -First 1
           Copy-Item -Path $uv.FullName -Destination installer\uv.exe
 
-      - name: Build Spyglass.exe
+      - name: Build Spyglass.exe and the setup helper
         run: |
-          # The launcher every starter opens, compiled with the .NET Framework 4.x compiler that
-          # Windows includes. The script stops with a message naming the compiler's path when the
-          # compiler is missing, and spyglass.iss will not compile without the launcher.
+          # Both are compiled with the .NET Framework 4.x compiler that Windows includes; each script
+          # stops with a message naming the compiler's path when the compiler is missing.
           & installer\build_launcher.ps1 -Version $env:VERSION
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Install Inno Setup when it is missing
-        run: |
-          $default = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Get-Command iscc -ErrorAction SilentlyContinue) -and -not (Test-Path $default)) {
-            choco install innosetup -y --no-progress
-          }
-
-      - name: Build the installer
-        run: |
-          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
-          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
-          & $iscc "/DAppVersion=$env:VERSION" installer\spyglass.iss
+          & installer\build_setup_helper.ps1 -Version $env:VERSION
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Upload the installer to the release
+      - name: Install WiX and its extensions
+        run: |
+          dotnet tool install --global wix --version $env:WIX_VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          $wix = Join-Path $env:USERPROFILE ".dotnet\tools\wix.exe"
+          foreach ($extension in "WixToolset.UI.wixext", "WixToolset.Util.wixext", "WixToolset.Bal.wixext") {
+            & $wix extension add -g "$extension/$env:WIX_VERSION"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Build the MSI and the setup .exe
+        run: |
+          & installer\build_msi.ps1 -Version $env:VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem installer\Output | Select-Object Name, Length
+
+      - name: Upload the MSI to the release
         if: needs.release.outputs.test != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload $env:TAG "installer\Output\Spyglass-Setup-$env:VERSION.exe" --clobber
+          gh release upload $env:TAG "installer\Output\Spyglass-$env:VERSION.msi" --clobber
 
-      # A test tag publishes nothing: the installer is attached to this workflow run instead.
-      - name: Attach the installer to the workflow run (test tags)
+      # A test tag publishes nothing: the MSI is attached to this workflow run instead.
+      - name: Attach the MSI to the workflow run (test tags)
         if: needs.release.outputs.test == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: Spyglass-Setup-${{ needs.release.outputs.version }}-${{ github.ref_name }}
+          name: Spyglass-${{ needs.release.outputs.version }}-${{ github.ref_name }}-msi
+          path: installer/Output/Spyglass-${{ needs.release.outputs.version }}.msi
+          if-no-files-found: error
+          retention-days: 7
+
+      # The setup .exe goes to the run for every tag, never to the release, until it has passed
+      # the Start-menu test.
+      - name: Attach the setup .exe to the workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: Spyglass-Setup-${{ needs.release.outputs.version }}-${{ github.ref_name }}-exe
           path: installer/Output/Spyglass-Setup-${{ needs.release.outputs.version }}.exe
           if-no-files-found: error
           retention-days: 7

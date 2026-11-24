@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The per-user Windows Installer (MSI) package for Spyglass, built with WiX 5.0.2 by
+     installer\build_msi.ps1 together with installer\obj\files.wxs, which installer\harvest.py
+     writes for each build:
+       wix build -arch x64 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -d Version=0.42.0
+                 -o installer\Output\Spyglass-0.42.0.msi installer\spyglass.wxs installer\obj\files.wxs
+
+     Why an MSI: Windows lists an app in the Start menu and in Settings > Installed apps at once
+     when its Start-menu entry is made by Windows Installer and carries an app ID; entries made by
+     the old Inno Setup installer never appeared. It installs for the current user only, so no
+     step needs administrator rights.
+
+     How setup runs, in order:
+       1. PrepareSpyglass (the helper, from the package, before costing): stops a Spyglass the
+          app started, refuses to go on while a program still runs from the install folder, and
+          removes a Spyglass that the old Inno Setup installer put on this PC (data kept).
+       2. Windows Installer copies the files, makes the links and writes one registry value per
+          ticked part under Software\ekmungi\Spyglass\Features.
+       3. BuildEnvironment (the installed helper): uv builds Python with the ticked library
+          groups, then Spyglass's own Python applies the other choices. A uv failure stops setup
+          and RollbackEnvironment deletes the half-built environment.
+     Uninstall runs UninstallSpyglass first, which undoes what setup added and deletes the Python
+     environment; the data folder and desktop.json always stay. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Spyglass" Manufacturer="ekmungi" Version="$(var.Version)" Language="1033"
+           UpgradeCode="2B3EE94C-873E-4560-9FAC-5A44D08C7F29" Scope="perUser">
+    <!-- A newer version removes the older one first, so no file of it lingers. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer Spyglass is already installed. Uninstall it first to install this older version." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="spyglass.ico" SourceFile="installer\spyglass.ico" />
+    <Property Id="ARPPRODUCTICON" Value="spyglass.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ekmungi/spyglass" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/ekmungi/spyglass" />
+
+    <!-- ===== What setup looks for before it shows the choices ===== -->
+
+    <!-- Start with Windows stays ticked on an upgrade when the start-up entry exists. -->
+    <Property Id="AUTOSTART_FOUND">
+      <RegistrySearch Id="AutostartEntry" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                      Name="Spyglass" Type="raw" />
+    </Property>
+    <!-- Claude Code's native installer and npm's global folder: the connector is ticked when
+         either holds the claude command. -->
+    <Property Id="CLAUDE_FOUND">
+      <DirectorySearch Id="ClaudeNative" Path="[%USERPROFILE]\.local\bin" Depth="0">
+        <FileSearch Id="ClaudeNativeExe" Name="claude.exe" />
+      </DirectorySearch>
+    </Property>
+    <Property Id="CLAUDE_NPM_FOUND">
+      <DirectorySearch Id="ClaudeNpm" Path="[AppDataFolder]npm" Depth="0">
+        <FileSearch Id="ClaudeNpmCmd" Name="claude.cmd" />
+      </DirectorySearch>
+    </Property>
+    <!-- The Chromium browsers, where their own installers put them (all users, then this user);
+         the same places Spyglass's Settings page looks. -->
+    <Property Id="CHROME_FOUND">
+      <DirectorySearch Id="ChromeAll" Path="[ProgramFiles64Folder]Google\Chrome\Application" Depth="0">
+        <FileSearch Id="ChromeAllExe" Name="chrome.exe" />
+      </DirectorySearch>
+      <DirectorySearch Id="ChromeAll32" Path="[ProgramFilesFolder]Google\Chrome\Application" Depth="0">
+        <FileSearch Id="ChromeAll32Exe" Name="chrome.exe" />
+      </DirectorySearch>
+      <DirectorySearch Id="ChromeUser" Path="[LocalAppDataFolder]Google\Chrome\Application" Depth="0">
+        <FileSearch Id="ChromeUserExe" Name="chrome.exe" />
+      </DirectorySearch>
+    </Property>
+    <Property Id="EDGE_FOUND">
+      <DirectorySearch Id="EdgeAll32" Path="[ProgramFilesFolder]Microsoft\Edge\Application" Depth="0">
+        <FileSearch Id="EdgeAll32Exe" Name="msedge.exe" />
+      </DirectorySearch>
+      <DirectorySearch Id="EdgeAll" Path="[ProgramFiles64Folder]Microsoft\Edge\Application" Depth="0">
+        <FileSearch Id="EdgeAllExe" Name="msedge.exe" />
+      </DirectorySearch>
+    </Property>
+    <Property Id="BRAVE_FOUND">
+      <DirectorySearch Id="BraveAll" Path="[ProgramFiles64Folder]BraveSoftware\Brave-Browser\Application" Depth="0">
+        <FileSearch Id="BraveAllExe" Name="brave.exe" />
+      </DirectorySearch>
+      <DirectorySearch Id="BraveUser" Path="[LocalAppDataFolder]BraveSoftware\Brave-Browser\Application" Depth="0">
+        <FileSearch Id="BraveUserExe" Name="brave.exe" />
+      </DirectorySearch>
+    </Property>
+    <Property Id="VIVALDI_FOUND">
+      <DirectorySearch Id="VivaldiUser" Path="[LocalAppDataFolder]Vivaldi\Application" Depth="0">
+        <FileSearch Id="VivaldiUserExe" Name="vivaldi.exe" />
+      </DirectorySearch>
+      <DirectorySearch Id="VivaldiAll" Path="[ProgramFiles64Folder]Vivaldi\Application" Depth="0">
+        <FileSearch Id="VivaldiAllExe" Name="vivaldi.exe" />
+      </DirectorySearch>
+    </Property>
+    <Property Id="OPERA_FOUND">
+      <DirectorySearch Id="OperaUser" Path="[LocalAppDataFolder]Programs\Opera" Depth="0">
+        <FileSearch Id="OperaUserExe" Name="opera.exe" />
+      </DirectorySearch>
+      <DirectorySearch Id="OperaAll" Path="[ProgramFiles64Folder]Opera" Depth="0">
+        <FileSearch Id="OperaAllExe" Name="opera.exe" />
+      </DirectorySearch>
+    </Property>
+
+    <!-- ===== Folders ===== -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsDir" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Spyglass">
+          <!-- The tray reads its icon from here. -->
+          <Directory Id="InstallerDir" Name="installer" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- ===== The program itself ===== -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="ProgramRoot" Guid="AF9DD790-03C0-4ABA-9116-9D68956CE884">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass" Name="InstallFolder" Type="string"
+                       Value="[INSTALLFOLDER]" KeyPath="yes" />
+        <File Id="SpyglassExe" Source="installer\Spyglass.exe" />
+        <File Id="SetupHelperExe" Source="installer\SpyglassSetup.exe" />
+        <File Id="UvExe" Source="installer\uv.exe" />
+        <File Id="PyprojectToml" Source="pyproject.toml" />
+        <File Id="UvLock" Source="uv.lock" />
+        <File Id="ReadmeMd" Source="README.md" />
+        <File Id="LicenseFile" Source="LICENSE" />
+        <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+        <RemoveFolder Id="RemoveProgramsDir" Directory="ProgramsDir" On="uninstall" />
+        <!-- Every value Spyglass's setup writes lives under this key. -->
+        <RemoveRegistryKey Root="HKCU" Key="Software\ekmungi\Spyglass" Action="removeOnUninstall" />
+      </Component>
+    </DirectoryRef>
+    <DirectoryRef Id="InstallerDir">
+      <Component Id="ProgramIcon" Guid="079779A8-28C2-417A-9905-3B40DC0A5821">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass" Name="TrayIcon" Type="integer"
+                       Value="1" KeyPath="yes" />
+        <File Id="TrayIcon" Source="installer\spyglass.ico" />
+        <RemoveFolder Id="RemoveInstallerDir" On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- The one Start-menu entry, made by Windows Installer and carrying the app ID: both are what
+         make Windows list Spyglass at once. -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="1BDCEC30-0A13-43C6-984D-9D9B69C4D8C7">
+        <Shortcut Id="SpyglassStartMenu" Name="Spyglass" Description="Open Spyglass"
+                  Target="[INSTALLFOLDER]Spyglass.exe" WorkingDirectory="INSTALLFOLDER" Icon="spyglass.ico">
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="ekmungi.Spyglass" />
+        </Shortcut>
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass" Name="StartMenuShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="00231C16-2E34-42EE-B1C1-0FA04ECA3643">
+        <Shortcut Id="SpyglassDesktop" Name="Spyglass" Description="Open Spyglass"
+                  Target="[INSTALLFOLDER]Spyglass.exe" WorkingDirectory="INSTALLFOLDER" Icon="spyglass.ico">
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="ekmungi.Spyglass" />
+        </Shortcut>
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass" Name="DesktopShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- ===== One registry value per ticked part, which setup's own steps read ===== -->
+    <ComponentGroup Id="FeatureValues" Directory="INSTALLFOLDER">
+      <Component Id="FeatureAutostart" Guid="66E4C462-E9B0-4860-ACA1-3E77D3E9C46F">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="autostart" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="FeaturePdf" Guid="77193CE0-897F-45FF-A242-C9BFFA91384D">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="pdf" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="FeatureLocalAi" Guid="3A31DC80-4094-4154-BF27-E32711565BF5">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="local-ai" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="FeatureYouTube" Guid="54AFA1EF-D071-47AA-B427-69A3E6310B1F">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="youtube" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="FeatureConnector" Guid="4F862872-6176-44E9-9827-85594C158566">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="connector" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="FeatureChrome" Guid="8995E7C6-5FB1-47BD-88C2-6107C1E047B5">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="browser.chrome" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="FeatureEdge" Guid="58B72722-3CB7-4128-AECF-0FD3B8A7CC6B">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="browser.edge" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="FeatureBrave" Guid="A8FA7C33-4E41-4DCA-91B3-9E4194A69FBD">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="browser.brave" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="FeatureVivaldi" Guid="74716A08-BC8E-4454-8859-6157005081B4">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="browser.vivaldi" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="FeatureOpera" Guid="341E07BC-EF36-4546-A496-AA3ACA0A0722">
+        <RegistryValue Root="HKCU" Key="Software\ekmungi\Spyglass\Features" Name="browser.opera" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- ===== The choices. The install level is 1: Level 1 is ticked by default, 1000 is not,
+         and 0 hides a choice. ===== -->
+    <Feature Id="Spyglass" Title="Spyglass" Description="The Spyglass program. It is always installed."
+             Level="1" AllowAbsent="no" AllowAdvertise="no" Display="expand">
+      <ComponentGroupRef Id="ProgramFiles" />
+      <ComponentRef Id="ProgramRoot" />
+      <ComponentRef Id="ProgramIcon" />
+      <ComponentRef Id="StartMenuShortcut" />
+
+      <Feature Id="Autostart" Title="Start with Windows"
+               Description="Spyglass starts when you sign in and waits in the notification area. You can change this later in Settings."
+               Level="1000" AllowAdvertise="no">
+        <Level Value="1" Condition="AUTOSTART_FOUND" />
+        <ComponentRef Id="FeatureAutostart" />
+      </Feature>
+      <Feature Id="DesktopLink" Title="Desktop shortcut" Description="A Spyglass shortcut on the desktop."
+               Level="1000" AllowAdvertise="no">
+        <ComponentRef Id="DesktopShortcut" />
+      </Feature>
+      <Feature Id="PdfReading" Title="PDF reading"
+               Description="Reads PDFs with PyMuPDF, which handles complex layouts. Without it, Spyglass reads PDFs in a basic way."
+               Level="1" AllowAdvertise="no">
+        <ComponentRef Id="FeaturePdf" />
+      </Feature>
+      <Feature Id="LocalAi" Title="Local AI model"
+               Description="Search by meaning and similar items, with a model of about 128 MB that runs on this PC. Without it, search by words still works."
+               Level="1" AllowAdvertise="no">
+        <ComponentRef Id="FeatureLocalAi" />
+      </Feature>
+      <Feature Id="YouTube" Title="YouTube transcripts"
+               Description="Installs the separate yt-transcribe engine, which reads the captions of YouTube videos."
+               Level="1000" AllowAdvertise="no">
+        <ComponentRef Id="FeatureYouTube" />
+      </Feature>
+      <Feature Id="ClaudeConnector" Title="Claude Code connector"
+               Description="Adds Spyglass to Claude Code's connectors, so Claude Code can use Spyglass's tools. A connector named spyglass that points elsewhere is never replaced."
+               Level="1000" AllowAdvertise="no">
+        <Level Value="1" Condition="CLAUDE_FOUND OR CLAUDE_NPM_FOUND" />
+        <ComponentRef Id="FeatureConnector" />
+      </Feature>
+      <Feature Id="BrowserExtension" Title="Browser extension setup"
+               Description="After setup, Spyglass shows how to add its extension to each browser you tick, without any store."
+               Level="1" AllowAdvertise="no" Display="expand">
+        <Level Value="0" Condition="NOT (CHROME_FOUND OR EDGE_FOUND OR BRAVE_FOUND OR VIVALDI_FOUND OR OPERA_FOUND)" />
+        <Feature Id="BrowserChrome" Title="Google Chrome" Level="1000" AllowAdvertise="no">
+          <Level Value="0" Condition="NOT CHROME_FOUND" />
+          <ComponentRef Id="FeatureChrome" />
+        </Feature>
+        <Feature Id="BrowserEdge" Title="Microsoft Edge" Level="1000" AllowAdvertise="no">
+          <Level Value="0" Condition="NOT EDGE_FOUND" />
+          <ComponentRef Id="FeatureEdge" />
+        </Feature>
+        <Feature Id="BrowserBrave" Title="Brave" Level="1000" AllowAdvertise="no">
+          <Level Value="0" Condition="NOT BRAVE_FOUND" />
+          <ComponentRef Id="FeatureBrave" />
+        </Feature>
+        <Feature Id="BrowserVivaldi" Title="Vivaldi" Level="1000" AllowAdvertise="no">
+          <Level Value="0" Condition="NOT VIVALDI_FOUND" />
+          <ComponentRef Id="FeatureVivaldi" />
+        </Feature>
+        <Feature Id="BrowserOpera" Title="Opera" Level="1000" AllowAdvertise="no">
+          <Level Value="0" Condition="NOT OPERA_FOUND" />
+          <ComponentRef Id="FeatureOpera" />
+        </Feature>
+      </Feature>
+    </Feature>
+
+    <!-- ===== The setup steps that are programs (installer\setup) ===== -->
+    <!-- The helper as part of the package, for the step before any file exists. -->
+    <Binary Id="SetupHelperBinary" SourceFile="installer\SpyglassSetup.exe" />
+    <!-- Each folder argument ends in "." because a backslash before the closing quote would
+         escape the quote. -->
+    <CustomAction Id="PrepareSpyglass" BinaryRef="SetupHelperBinary"
+                  ExeCommand="prepare --install-dir &quot;[INSTALLFOLDER].&quot; --ui [UILevel]"
+                  Execute="immediate" Return="check" />
+    <CustomAction Id="RollbackEnvironment" FileRef="SetupHelperExe"
+                  ExeCommand="remove-environment --install-dir &quot;[INSTALLFOLDER].&quot;"
+                  Execute="rollback" Return="ignore" />
+    <CustomAction Id="BuildEnvironment" FileRef="SetupHelperExe"
+                  ExeCommand="environment --install-dir &quot;[INSTALLFOLDER].&quot; --ui [UILevel]"
+                  Execute="deferred" Return="check" />
+    <CustomAction Id="UninstallSpyglass" FileRef="SetupHelperExe"
+                  ExeCommand="uninstall --install-dir &quot;[INSTALLFOLDER].&quot; --ui [UILevel]"
+                  Execute="deferred" Return="check" />
+    <InstallExecuteSequence>
+      <!-- Before costing, because removing the old Inno install changes the files on disk. Not
+           when this version is removed, and not when a newer version removes it. -->
+      <Custom Action="PrepareSpyglass" Before="CostInitialize"
+              Condition='NOT UPGRADINGPRODUCTCODE AND NOT (REMOVE~="ALL")' />
+      <!-- After the feature values are written, which the steps read; also on Modify and repair. -->
+      <Custom Action="RollbackEnvironment" Before="BuildEnvironment" Condition='NOT (REMOVE~="ALL")' />
+      <Custom Action="BuildEnvironment" After="WriteRegistryValues" Condition='NOT (REMOVE~="ALL")' />
+      <!-- A newer version that replaces this one keeps the environment, the connector and the
+           engine, and builds on them. -->
+      <Custom Action="UninstallSpyglass" Before="RemoveFiles"
+              Condition='REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE' />
+    </InstallExecuteSequence>
+
+    <!-- ===== Pages: welcome, licence, the choices, install, and "Open Spyglass now" ===== -->
+    <WixVariable Id="WixUILicenseRtf" Value="installer\license.rtf" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open Spyglass now" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WixShellExecTarget" Value="[#SpyglassExe]" />
+    <CustomAction Id="LaunchSpyglass" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORTNAME)"
+                  DllEntry="WixShellExec" Impersonate="yes" />
+    <UI>
+      <ui:WixUI Id="WixUI_FeatureTree" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchSpyglass"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+  </Package>
+</Wix>

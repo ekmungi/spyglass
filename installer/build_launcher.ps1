@@ -1,11 +1,11 @@
-# Compile Spyglass.exe, the launcher the installer puts at the root of the install folder, from
+# Compile Spyglass.exe, the launcher setup puts at the root of the install folder, from
 # installer\launcher\Spyglass.cs. Uses the C# compiler that comes with the .NET Framework 4.x, which
 # Windows 10 and 11 include, so no build tool has to be installed. The local build and the release
 # workflow both run this script:  installer\build_launcher.ps1 -Version 0.41.1
 param(
     # The release version, digits only (x.y.z); it becomes the program's file and product version.
     [Parameter(Mandatory = $true)][string]$Version,
-    # Where to write the program; by default installer\Spyglass.exe, where spyglass.iss looks.
+    # Where to write the program; by default installer\Spyglass.exe, where spyglass.wxs looks.
     [string]$OutFile = "",
     # The compiler; by default where the .NET Framework 4.x puts its 64-bit compiler.
     [string]$CscPath = ""
