@@ -17,9 +17,13 @@ from spyglass_service.yt_discovery import discover_yt_transcribe
 
 # The engine's package name, which `uv tool uninstall` takes.
 ENGINE_PACKAGE = "yt-transcribe"
-# Where uv fetches it: the main branch's archive, whose server folder holds the package.
+# The engine's commit setup installs (its version 0.14.0, 11 October 2026). Pinned, so every
+# install gets code that was reviewed for this release and not whatever the branch holds that day;
+# move it forward deliberately with a Spyglass release.
+ENGINE_COMMIT = "ebc0ed330f281a21edc3c8f8a41add051f786526"
+# Where uv fetches it: that commit's archive, whose server folder holds the package.
 ENGINE_SOURCE = (f"{ENGINE_PACKAGE} @ https://github.com/ekmungi/youtube-transcribe/archive/"
-                 "refs/heads/main.zip#subdirectory=server")
+                 f"{ENGINE_COMMIT}.zip#subdirectory=server")
 
 
 def _tool_environment(environ: Mapping[str, str]) -> dict[str, str]:

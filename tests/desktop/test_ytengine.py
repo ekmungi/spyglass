@@ -1,5 +1,6 @@
 """The yt-transcribe engine that setup installs with the bundled uv, and removes only if it added it."""
 
+import re
 from pathlib import Path
 
 from spyglass_service.desktop.ytengine import ENGINE_SOURCE, install_engine, remove_engine
@@ -26,6 +27,12 @@ def test_installs_the_engine_from_its_archive_with_the_bundled_uv(tmp_path: Path
     assert "#subdirectory=server" in ENGINE_SOURCE
     # Setup's own uv settings point at Spyglass's environment; the tool must not inherit them.
     assert env == {"PATH": "x"}
+
+
+def test_the_engine_source_is_pinned_to_one_commit() -> None:
+    """A branch archive would install whatever the branch holds on the day of the install."""
+    assert re.search(r"/archive/[0-9a-f]{40}\.zip#", ENGINE_SOURCE)
+    assert "refs/heads" not in ENGINE_SOURCE
 
 
 def test_an_engine_that_is_already_there_is_left_alone(tmp_path: Path) -> None:
