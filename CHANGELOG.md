@@ -7,6 +7,44 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/); this pro
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-11-24
+
+Windows setup becomes a Windows Installer package, so Spyglass appears in the Start menu and in
+Installed apps at once, and setup asks which parts to install.
+
+### Added
+- **A per-user MSI package.** `Spyglass-<version>.msi`, built with WiX 5.0.2, replaces the Inno
+  Setup installer. It installs for your Windows account only, into the same folder as before, and
+  needs no administrator rights. Its Start-menu entry is made by Windows Installer and carries the
+  app ID `ekmungi.Spyglass`, which makes Windows list Spyglass in Start and in Settings > Installed
+  apps right away; the entries the old installer made never appeared there. Installing it over
+  0.41.1 removes the old install first and keeps the data folder and settings.
+- **Choices in setup.** Start with Windows (ticked only when it was on), a desktop shortcut, PDF
+  reading, the local AI model, YouTube transcripts (the separate yt-transcribe engine, installed with
+  the bundled uv from one pinned commit), the Claude Code connector (ticked when Claude Code is
+  found; a connector named spyglass that points elsewhere is never replaced) and one
+  browser-extension choice for each Chromium browser setup finds, Opera included. Modify in
+  Installed apps adds and removes parts later. Uninstall removes what setup added and keeps the data
+  folder.
+- **A first-start page.** A fresh install opens on a page that suggests the data folder and asks for
+  the Obsidian vault; choosing another folder restarts Spyglass on it. When browsers were ticked, the
+  page then shows the Load unpacked steps with a button per browser.
+- **Optional parts in Settings.** PDF reading (PyMuPDF) and the local AI model (fastembed) are now
+  optional. Without PyMuPDF, PDFs are read with pypdf; without the model, search by meaning and
+  similar items are off and search by words still works. A Settings section names each missing part
+  and how to add it.
+- **A setup .exe.** The release workflow also builds `Spyglass-Setup-<version>.exe` around the
+  package and attaches it to the workflow run. It is published once a test install shows that it,
+  too, puts Spyglass in the Start menu at once.
+
+### Changed
+- Setup's log is now `%LOCALAPPDATA%\Spyglass\install.log`, beside `desktop.json`.
+- Running setup again repairs a `desktop.json` the app cannot read; the old file is kept as
+  `desktop.json.bad`.
+
+### Removed
+- The Inno Setup script and its build step.
+
 ## [0.41.1] - 2026-11-23
 
 The installed Spyglass gets a program of its own, and two small fixes from the first test of the

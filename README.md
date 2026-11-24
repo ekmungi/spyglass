@@ -63,13 +63,14 @@ The [user guide](docs/user-guide.md) describes the daily routine in plain langua
   computer and listens only on `127.0.0.1`, port 7777.
 - A built-in scheduler collects, judges, composes the brief, searches the watch list and makes a
   nightly backup.
-- Everything is stored in one SQLite database in a data folder: the one chosen in the installer
-  (by default `%LOCALAPPDATA%\Spyglass\data`), or `.spyglass` in your home folder when you run
-  the service from the repository.
+- Everything is stored in one SQLite database in a data folder: the one chosen when the installed
+  app first starts (by default `%LOCALAPPDATA%\Spyglass\data`), or `.spyglass` in your home folder
+  when you run the service from the repository.
 - The interface is a React application that the service serves. You open it in a browser window.
 - The AI engines are services you choose: a cloud provider with your own key, a model server on
   your computer, or a command-line AI tool you already have installed.
-- A small embedding model runs on your computer to find related items. It is downloaded once.
+- A small embedding model runs on your computer to find related items. It is downloaded once. In
+  the installed app it is an optional part of setup.
 - Pages are fetched by the service itself, through a guarded connection that accepts only public
   addresses.
 
@@ -86,7 +87,7 @@ flowchart LR
 ## Requirements
 
 The installer needs Windows 10 or 11 and an internet connection while it runs. It brings its own
-Python, so no developer tools are needed.
+Python, so no developer tools are needed, and it needs no administrator rights.
 
 A developer install from the source code needs the following:
 
@@ -104,27 +105,54 @@ work, but no item is judged. See [Choosing an AI engine](#choosing-an-ai-engine)
 
 ### With the installer (Windows)
 
-1. Download `Spyglass-Setup-<version>.exe` from the
-   [latest release](https://github.com/ekmungi/spyglass/releases/latest) and run it. It installs for
-   your user only and needs no administrator rights. The installer is not signed, so Windows
-   SmartScreen may warn about it; choose **More info**, then **Run anyway**.
-2. Choose the data folder. The default, `%LOCALAPPDATA%\Spyglass\data`, is outside any cloud-synced
-   folder, which keeps the database safe. If you use Obsidian, choose your vault on the next page;
-   you can also set it later in **Settings**. Tick **Start with Windows** if Spyglass should start
-   when you sign in.
-3. Setup downloads Python and the libraries Spyglass needs, which takes a few minutes, and writes a
-   log to `install.log` in the install folder.
-4. Spyglass opens in your browser. It keeps running in the notification area after you close the
-   tab; Windows 11 may hide its icon behind the ^ arrow. Open it again from the Start menu or with a
-   click on the icon, and quit it from the icon's menu or from **Settings**. The program itself is
-   `Spyglass.exe` in the install folder (`%LOCALAPPDATA%\Programs\Spyglass` by default); Task
-   Manager shows it as Spyglass, with the Python processes that do the work under it.
-5. Set up Spyglass in the app, as described [below](#set-up-spyglass-in-the-app).
+1. Download `Spyglass-<version>.msi` from the
+   [latest release](https://github.com/ekmungi/spyglass/releases/latest) and open it. It is a
+   Windows Installer package that installs for your user only, into
+   `%LOCALAPPDATA%\Programs\Spyglass`, and needs no administrator rights. It is not signed, so
+   Windows SmartScreen may warn about it; choose **More info**, then **Run anyway**.
+2. Choose what to install. Spyglass itself is always installed. The other choices are:
+   - **Start with Windows**: Spyglass starts when you sign in. It is ticked only when it was on
+     before.
+   - **Desktop shortcut**.
+   - **PDF reading**: reads PDFs with PyMuPDF. Without it, PDFs are read in a basic way.
+   - **Local AI model**: search by meaning and similar items, with a model of about 128 MB that runs
+     on your computer. Without it, search by words still works.
+   - **YouTube transcripts**: installs the separate
+     [yt-transcribe](https://github.com/ekmungi/youtube-transcribe) engine, which reads the captions
+     of YouTube videos.
+   - **Claude Code connector**: adds Spyglass to Claude Code's connectors. It is ticked when setup
+     finds Claude Code, and it never replaces a connector named spyglass that points elsewhere.
+   - **Browser extension setup**: one choice for each Chromium browser setup finds (Chrome, Edge,
+     Brave, Vivaldi, Opera). Spyglass then shows how to add its extension to each one, without any
+     store.
+3. Setup downloads Python and the libraries you chose, which takes a few minutes, and writes a log to
+   `%LOCALAPPDATA%\Spyglass\install.log`. If that fails, setup stops, undoes what it did and names
+   the log.
+4. Spyglass is in the Start menu and in **Settings > Apps > Installed apps** at once. Leave **Open
+   Spyglass now** ticked on the last page. On a fresh install, Spyglass first asks where to keep its
+   data and which Obsidian vault to use. The suggested folder, `%LOCALAPPDATA%\Spyglass\data`, is
+   outside any cloud-synced folder, which keeps the database safe. The vault is optional; you can
+   also set it later in **Settings**. If you choose another data folder, Spyglass starts again on
+   it. If you ticked browsers, the page then shows how to add the extension.
+5. Spyglass keeps running in the notification area after you close the tab; Windows 11 may hide its
+   icon behind the ^ arrow. Open it again from the Start menu or with a click on the icon, and quit
+   it from the icon's menu or from **Settings**. The program itself is `Spyglass.exe` in the install
+   folder; Task Manager shows it as Spyglass, with the Python processes that do the work under it.
+6. Set up Spyglass in the app, as described [below](#set-up-spyglass-in-the-app).
 
-To upgrade, run the newer installer; it keeps your data folder. To uninstall, use **Settings >
-Apps** in Windows. The data folder and the settings file `%LOCALAPPDATA%\Spyglass\desktop.json`
+To change what is installed, choose Spyglass in **Settings > Apps > Installed apps** in Windows, then
+**Modify**, or open the `.msi` again. Setup closes a running Spyglass first; open it again
+afterwards. **Settings** in Spyglass lists the parts that are not installed.
+
+To upgrade, open the newer `.msi`; it keeps your data folder, your settings and your choices. An
+upgrade from Spyglass 0.41.1 or older, which used another installer, removes the old install first
+and keeps its data folder and settings.
+
+To uninstall, use **Settings > Apps > Installed apps** in Windows. It removes the program, its Python,
+the Start-menu entry, the start-up entry, and the Claude Code connector and yt-transcribe engine if
+setup added them. The data folder and the settings file `%LOCALAPPDATA%\Spyglass\desktop.json`
 stay, so a later install picks them up again. A data folder from Spyglass 0.32 or older cannot be
-opened by this version, and the installer refuses it without changing it.
+opened by this version, and Spyglass refuses it without changing it.
 
 Only one Spyglass can run at a time. If you also start one from the source code, or from the
 Obsidian plugin's Open dashboard command, stop it before you open the installed Spyglass, and switch
@@ -177,7 +205,7 @@ on the plugin's **Connect only** setting.
 **On Windows**, `scripts\spyglass.cmd` starts the service if it is not running and opens it in an
 app-style window of Edge or Chrome. You can pin it to the taskbar. To start the service at every
 sign-in, run the following command. Add `-Uninstall` to remove the task again. Do not use it next
-to the installed Spyglass, whose installer removes this task.
+to the installed Spyglass, whose setup removes this task.
 
 ```
 powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1
@@ -295,9 +323,9 @@ covers the same switches from the settings page.
 
 Every setting can be set as an environment variable or in a `.env` file, which the service reads
 when it starts. The installed app reads the `.env` file in its data folder; there the data folder
-and the port always come from the installer's choices, and so does the vault when one was chosen
-in the installer. A `.env` file cannot change those, but it can set a vault when none was chosen
-in the installer. A service run from the repository reads the `.env` file in the folder it is
+and the port always come from `%LOCALAPPDATA%\Spyglass\desktop.json`, and so does the vault when
+one was chosen on the first-start page. A `.env` file cannot change those, but it can set a vault
+when none was chosen there. A service run from the repository reads the `.env` file in the folder it is
 started from, normally the repository folder. If you move from a 0.40.1 setup run from the
 repository to the installed app, copy the keys from your `.env` file into a `.env` file in the new
 data folder. Many settings can also be changed in **Settings**, and those changes are kept in the
@@ -337,7 +365,7 @@ legacy plugin, and you can delete them if you do not use either.
 
 ## Data and backups
 
-- All data lives in the data folder: the one chosen in the installer (by default
+- All data lives in the data folder: the one chosen when the installed app first starts (by default
   `%LOCALAPPDATA%\Spyglass\data`), or for a developer install `.spyglass` in your home folder unless
   `SPYGLASS_DATA_DIR` says otherwise. Keep it outside a cloud-synced folder, because a live SQLite
   database in a synced folder can be corrupted. The logs, `service.log` and `service.err.log`, are
@@ -347,8 +375,10 @@ legacy plugin, and you can delete them if you do not use either.
   seven in total. A computer that was asleep at 03:00 takes the backup soon after it wakes.
 - A weekly clean-up removes the stored text of old items you never opened, saved or sent in, after
   120 days by default. The items and their judgements are kept.
-- To move the data of the installed app, quit Spyglass, move the data folder's contents to the new
-  folder, then run the installer again and choose the new folder. `SPYGLASS_DATA_DIR` applies only
+- To move the data of the installed app, quit Spyglass and move the data folder's contents to the
+  new folder. Then open `%LOCALAPPDATA%\Spyglass\desktop.json` in a text editor, set `data_dir` to
+  `null` and save it; the next start asks for the folder again, and you choose the new one.
+  `SPYGLASS_DATA_DIR` applies only
   to a service run from the repository: stop it, move the folder and set the variable to the new
   place.
   To delete everything, stop the service and delete the folder. Keys you typed into **Settings**
@@ -383,8 +413,9 @@ setting anything up.
   and Find papers.
 - `frontend/` is the React interface. The current app is in `frontend/src/radar/`.
 - `browser-extension/` is the Send to Spyglass extension.
-- `installer/` holds the Windows installer script, its icon and the `Spyglass.exe` launcher
-  (`installer/launcher/`); its README says how to build them.
+- `installer/` holds the Windows Installer package source (`spyglass.wxs`, built with WiX), the
+  `Spyglass.exe` launcher (`installer/launcher/`), the setup helper (`installer/setup/`) and the
+  icon; its README says how to build them.
 - `tests/` holds the Python tests.
 - `docs/` holds the user guide and the privacy and safety description.
 - `plugin/` and `skills/` hold the legacy Obsidian plugin and its Claude skills.
@@ -398,7 +429,8 @@ setting anything up.
   the browser extension, FDA device decisions, the usage record and the in-app Help page are new.
   The [changelog](CHANGELOG.md) lists every change.
 - Spyglass is built and tested on Windows 11 only. Other systems are untested.
-- The installer is for Windows only, and it is not signed.
+- The installer is for Windows only, and it is not signed. Browser extension setup covers Chromium
+  browsers only; Firefox is not supported yet.
 - Some parts are tested only against simulated services: the live Slack connection, Slack file
   capture and the Codex command.
 - The Obsidian plugin and its skills are legacy. They still work, but new work goes into the

@@ -16,6 +16,12 @@ It runs on your own computer. To use it, open a browser and go to `http://localh
 double-click `scripts\spyglass.cmd` in the Spyglass folder, which starts the program if needed and
 opens it in its own window.
 
+If you installed Spyglass with its Windows installer, open it from the Start menu instead. The
+first time, it asks where to keep its data and which Obsidian vault to use. Setup also asked which
+parts to install, such as PDF reading, the local AI model and YouTube transcripts. To add or remove
+one later, choose Spyglass in **Settings > Apps > Installed apps** in Windows, then **Modify**.
+Spyglass's own **Settings** page lists the parts that are not installed and what each one changes.
+
 ## 2. The daily routine
 
 1. Open Spyglass. You land on **Today**.
@@ -263,7 +269,9 @@ instead of a broken image.
 
 ## 9. Starting with Windows
 
-Spyglass has to be running to collect and to compose the brief. To start it automatically every
+Spyglass has to be running to collect and to compose the brief. In the installed app, tick **Start
+with Windows** in setup, or switch it on in **Settings** under **Spyglass on this computer**. The
+steps below are for a copy run from the Spyglass folder. To start that copy automatically every
 time you sign in to Windows:
 
 1. Open the Spyglass folder in File Explorer, click the address bar, type `powershell`, and press

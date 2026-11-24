@@ -7,6 +7,10 @@ GitHub release. It also builds `Spyglass-Setup-<version>.exe`, a WiX setup progr
 package, which it attaches to the workflow run only: it is published once a test install has shown
 that it, too, puts Spyglass in the Start menu at once.
 
+One more reason the setup .exe is held back: its entry in Installed apps belongs to the setup
+program, whose Modify offers only Repair and Uninstall, so parts could then be added or removed
+only by opening the `.msi`.
+
 Why an MSI: Windows lists an app in the Start menu and in Settings > Installed apps at once when
 its Start-menu entry is made by Windows Installer and carries an app ID. The entries that the
 earlier Inno Setup installer made never appeared there. The package's entry carries the app ID
