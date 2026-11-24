@@ -12,9 +12,8 @@ program, whose Modify offers only Repair and Uninstall, so parts could then be a
 only by opening the `.msi`.
 
 Why an MSI: Windows lists an app in the Start menu and in Settings > Installed apps at once when
-its Start-menu entry is made by Windows Installer and carries an app ID. The entries that the
-earlier Inno Setup installer made never appeared there. The package's entry carries the app ID
-`ekmungi.Spyglass`.
+its Start-menu entry is made by Windows Installer and carries an app ID. The package's entry
+carries the app ID `ekmungi.Spyglass`.
 
 To try the GitHub build without publishing anything, push a test tag: the code's version plus
 `-testN`, for example `0.42.0-test1`. The job builds everything exactly as for a release, creates

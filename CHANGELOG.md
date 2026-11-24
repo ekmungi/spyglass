@@ -17,8 +17,7 @@ Installed apps at once, and setup asks which parts to install.
   Setup installer. It installs for your Windows account only, into the same folder as before, and
   needs no administrator rights. Its Start-menu entry is made by Windows Installer and carries the
   app ID `ekmungi.Spyglass`, which makes Windows list Spyglass in Start and in Settings > Installed
-  apps right away; the entries the old installer made never appeared there. Installing it over
-  0.41.1 removes the old install first and keeps the data folder and settings.
+  apps right away. Installing it over 0.41.1 removes the old install first and keeps the data folder and settings.
 - **Choices in setup.** Start with Windows (ticked only when it was on), a desktop shortcut, PDF
   reading, the local AI model, YouTube transcripts (the separate yt-transcribe engine, installed with
   the bundled uv from one pinned commit), the Claude Code connector (ticked when Claude Code is
