@@ -626,6 +626,15 @@ def create_app(
             """Serve the built dashboard's entry point."""
             return FileResponse(index_file)
 
+        favicon_file = spa_dir / "favicon.svg"
+
+        @app.get("/favicon.svg")
+        def favicon() -> FileResponse:
+            """Serve the browser tab's icon, which Vite copies from frontend/public into the build."""
+            if not favicon_file.is_file():
+                raise HTTPException(status_code=404, detail="this build has no favicon")
+            return FileResponse(favicon_file, media_type="image/svg+xml")
+
     else:
 
         @app.get("/")

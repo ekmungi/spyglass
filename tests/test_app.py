@@ -285,6 +285,31 @@ def test_root_serves_spa_index_when_build_exists(tmp_path: Path) -> None:
     assert "SPA build" in response.text
 
 
+def test_favicon_is_served_from_the_build(tmp_path: Path) -> None:
+    """The browser tab's icon, copied into the build by Vite, is served at /favicon.svg."""
+    spa = tmp_path / "dist"
+    spa.mkdir()
+    (spa / "index.html").write_text("<html></html>", encoding="utf-8")
+    (spa / "favicon.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
+    app = create_app(make_settings(tmp_path), spa_dir=spa)
+    with TestClient(app) as client:
+        response = client.get("/favicon.svg")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/svg+xml")
+    assert response.text.startswith("<svg")
+
+
+def test_favicon_is_404_when_the_build_has_none(tmp_path: Path) -> None:
+    """A build without the icon answers 404 at /favicon.svg, never an error page."""
+    spa = tmp_path / "dist"
+    spa.mkdir()
+    (spa / "index.html").write_text("<html></html>", encoding="utf-8")
+    app = create_app(make_settings(tmp_path), spa_dir=spa)
+    with TestClient(app) as client:
+        response = client.get("/favicon.svg")
+    assert response.status_code == 404
+
+
 def _no_background_embed(monkeypatch) -> None:
     """Neutralize the background embed job for backup tests.
 

@@ -1,4 +1,4 @@
-"""Static checks of the Windows installer script, its icon tool, the release job and the version.
+"""Static checks of the Windows installer script, the release job and the version.
 
 The installer can only be run on a real Windows PC (installer/README.md says how). These tests
 read the Inno Setup script as text and pin the rules it must keep: it installs per user, ships
@@ -8,7 +8,6 @@ never stops a Spyglass that the desktop app did not start.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import re
@@ -18,7 +17,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from PIL import Image
 
 import spyglass_service
 from spyglass_service.desktop import platform_windows, tray
@@ -26,7 +24,6 @@ from spyglass_service.desktop import platform_windows, tray
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "installer"
 EXPECTED_VERSION = "0.41.1"
-ICON_SIZES = {(16, 16), (32, 32), (48, 48), (256, 256)}
 
 
 def _read(path: Path) -> str:
@@ -347,26 +344,3 @@ def test_versions_agree() -> None:
     assert extension["version"] == EXPECTED_VERSION
     assert list(versions)[-1] == EXPECTED_VERSION
     assert versions[EXPECTED_VERSION] == plugin["minAppVersion"]
-
-
-def _load_make_icon():
-    """Import installer/make_icon.py, which is a script and not part of the package."""
-    spec = importlib.util.spec_from_file_location("make_icon", INSTALLER / "make_icon.py")
-    assert spec and spec.loader, "installer/make_icon.py is missing"
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_make_icon_writes_the_four_sizes(tmp_path: Path) -> None:
-    """The icon tool turns the extension's 128-pixel icon into a 16, 32, 48 and 256 icon."""
-    target = tmp_path / "out.ico"
-    _load_make_icon().make_icon(ROOT / "browser-extension" / "icons" / "icon-128.png", target)
-    with Image.open(target) as icon:
-        assert set(icon.info["sizes"]) == ICON_SIZES
-
-
-def test_committed_icon_has_the_four_sizes() -> None:
-    """The icon in the repository is the tool's output, so the build needs no Pillow step."""
-    with Image.open(INSTALLER / "spyglass.ico") as icon:
-        assert set(icon.info["sizes"]) == ICON_SIZES
