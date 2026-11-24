@@ -260,3 +260,19 @@ def test_the_progress_page_says_what_the_long_steps_do() -> None:
     texts = {p.get("Action"): p.get("Message") for p in package.iter(f"{W}ProgressText")}
     assert "Python" in texts["BuildEnvironment"] and "minutes" in texts["BuildEnvironment"]
     assert "PrepareSpyglass" in texts
+
+
+def test_every_icon_comes_from_the_committed_icon_file(package: ET.Element) -> None:
+    """Installed apps, the Start-menu and desktop links, the setup .exe and the tray all show the
+    icon that scripts/make_icons.py renders into installer/spyglass.ico."""
+    from spyglass_service.desktop import tray
+
+    icon = package.find("w:Icon", NS)
+    assert icon.get("SourceFile") == r"installer\spyglass.ico"
+    assert _by_id(package, "Property", "ARPPRODUCTICON").get("Value") == icon.get("Id")
+    assert {s.get("Icon") for s in package.iter(f"{W}Shortcut")} == {icon.get("Id")}
+    bundle = parse(BUNDLE).getroot().find("w:Bundle", NS)
+    assert bundle.get("IconSourceFile") == r"installer\spyglass.ico"
+    # The tray reads the icon from the install folder's installer subfolder, where the MSI puts it.
+    assert tray.ICON_PATH.parts[-2:] == ("installer", "spyglass.ico")
+    assert _by_id(package, "Directory", "InstallerDir").get("Name") == "installer"

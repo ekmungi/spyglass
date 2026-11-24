@@ -33,6 +33,10 @@ Installed apps at once, and setup asks which parts to install.
   optional. Without PyMuPDF, PDFs are read with pypdf; without the model, search by meaning and
   similar items are off and search by words still works. A Settings section names each missing part
   and how to add it.
+- **Spyglass has its own icon:** a flat telescope in terracotta, teal and cream with a gold lens on a
+  charcoal tile, used by the installer, the Start menu, `Spyglass.exe`, the tray, the browser
+  extension and the browser tab. One script, `scripts/make_icons.py`, renders every icon file from
+  the SVG master in `assets/icon/`.
 - **A setup .exe.** The release workflow also builds `Spyglass-Setup-<version>.exe` around the
   package and attaches it to the workflow run. It is published once a test install shows that it,
   too, puts Spyglass in the Start menu at once.

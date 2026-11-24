@@ -72,8 +72,8 @@ your computer. Pages already sent stay in Spyglass.
 The extension has no build step and no dependencies. `lib.js` holds the logic that can be tested
 without a browser (address checks, size rules, the request, the sentences shown); it is imported by
 the extension and by the interface's tests (`frontend/src/radar/extension/lib.test.ts`). The package
-checks run with `node --test browser-extension/tests/*.test.js`. The icons are written by
-`tools/make_icons.py`, and the result is committed.
+checks run with `node --test browser-extension/tests/*.test.js`. The icons are rendered from the
+Spyglass icon's SVG master (`assets/icon/`) by `scripts/make_icons.py`, and the result is committed.
 
 `tests/e2e/run_e2e.py` loads the extension in a real Chromium (the one patchright installed, with a
 throwaway profile) and checks installing, connecting and every way of sending against a running

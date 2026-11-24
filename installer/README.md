@@ -33,7 +33,7 @@ downloaded from the run's page for seven days. Delete the test tag afterwards wi
 | `launcher\Spyglass.cs`, `build_launcher.ps1` | `Spyglass.exe`, the program every starter opens. |
 | `setup\*.cs`, `build_setup_helper.ps1` | `SpyglassSetup.exe`, the helper the package runs for its setup steps. |
 | `build_msi.ps1` | Builds the package and the setup `.exe`. |
-| `spyglass.ico`, `make_icon.py` | The icon, and the script that makes it from the extension's icon. |
+| `spyglass.ico` | The icon, which is committed. It is rendered, with the extension's icons and the browser tab's icon, from the SVG master in `assets/icon/`: `uv run python scripts/make_icons.py`. |
 
 The steps after Python exists run in Spyglass's own Python, in
 `src/spyglass_service/desktop/setup_steps.py`, so the test suite covers them.

@@ -422,6 +422,8 @@ setting anything up.
 - `scripts/` holds the Windows start scripts and an optional git pre-push check
   (`scripts/pre_push_guard.py`) that refuses commits with personal paths, e-mail addresses or
   terms you list.
+- `assets/icon/` holds the Spyglass icon as an SVG master; `scripts/make_icons.py` renders the
+  Windows icon, the extension's icons and the browser tab's icon from it.
 
 ## Status and limits
 
