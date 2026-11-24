@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 
 from spyglass_service.models import Item
 from spyglass_service.radar.models import ItemEntity, WatchEntity, dumps
-from spyglass_service.radar.watch.registry import OTHER, STATUSES, entity_dict, norm_name
+from spyglass_service.radar.watch.registry import FOLLOWED, OTHER, STATUSES, entity_dict, norm_name
 
 ACTIONS = ("pause", "resume", "rename", "move", "remove")
 # Longest group name accepted; the register shows names as headings.
@@ -48,7 +48,7 @@ def members(session: Session, category: str, *, followed_only: bool) -> list[Wat
     """The entries of a group; "Other" is the entries with no category."""
     stored = "" if category.casefold() == OTHER.casefold() else category
     rows = session.exec(select(WatchEntity).where(WatchEntity.category == stored)).all()
-    return [e for e in rows if e.status != "suggested"] if followed_only else list(rows)
+    return [e for e in rows if e.status in FOLLOWED] if followed_only else list(rows)
 
 
 def _links(session: Session, entity_id: int) -> list[dict]:
@@ -124,6 +124,7 @@ def restore_entries(session: Session, entries: list[dict]) -> int:
             website=raw.get("website"), status=status, why=raw.get("why"),
             added_via=raw.get("added_via") or "user",
             last_hit_at=_when(raw.get("last_hit_at")),
+            section=raw.get("section") or "", suggest_count=int(raw.get("count") or 0),
         )
         session.add(entity)
         session.flush()

@@ -19,7 +19,7 @@ router = APIRouter()
 router.include_router(manage_router)
 
 Kind = Literal["company", "lab", "regulator", "person", "publication"]
-Status = Literal["active", "suggested", "muted"]
+Status = Literal["active", "suggested", "muted", "rejected"]
 
 
 class DiscoverBody(BaseModel):

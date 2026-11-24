@@ -3,10 +3,11 @@
 import pytest
 from sqlmodel import Session, select
 
+from spyglass_service.radar import feed_views
 from spyglass_service.radar.models import ItemEntity
-from spyglass_service.radar.watch import registry
+from spyglass_service.radar.watch import groups, registry, review
 
-from .test_brief_seed import add_item, make_engine
+from .test_brief_seed import NOW_NAIVE, add_item, make_engine
 
 
 def test_create_defaults_and_duplicate_detection(tmp_path) -> None:
@@ -80,4 +81,52 @@ def test_grouped_empty(tmp_path) -> None:
     engine = make_engine(tmp_path)
     with Session(engine) as s:
         assert registry.grouped(s) == {"categories": [], "suggested": []}
+    engine.dispose()
+
+
+def test_rejected_names_are_not_followed(tmp_path) -> None:
+    """A name the reader rejected is in no group, no followed-only list, no week count and no review."""
+    engine = make_engine(tmp_path)
+    with Session(engine) as s:
+        followed = registry.create_entity(s, "Alpha Scopes", category="Endoscopy AI")
+        rejected = registry.create_entity(s, "Beta Vision", category="Endoscopy AI", status="rejected")
+        followed_id, rejected_id = followed.id, rejected.id
+    assert registry.STATUSES == ("active", "suggested", "muted", "rejected")
+    assert registry.FOLLOWED == ("active", "muted")
+    for entity_id, title in ((followed_id, "alpha story"), (rejected_id, "beta story")):
+        item_id = add_item(engine, title, age_hours=3, tier="top", score=70)
+        with Session(engine) as s:
+            s.add(ItemEntity(item_id=item_id, entity_id=entity_id))
+            s.commit()
+    with Session(engine) as s:
+        payload = registry.grouped(s, now=NOW_NAIVE)
+        in_groups = [e["name"] for c in payload["categories"] for e in c["entities"]]
+        assert in_groups == ["Alpha Scopes"]
+        assert payload["suggested"] == []
+        assert [e.name for e in groups.members(s, "Endoscopy AI", followed_only=True)] == ["Alpha Scopes"]
+        assert len(feed_views.watch_group_item_ids(s, "Endoscopy AI", NOW_NAIVE)) == 1
+        assert [r["name"] for r in review.build_picture(s)["register"]] == ["Alpha Scopes"]
+    engine.dispose()
+
+
+def test_entity_dict_carries_the_section_and_the_suggestion_count(tmp_path) -> None:
+    """The register entry shows which section a name sits in and how often it was suggested."""
+    engine = make_engine(tmp_path)
+    with Session(engine) as s:
+        entity = registry.create_entity(s, "Alpha Scopes")
+        assert registry.entity_dict(entity)["section"] == ""
+        assert registry.entity_dict(entity)["count"] == 0
+        entity.section, entity.suggest_count = "Competitors", 3
+        shown = registry.entity_dict(entity)
+        assert (shown["section"], shown["count"]) == ("Competitors", 3)
+    engine.dispose()
+
+
+def test_update_can_reject_a_name_and_an_unknown_status_is_refused(tmp_path) -> None:
+    engine = make_engine(tmp_path)
+    with Session(engine) as s:
+        entity = registry.create_entity(s, "Alpha Scopes", status="suggested")
+        assert registry.update_entity(s, entity.id, {"status": "rejected"}).status == "rejected"
+        with pytest.raises(ValueError):
+            registry.update_entity(s, entity.id, {"status": "banned"})
     engine.dispose()

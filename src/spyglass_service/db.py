@@ -56,6 +56,9 @@ _ADDED_COLUMNS = [
     ("itemstate", "captured_at", "DATETIME"),
     # Radar: a brief's last regeneration, kept apart from its first composition time.
     ("radarbrief", "regenerated_at", "DATETIME"),
+    # Radar watch register: the page section a name sits in, and how often it was suggested.
+    ("watchentity", "section", "VARCHAR NOT NULL DEFAULT ''"),
+    ("watchentity", "suggest_count", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

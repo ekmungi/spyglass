@@ -176,3 +176,14 @@ def test_restore_drops_links_to_items_that_no_longer_exist(tmp_path) -> None:
         groups.restore_entries(s, removed)
         assert all(link_.item_id != 9999 for link_ in s.exec(select(ItemEntity)).all())
     engine.dispose()
+
+
+def test_restore_keeps_a_rejected_status(tmp_path) -> None:
+    """An entry sent back to the register keeps "rejected", and its section and suggestion count."""
+    engine = make_engine(tmp_path)
+    entries = [{"name": "Gamma Optics", "status": "rejected", "section": "Competitors", "count": 4, "links": []}]
+    with Session(engine) as s:
+        assert groups.restore_entries(s, entries) == 1
+        gamma = s.exec(select(WatchEntity).where(WatchEntity.name == "Gamma Optics")).one()
+        assert (gamma.status, gamma.section, gamma.suggest_count) == ("rejected", "Competitors", 4)
+    engine.dispose()

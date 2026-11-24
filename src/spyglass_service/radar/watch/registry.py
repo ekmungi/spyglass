@@ -12,7 +12,9 @@ from spyglass_service.radar.models import Assessment, ItemEntity, WatchEntity, d
 from spyglass_service.radar.serialize import radar_items
 
 KINDS = ("company", "lab", "regulator", "person", "publication")
-STATUSES = ("active", "suggested", "muted")
+STATUSES = ("active", "suggested", "muted", "rejected")
+# The statuses that count as followed: checked daily or paused. A suggested or rejected name is not.
+FOLLOWED = ("active", "muted")
 # The kinds whose stories fill the brief's "On your watch list" section: what competitors and
 # regulators are doing. AI labs, research centres and hospitals are kind "lab", and journals
 # and societies "publication"; they are watched too, but their stories go to the ordinary
@@ -92,6 +94,8 @@ def entity_dict(entity: WatchEntity) -> dict:
         "query": entity.query,
         "website": entity.website,
         "status": entity.status,
+        "section": entity.section,
+        "count": entity.suggest_count,
         "why": entity.why,
         "added_via": entity.added_via,
         "last_hit_at": entity.last_hit_at.isoformat() if entity.last_hit_at else None,
@@ -241,7 +245,7 @@ def grouped(session: Session, *, now: datetime | None = None) -> dict:
     and `paused`, true when every name in it is muted. `now` (naive UTC) is only for tests.
     """
     entities = session.exec(select(WatchEntity)).all()
-    followed = [e for e in entities if e.status != "suggested"]
+    followed = [e for e in entities if e.status in FOLLOWED]
     recent_ids = _recent_item_ids(session, followed)
     week = _week_item_ids(session, [e.id for e in followed], now)
     items = {i["id"]: i for i in radar_items(session, [i for ids in recent_ids.values() for i in ids])}

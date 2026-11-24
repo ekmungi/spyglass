@@ -13,6 +13,8 @@ _OLD_TABLES = (
     "from_user BOOLEAN NOT NULL DEFAULT 0)",
     "CREATE TABLE radarbrief (id INTEGER PRIMARY KEY, day VARCHAR NOT NULL UNIQUE, "
     "doc VARCHAR NOT NULL, created_at DATETIME)",
+    "CREATE TABLE watchentity (id INTEGER PRIMARY KEY, name VARCHAR NOT NULL UNIQUE, "
+    "status VARCHAR NOT NULL DEFAULT 'suggested')",
 )
 
 
@@ -40,5 +42,24 @@ def test_old_radar_tables_gain_the_new_columns_and_keep_their_rows(tmp_path) -> 
             row = session.exec(text(
                 "SELECT score, digest_attempts, triage_attempts, error FROM assessment")).one()
         assert tuple(row) == (40, 0, 0, None)
+    finally:
+        engine.dispose()
+
+
+def test_old_watch_tables_gain_section_and_count(tmp_path) -> None:
+    """init_db adds the section and the suggestion count, and an old row reads as no section, count 0."""
+    engine = create_db_engine(tmp_path / "old.db")
+    try:
+        with Session(engine) as session:
+            for ddl in _OLD_TABLES:
+                session.exec(text(ddl))
+            session.exec(text("INSERT INTO watchentity (name, status) VALUES ('Alpha Scopes', 'active')"))
+            session.commit()
+        init_db(engine)
+        init_db(engine)
+        assert {"section", "suggest_count"} <= _columns(engine, "watchentity")
+        with Session(engine) as session:
+            row = session.exec(text("SELECT status, section, suggest_count FROM watchentity")).one()
+        assert tuple(row) == ("active", "", 0)
     finally:
         engine.dispose()

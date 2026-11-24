@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 Kind = Literal["company", "lab", "regulator", "person", "publication"]
-Status = Literal["active", "suggested", "muted"]
+Status = Literal["active", "suggested", "muted", "rejected"]
 
 
 class GroupBody(BaseModel):

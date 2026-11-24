@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 from spyglass_service.models import Item
 from spyglass_service.radar.models import Assessment, ItemEntity, ItemState, WatchEntity, utcnow
 from spyglass_service.radar.profile_defaults import load_profile
-from spyglass_service.radar.watch.registry import OTHER, WEEK
+from spyglass_service.radar.watch.registry import FOLLOWED, OTHER, WEEK
 from spyglass_service.radar.watch.sweep import unknown_mentions
 
 # The look-back of the per-name "items this month" count.
@@ -59,13 +59,13 @@ def _days(then: datetime, now: datetime) -> int:
 def build_picture(session: Session, *, now: datetime | None = None) -> dict:
     """The review's input: `register`, `profile` and `unregistered`.
 
-    register: followed names (active or muted; suggestions are not reviewed) with id, name,
+    register: followed names (active or muted; suggested and rejected names are not reviewed) with id, name,
     category, kind, status, idle_days (since the last hit, or since it was added when it never
     had one), ever_hit, added_days_ago, week_count, month_count and engaged. `now` is naive UTC
     and only for tests.
     """
     now = now or utcnow().replace(tzinfo=None)
-    entities = [e for e in session.exec(select(WatchEntity)).all() if e.status != "suggested"]
+    entities = [e for e in session.exec(select(WatchEntity)).all() if e.status in FOLLOWED]
     entities.sort(key=lambda e: e.name.lower())
     entities = entities[:MAX_ENTRIES]
     stats = _engagement(session, [e.id for e in entities], now)
