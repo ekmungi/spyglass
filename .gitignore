@@ -22,6 +22,8 @@ plugin/dist/
 installer/uv.exe
 # The launcher that installer\build_launcher.ps1 compiles for every build.
 installer/Spyglass.exe
+# The MSI's helper program that installer\build_setup_helper.ps1 compiles for every build.
+installer/SpyglassSetup.exe
 installer/Output/
 
 # Local plan files are never committed (user rule)
