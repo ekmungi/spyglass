@@ -26,7 +26,7 @@ from pathlib import Path
 
 from spyglass_service import __version__
 from spyglass_service.desktop.connector import Runner, add_connector, find_claude, remove_connector
-from spyglass_service.desktop.datadir import DEFAULT_PORT, config_path
+from spyglass_service.desktop.datadir import DEFAULT_PORT, ConfigError, config_path, load_config
 from spyglass_service.desktop.platform_base import no_window_flags
 from spyglass_service.desktop.platform_windows import (
     LAUNCHER_NAME,
@@ -131,11 +131,21 @@ def _points_into(command: str, folder: Path) -> bool:
 
 
 def _ensure_desktop_config(ctx: SetupContext) -> StepResult:
-    """Write desktop.json naming no data folder, so the first start asks; keep an existing one."""
+    """Write desktop.json naming no data folder, so the first start asks; keep a usable one.
+
+    One the app cannot read is moved to desktop.json.bad and written again, because the app's
+    message for it says to run setup again.
+    """
+    note = ""
     if ctx.desktop_json.exists():
-        return f"kept {ctx.desktop_json}", {}
+        try:
+            load_config(ctx.desktop_json)
+            return f"kept {ctx.desktop_json}", {}
+        except ConfigError as exc:
+            os.replace(ctx.desktop_json, ctx.desktop_json.with_name(ctx.desktop_json.name + ".bad"))
+            note = f"set aside an unusable {ctx.desktop_json.name} ({exc}); "
     _write_json(ctx.desktop_json, {"data_dir": None, "vault_path": None, "port": DEFAULT_PORT})
-    return f"wrote {ctx.desktop_json}; the first start asks for the data folder", {}
+    return f"{note}wrote {ctx.desktop_json}; the first start asks for the data folder", {}
 
 
 def _remove_old_task(ctx: SetupContext) -> StepResult:

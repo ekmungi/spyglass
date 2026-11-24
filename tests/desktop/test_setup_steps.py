@@ -82,6 +82,15 @@ def test_an_existing_settings_file_is_kept(ctx: SetupContext) -> None:
     assert (ctx.config_dir / "desktop.json").read_text(encoding="utf-8") == existing
 
 
+def test_a_broken_settings_file_is_set_aside_and_written_again(ctx: SetupContext) -> None:
+    """The app tells the user to run setup again when desktop.json is unusable; that must work."""
+    ctx.config_dir.mkdir()
+    (ctx.config_dir / "desktop.json").write_text("{not json", encoding="utf-8")
+    install(ctx)
+    assert json.loads((ctx.config_dir / "desktop.json").read_text(encoding="utf-8"))["data_dir"] is None
+    assert (ctx.config_dir / "desktop.json.bad").read_text(encoding="utf-8") == "{not json"
+
+
 def test_start_with_windows_writes_the_launcher_entry(ctx: SetupContext) -> None:
     _tick(ctx, "autostart")
     install(ctx)
