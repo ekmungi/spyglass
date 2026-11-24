@@ -77,3 +77,15 @@ def test_the_folder_check_is_not_guarded(platform, tmp_path: Path) -> None:
     message box from it."""
     assert desktop_main.main(["--check-data-dir", str(tmp_path / "new")]) == 0
     assert platform.messages == []
+
+
+def test_an_unexpected_failure_in_a_test_never_reaches_the_real_machine(monkeypatch, capsys) -> None:
+    """Without any patch of its own, a failing start writes to the scratch folder the desktop tests'
+    guard sets, and the message goes to stderr instead of a box on the screen."""
+    import os
+
+    monkeypatch.setattr(launcher_mod, "Launcher", BrokenLauncher)
+    assert desktop_main.main([]) != 0
+    scratch = Path(os.environ["SPYGLASS_DESKTOP_CONFIG"]).parent
+    assert (scratch / "launcher-crash.log").is_file()
+    assert "could not start" in capsys.readouterr().err
