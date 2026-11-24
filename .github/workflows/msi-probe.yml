@@ -1,6 +1,9 @@
-# A one-off test build, only on the branch test/msi-probe: a tiny per-user Windows Installer
-# (.msi) package, to check whether Windows lists MSI-installed apps in the Start menu and in
-# Settings > Installed apps. It publishes nothing; the package is attached to the workflow run.
+# A one-off test build, only on the branch test/msi-probe: tiny per-user installers that check how
+# Windows lists a newly installed app in the Start menu and in Settings > Installed apps. It
+# publishes nothing; the installers are attached to the workflow run.
+#   SpyglassMsiProbe:  a Windows Installer (.msi) package, Start-menu entry without an app ID.
+#   SpyglassProbeMsi2: the same kind of package, Start-menu entry with an app ID.
+#   SpyglassProbeInno: an Inno Setup installer whose entry comes from [Icons], with an app ID.
 name: MSI probe
 
 on:
@@ -27,23 +30,59 @@ jobs:
           dotnet tool install --global wix --version $env:WIX_VERSION
           "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
-      - name: Build the probe program
+      - name: Install Inno Setup when it is missing
+        run: |
+          $default = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue) -and -not (Test-Path $default)) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Build the probe programs
         run: |
           $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           & $csc /nologo /target:winexe /win32icon:installer\spyglass.ico /out:installer\probe\SpyglassMsiProbe.exe installer\probe\SpyglassMsiProbe.cs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($name in 'SpyglassProbeMsi2', 'SpyglassProbeInno') {
+            & $csc /nologo /target:winexe /win32icon:installer\spyglass.ico "/out:installer\probe\$name.exe" installer\probe\Probe.cs
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
-      - name: Build the MSI
+      - name: Build the MSI packages
         run: |
           wix extension add -g "WixToolset.UI.wixext/$env:WIX_VERSION"
           wix build -arch x64 -ext WixToolset.UI.wixext -o installer\probe\out\SpyglassMsiProbe.msi installer\probe\probe.wxs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Get-Item installer\probe\out\SpyglassMsiProbe.msi | Select-Object Name, Length
+          wix build -arch x64 -ext WixToolset.UI.wixext -o installer\probe\out\SpyglassProbeMsi2.msi installer\probe\probe-msi2.wxs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Attach the MSI to the workflow run
+      - name: Build the Inno Setup installer
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc installer\probe\probe-inno.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem installer\probe\out | Select-Object Name, Length
+
+      - name: Attach the first MSI to the workflow run
         uses: actions/upload-artifact@v4
         with:
           name: SpyglassMsiProbe
           path: installer/probe/out/SpyglassMsiProbe.msi
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Attach the second MSI to the workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpyglassProbeMsi2
+          path: installer/probe/out/SpyglassProbeMsi2.msi
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Attach the Inno Setup installer to the workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpyglassProbeInno
+          path: installer/probe/out/SpyglassProbeInno.exe
           if-no-files-found: error
           retention-days: 7
