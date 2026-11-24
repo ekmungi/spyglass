@@ -2,6 +2,7 @@
 
 GET  /desktop/autostart         whether the switch is offered, and whether it is on
 PUT  /desktop/autostart         turn start-at-sign-in on or off
+GET  /desktop/capabilities      which optional parts setup installed, and how to add the rest
 GET  /desktop/extension         the folder with this install's copy of the browser extension
 GET  /desktop/browsers         the installed browsers that have an extensions page
 POST /desktop/open-extensions   open one browser's extensions page
@@ -18,6 +19,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
+from spyglass_service import capabilities
 from spyglass_service.desktop.platform_base import DesktopPlatform
 from spyglass_service.extension_copy import COPY_DIR
 from spyglass_service.radar.api.importer import same_origin_only
@@ -87,6 +89,12 @@ def put_autostart(body: AutostartBody, request: Request) -> dict[str, bool]:
             status_code=503, detail="Windows refused access to the start-up setting."
         ) from None
     return _autostart_state(platform)
+
+
+@router.get("/capabilities")
+def get_capabilities() -> dict:
+    """Which optional parts are installed (PDF reading, local AI model), and how to add the rest."""
+    return capabilities.report()
 
 
 @router.get("/extension")

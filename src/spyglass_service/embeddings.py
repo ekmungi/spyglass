@@ -14,6 +14,7 @@ import numpy as np
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from spyglass_service.capabilities import LocalModelMissing
 from spyglass_service.models import Card, Embedding, Item
 
 logger = logging.getLogger(__name__)
@@ -169,7 +170,11 @@ def fastembed_embedder(model_name: str = ARCTIC_MODEL, cache_dir: str | None = N
     def embed(texts: list[str]) -> np.ndarray:
         """Embed texts, loading the model on first call."""
         if holder["model"] is None:
-            from fastembed import TextEmbedding  # lazy: heavy import + one-time model download
+            try:
+                from fastembed import TextEmbedding  # lazy: heavy import + one-time model download
+            except ImportError as exc:
+                # Setup can leave the local AI model out; callers turn this into "off".
+                raise LocalModelMissing() from exc
 
             holder["model"] = TextEmbedding(model_name=model_name, cache_dir=cache_dir)
         model = holder["model"]
@@ -191,6 +196,9 @@ def embed_pending(engine: Engine, index: EmbeddingIndex) -> int:
     Thread-safe: serializes concurrent callers via _embed_lock so that a second call arriving
     while a backfill is in progress waits, then finds nothing pending and returns 0 rather
     than racing to INSERT duplicate rows and raising IntegrityError.
+
+    Without the local AI model (an optional part of the install) nothing is embedded and 0 is
+    returned: the first embed fails before any row is added, and the session is not committed.
     """
     with _embed_lock:
         embedded = 0
@@ -201,7 +209,11 @@ def embed_pending(engine: Engine, index: EmbeddingIndex) -> int:
                 select(Item).where(Item.id.in_(carded)).where(Item.id.not_in(have))  # type: ignore[union-attr]
             ).all()
             for item in item_ids:
-                vector = index.embed_one(shallow_text(item))
+                try:
+                    vector = index.embed_one(shallow_text(item))
+                except LocalModelMissing:
+                    logger.info("The local AI model is not installed; no items were embedded")
+                    return 0
                 session.add(
                     Embedding(
                         item_id=item.id, vector=vector, model=index.model,

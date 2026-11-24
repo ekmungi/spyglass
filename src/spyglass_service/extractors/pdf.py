@@ -13,6 +13,23 @@ from collections.abc import Callable
 logger = logging.getLogger(__name__)
 
 
+def _extract_with_pypdf(content: bytes) -> str:
+    """Extract text with pypdf, the basic reader used when setup left PyMuPDF out.
+
+    Returns "" for bytes that are not a readable PDF, logging why, like the PyMuPDF path.
+    """
+    import io
+
+    from pypdf import PdfReader
+
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        return "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+    except Exception:
+        logger.warning("PDF parse failed (pypdf); treating as empty extraction", exc_info=True)
+        return ""
+
+
 def _extract_pdf_text_from_bytes(content: bytes) -> str:
     """Extract text from in-memory PDF bytes using PyMuPDF/fitz (imported lazily).
 
@@ -20,9 +37,13 @@ def _extract_pdf_text_from_bytes(content: bytes) -> str:
     the bytes are not a readable PDF -- a fetch failure is data the conductor can
     record as an empty result, not a crash. The failure is still logged (not just
     swallowed) so a corrupt-PDF fetch is diagnosable instead of looking like a
-    genuinely empty page.
+    genuinely empty page. PyMuPDF is an optional part of the install; without it the
+    text comes from pypdf instead.
     """
-    import fitz
+    try:
+        import fitz
+    except ImportError:
+        return _extract_with_pypdf(content)
 
     try:
         doc = fitz.open(stream=content, filetype="pdf")

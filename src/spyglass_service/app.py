@@ -41,6 +41,7 @@ from spyglass_service.documents import set_yt_transcribe_cmd
 from spyglass_service.yt_discovery import discover_yt_transcribe
 from spyglass_service.extension_copy import sync_extension_copy
 from spyglass_service.radar.import_key import button_key
+from spyglass_service.capabilities import LocalModelMissing
 from spyglass_service.embeddings import EmbeddingIndex, embed_pending_all
 from spyglass_service.enrich import enrich_item, run_scheduled_enrich
 from spyglass_service.claude_jobs import reset_interrupted as reset_interrupted_claude_jobs
@@ -440,6 +441,12 @@ def create_app(
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
     # Added last, so outermost: security headers go on every response, refusals included.
     app.add_middleware(SecurityHeaders)
+    # The local AI model is an optional part of the install: a request whose work needs it
+    # answers 503 with the sentence that says how to add it, instead of a server error.
+    @app.exception_handler(LocalModelMissing)
+    async def local_model_missing(_request, exc: LocalModelMissing) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+
     app.state.settings = settings
     app.state.radar_scheduler = None
     app.state.started_by = started_by

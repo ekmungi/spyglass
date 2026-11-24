@@ -4,6 +4,7 @@ import { API_BASE, apiFetch, rootFetch } from './transport'
 import type {
   Autostart,
   BriefDoc,
+  Capabilities,
   DesktopBrowser,
   ExtensionFolder,
   ClaudeOpened,
@@ -317,6 +318,8 @@ export const getBrowsers = (signal?: AbortSignal) => request<DesktopBrowser[]>('
 export const openExtensionsPage = (browser: string) => request<null>('POST', '/desktop/open-extensions', { browser })
 /** The folder with this install's copy of the extension (it may not exist yet). */
 export const getExtensionFolder = (signal?: AbortSignal) => request<ExtensionFolder>('GET', '/desktop/extension', undefined, signal)
+/** Which optional parts (PDF reading, local AI model) setup installed, and how to add the rest. */
+export const getCapabilities = (signal?: AbortSignal) => request<Capabilities>('GET', '/desktop/capabilities', undefined, signal)
 
 /** Stop Spyglass. POST /api/shutdown is outside /api/radar, so it goes through the root transport. */
 export async function quitSpyglass(): Promise<null> {

@@ -1,5 +1,5 @@
 // Settings page: AI engines (and which AI judges), privacy, the daily brief schedule, the vault folders, filing, the Send to Spyglass
-// bookmark button, this computer (start with Windows, quit) and the theme. Each group saves on its own and reports success or failure
+// bookmark button, this computer (start with Windows, quit), the optional parts not installed and the theme. Each group saves on its own and reports success or failure
 // beside its own button.
 import './settings/settings.css'
 import { Button, Skeleton } from '../ui'
@@ -11,6 +11,7 @@ import { BriefSection } from './settings/BriefSection'
 import { DesktopSection } from './settings/DesktopSection'
 import { EnginesSection } from './settings/EnginesSection'
 import { FilingSection } from './settings/FilingSection'
+import { PartsSection } from './settings/PartsSection'
 import { PrivacySection } from './settings/PrivacySection'
 import { UsageSection } from './settings/UsageSection'
 import { VaultSection } from './settings/VaultSection'
@@ -70,6 +71,8 @@ export default function SettingsPage() {
       <BringInSection focus={route.name === 'settings' && route.section === BRING_IN_SECTION} />
 
       <DesktopSection />
+
+      <PartsSection />
 
       <UsageSection />
 
