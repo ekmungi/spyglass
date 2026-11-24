@@ -7,7 +7,7 @@
 #   installer\build_setup_helper.ps1 -Version 0.42.0
 # WiX and its three extensions, once per machine (the .NET SDK provides the dotnet command):
 #   dotnet tool install --global wix --version 5.0.2
-#   wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2 WixToolset.Bal.wixext/5.0.2
+#   wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2 WixToolset.BootstrapperApplications.wixext/5.0.2
 param(
     # The release version, digits only (x.y.z); Windows Installer needs it as digits.
     [Parameter(Mandatory = $true)][string]$Version,
@@ -60,7 +60,7 @@ try {
         -d "Version=$Version" -o $msi installer\spyglass.wxs installer\obj\files.wxs
     if ($LASTEXITCODE -ne 0) { Stop-Build "WiX could not build the MSI (exit code $LASTEXITCODE)." }
     $exe = "installer\Output\Spyglass-Setup-$Version.exe"
-    & $Wix build -arch x64 -ext WixToolset.Bal.wixext -d "Version=$Version" -d "MsiPath=$msi" `
+    & $Wix build -arch x64 -ext WixToolset.BootstrapperApplications.wixext -d "Version=$Version" -d "MsiPath=$msi" `
         -o $exe installer\bundle.wxs
     if ($LASTEXITCODE -ne 0) { Stop-Build "WiX could not build the setup .exe (exit code $LASTEXITCODE)." }
     Write-Output "Built $msi and $exe."

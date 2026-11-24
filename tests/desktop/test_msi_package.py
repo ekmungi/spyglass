@@ -242,3 +242,10 @@ def test_harvest_of_the_repository_includes_the_service() -> None:
     folders = harvest.collect(ROOT)
     assert any(p.name == "__init__.py" for p in folders["src/spyglass_service"])
     assert "skills" in folders or any(k.startswith("skills/") for k in folders)
+
+
+def test_the_progress_page_says_what_the_long_steps_do() -> None:
+    package = parse(PACKAGE).getroot().find("w:Package", NS)
+    texts = {p.get("Action"): p.get("Message") for p in package.iter(f"{W}ProgressText")}
+    assert "Python" in texts["BuildEnvironment"] and "minutes" in texts["BuildEnvironment"]
+    assert "PrepareSpyglass" in texts

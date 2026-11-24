@@ -296,10 +296,15 @@
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open Spyglass now" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WixShellExecTarget" Value="[#SpyglassExe]" />
-    <CustomAction Id="LaunchSpyglass" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORTNAME)"
+    <!-- The package is built for x64 only (-arch x64), so the x64 build of WiX's helper library. -->
+    <CustomAction Id="LaunchSpyglass" BinaryRef="Wix4UtilCA_X64"
                   DllEntry="WixShellExec" Impersonate="yes" />
     <UI>
       <ui:WixUI Id="WixUI_FeatureTree" />
+      <!-- What the progress page says during the two steps that can take a while. -->
+      <ProgressText Action="PrepareSpyglass" Message="Closing Spyglass and removing an earlier version" />
+      <ProgressText Action="BuildEnvironment"
+                    Message="Preparing Python and the libraries Spyglass needs. This takes a few minutes." />
       <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchSpyglass"
                Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
     </UI>

@@ -142,7 +142,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           $wix = Join-Path $env:USERPROFILE ".dotnet\tools\wix.exe"
-          foreach ($extension in "WixToolset.UI.wixext", "WixToolset.Util.wixext", "WixToolset.Bal.wixext") {
+          foreach ($extension in "WixToolset.UI.wixext", "WixToolset.Util.wixext", "WixToolset.BootstrapperApplications.wixext") {
             & $wix extension add -g "$extension/$env:WIX_VERSION"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }

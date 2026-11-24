@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Spyglass-Setup-<version>.exe: a WiX setup program (a Burn bundle) around the MSI, built by
      installer\build_msi.ps1 after the MSI:
-       wix build -arch x64 -ext WixToolset.Bal.wixext -d Version=0.42.0
+       wix build -arch x64 -ext WixToolset.BootstrapperApplications.wixext -d Version=0.42.0
                  -d MsiPath=installer\Output\Spyglass-0.42.0.msi
                  -o installer\Output\Spyglass-Setup-0.42.0.exe installer\bundle.wxs
      It shows the MSI's own pages, so the choices are the same. It is published only once a test
