@@ -7,6 +7,9 @@ import type {
   Capabilities,
   DesktopBrowser,
   ExtensionFolder,
+  FirstStart,
+  FirstStartChoice,
+  FirstStartSaved,
   ClaudeOpened,
   ClaudePreview,
   ClaudeRequest,
@@ -320,6 +323,12 @@ export const openExtensionsPage = (browser: string) => request<null>('POST', '/d
 export const getExtensionFolder = (signal?: AbortSignal) => request<ExtensionFolder>('GET', '/desktop/extension', undefined, signal)
 /** Which optional parts (PDF reading, local AI model) setup installed, and how to add the rest. */
 export const getCapabilities = (signal?: AbortSignal) => request<Capabilities>('GET', '/desktop/capabilities', undefined, signal)
+/** Whether this is a first start (to choose the data folder and vault) and which browser guides are waiting. */
+export const getFirstStart = (signal?: AbortSignal) => request<FirstStart>('GET', '/desktop/first-start', undefined, signal)
+/** Save the first-start choices; answers 400 with a sentence for a refused folder or vault, and 409 when already chosen. */
+export const saveFirstStart = (body: FirstStartChoice) => request<FirstStartSaved>('POST', '/desktop/first-start', body)
+/** Forget the browser guide, so the first-start page no longer shows it. */
+export const dismissSetupGuide = () => request<null>('POST', '/desktop/setup-guide/dismiss', {})
 
 /** Stop Spyglass. POST /api/shutdown is outside /api/radar, so it goes through the root transport. */
 export async function quitSpyglass(): Promise<null> {

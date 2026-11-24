@@ -1,0 +1,8 @@
+/* First-start page: a full-height screen that scrolls on its own, because the document itself does not. Tokens only. */
+.rw-screen {
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--paper, transparent);
+  color: var(--ink);
+}

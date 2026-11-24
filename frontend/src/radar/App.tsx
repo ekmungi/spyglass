@@ -12,6 +12,7 @@ import { ClaudeDialogHost } from './claude/ClaudeDialogHost'
 import { FeedPage } from './pages/FeedPage'
 import { HelpPage } from './pages/HelpPage'
 import { TodayPage } from './pages/TodayPage'
+import { FirstStartGate } from './pages/welcome/FirstStartGate'
 import { ReaderPage } from './reader/ReaderPage'
 import { arrivedByHistoryStep, getScroll, readerOrigin, routeKey, saveScroll, useRoute, type Route } from './router'
 import { NotFound } from './shell/NotFound'
@@ -41,13 +42,13 @@ function PageFor({ route, active }: { route: Route; active: boolean }) {
   }
 }
 
-/** Root component of the redesigned interface: the import window alone, or the full shell. */
+/** Root component of the redesigned interface: the import window alone, or the full shell (behind the first-start gate). */
 export default function RadarApp() {
   const route = useRoute()
   return (
     // Icons not yet drawn through ui/icons still get the shared stroke from here.
     <LucideProvider strokeWidth={ICON_STROKE}>
-      {route.name === 'import' ? <ImportPage token={route.token} error={route.error} /> : <Shell />}
+      {route.name === 'import' ? <ImportPage token={route.token} error={route.error} /> : <FirstStartGate><Shell /></FirstStartGate>}
     </LucideProvider>
   )
 }
