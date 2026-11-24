@@ -147,6 +147,26 @@ def test_installed_browsers_lists_only_existing_executables(tmp_path: Path) -> N
     assert browsers[1].extensions_url == "vivaldi://extensions"
 
 
+def test_opera_is_found_where_its_own_installer_puts_it(tmp_path: Path, monkeypatch) -> None:
+    """Opera installs per user under Programs, or for all users straight under Program Files."""
+    from spyglass_service.desktop.platform_windows import _default_candidates
+
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("ProgramFiles", str(tmp_path / "pf"))
+    monkeypatch.delenv("ProgramFiles(x86)", raising=False)
+    found = _default_candidates()["opera"]
+    assert tmp_path / "local" / "Programs" / "Opera" / "opera.exe" in found
+    assert tmp_path / "pf" / "Opera" / "opera.exe" in found
+
+
+def test_opera_opens_its_own_extensions_page(tmp_path: Path) -> None:
+    opera = _exe(tmp_path, "opera", "opera.exe")
+    platform = WindowsPlatform(registry=FakeRegistry(), candidates={"opera": [opera]})
+    browsers = platform.installed_browsers()
+    assert [(b.id, b.name, b.extensions_url) for b in browsers] == [
+        ("opera", "Opera", "opera://extensions")]
+
+
 def test_open_extensions_page_launches_the_browser_with_its_address(tmp_path: Path) -> None:
     vivaldi = _exe(tmp_path, "vivaldi", "vivaldi.exe")
     launched: list[list[str]] = []

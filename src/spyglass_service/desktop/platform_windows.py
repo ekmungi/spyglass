@@ -53,7 +53,11 @@ _BROWSERS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
         "brave://extensions",
         ("BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
     ),
+    # Opera's own installer uses Programs\Opera for one user; see _EXTRA_PARTS for all users.
+    ("opera", "Opera", "opera://extensions", ("Programs", "Opera", "opera.exe")),
 )
+# Further places under the same roots, for a browser whose installer differs by scope.
+_EXTRA_PARTS: dict[str, tuple[tuple[str, ...], ...]] = {"opera": (("Opera", "opera.exe"),)}
 
 # Per-machine (both bitnesses) and per-user install roots, in the order they are tried.
 _ROOT_VARIABLES = ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA")
@@ -128,7 +132,8 @@ def _default_candidates() -> dict[str, list[Path]]:
     """Where each supported browser usually lives, from the machine's Application folders."""
     roots = [Path(os.environ[var]) for var in _ROOT_VARIABLES if os.environ.get(var)]
     return {
-        browser_id: [root.joinpath(*parts) for root in roots]
+        browser_id: [root.joinpath(*each) for each in (parts, *_EXTRA_PARTS.get(browser_id, ()))
+                     for root in roots]
         for browser_id, _name, _url, parts in _BROWSERS
     }
 
