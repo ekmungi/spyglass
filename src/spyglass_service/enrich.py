@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from spyglass_service.capabilities import LocalModelMissing
 from spyglass_service.categories import _ensure_category, managed_category_names
 from spyglass_service.content_store import store_fulltext
 from spyglass_service.documents import fetch_fulltext
@@ -233,6 +234,9 @@ def enrich_item(
     # backfillable extra -- the background shallow-embed pass re-covers items lacking one.
     try:
         embed_summary(engine, index, item.id, title, g2.summary, g2.tags)
+    except LocalModelMissing:
+        # Setup can leave the local AI model out; that is a choice, not a failure to report.
+        logger.debug("The local AI model is not installed; item %s keeps no embedding", item.id)
     except Exception:  # noqa: BLE001 -- never let embedding failure abort a successful enrichment
         logger.exception("embed_summary failed for item %s; summary saved, embedding skipped", item.id)
     return {"relevance_score": g2.relevance_score, "recommended": recommended,

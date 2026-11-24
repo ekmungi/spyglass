@@ -44,7 +44,10 @@ class FakeRun:
 
 
 @pytest.fixture()
-def ctx(tmp_path: Path) -> SetupContext:
+def ctx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SetupContext:
+    # The PC's own Claude Code settings and npm folder must not decide any test.
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     install_dir = tmp_path / "Programs" / "Spyglass"
     install_dir.mkdir(parents=True)
     home = tmp_path / "home"

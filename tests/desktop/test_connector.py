@@ -3,8 +3,17 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from spyglass_service.desktop import connector
 from spyglass_service.desktop.connector import add_connector, connector_url, remove_connector
+
+
+@pytest.fixture(autouse=True)
+def _no_real_claude_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Keep the PC's own Claude Code settings and npm folder out of every test."""
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
 
 
 class FakeRun:
@@ -97,3 +106,11 @@ def test_finds_claude_in_the_native_installer_folder(tmp_path: Path) -> None:
 
 def test_finds_no_claude_when_there_is_none(tmp_path: Path) -> None:
     assert connector.find_claude(tmp_path, which=lambda _name: None) is None
+
+
+def test_a_connector_without_an_address_counts_as_pointing_elsewhere(tmp_path: Path) -> None:
+    """A command-line (stdio) connector named spyglass has no url; setup must leave it alone."""
+    run = FakeRun()
+    _claude_config(tmp_path, {"spyglass": {"type": "stdio", "command": "spyglass-mcp"}})
+    assert add_connector("claude.exe", 7777, home=tmp_path, run=run) == "foreign"
+    assert run.calls == []

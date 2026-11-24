@@ -168,3 +168,16 @@ def test_dismissing_the_guide_removes_it(upgraded: Rig) -> None:
     assert upgraded.client.post(f"{BASE}/setup-guide/dismiss").status_code == 204
     assert not guide.exists()
     assert upgraded.client.get(f"{BASE}/first-start").json()["browsers"] == []
+
+
+def test_the_restarted_spyglass_opens_no_second_browser_tab(monkeypatch) -> None:
+    """The first-start page reloads itself, so the new start runs in the background."""
+    started: list[list[str]] = []
+
+    class Recorder:
+        def __init__(self, args, **_kwargs) -> None:
+            started.append(list(args))
+
+    monkeypatch.setattr(first_start.subprocess, "Popen", Recorder)
+    first_start.spawn_restart()
+    assert started and started[0][-2:] == ["--restart", "--background"]

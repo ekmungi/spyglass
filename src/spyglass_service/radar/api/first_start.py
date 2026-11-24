@@ -66,8 +66,9 @@ def spawn_restart() -> None:
     """Start a new Spyglass that waits for this one to free the port; this one then stops."""
     pythonw = Path(sys.executable).with_name("pythonw.exe")
     launcher = launcher_path(pythonw)
-    args = ([str(launcher), "--restart"] if launcher is not None
-            else [str(pythonw), "-m", "spyglass_service.desktop", "--restart"])
+    # In the background: the first-start page reloads itself, so no second tab should open.
+    args = ([str(launcher), "--restart", "--background"] if launcher is not None
+            else [str(pythonw), "-m", "spyglass_service.desktop", "--restart", "--background"])
     flags = (no_window_flags() | getattr(subprocess, "DETACHED_PROCESS", 0)
              | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     subprocess.Popen(args, creationflags=flags, close_fds=True,  # noqa: S603 -- no shell

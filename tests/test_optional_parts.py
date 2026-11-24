@@ -158,3 +158,23 @@ def test_related_items_fall_back_to_text_without_the_model(tmp_path: Path) -> No
         app.state.engine.dispose()
     assert reply.status_code == 200
     assert reply.json()["items"] == []
+
+
+def test_find_papers_skips_collected_papers_without_the_model(engine) -> None:
+    """Collected papers are matched by meaning; without the model that part is skipped, not 502."""
+    from spyglass_service.radar.models import Assessment
+    from spyglass_service.radar.papers import search
+
+    def missing(_texts: list[str]) -> np.ndarray:
+        raise capabilities.LocalModelMissing()
+
+    index = EmbeddingIndex(missing, ARCTIC_MODEL, ARCTIC_DIM)
+    with Session(engine) as session:
+        item = Item(source="rss", external_id="p1", url="https://arxiv.org/abs/1", title="P")
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        session.add(Assessment(item_id=item.id, kind="paper"))
+        session.commit()
+        index.add(item.id, np.ones(ARCTIC_DIM, dtype=np.float32).tobytes())
+        assert search._local_papers(session, index, "retina") == []

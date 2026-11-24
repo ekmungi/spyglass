@@ -46,7 +46,8 @@ def _settings_file(home: Path) -> Path:
 
 
 def registered_url(home: Path) -> str | None:
-    """The address of the user-scope "spyglass" connector, or None when there is none.
+    """The address of the user-scope "spyglass" connector, "" for one without an address, or
+    None when there is none.
 
     A settings file that is missing or cannot be read counts as no connector: the add command
     then refuses a name that exists, so nothing is overwritten either way.
@@ -57,8 +58,11 @@ def registered_url(home: Path) -> str | None:
         return None
     servers = data.get("mcpServers") if isinstance(data, dict) else None
     entry = servers.get(SERVER_NAME) if isinstance(servers, dict) else None
+    if entry is None:
+        return None
     url = entry.get("url") if isinstance(entry, dict) else None
-    return url if isinstance(url, str) else None
+    # An entry without an address (a command-line connector) is someone else's: "" never matches.
+    return url if isinstance(url, str) else ""
 
 
 def _is_ours(url: str, port: int) -> bool:

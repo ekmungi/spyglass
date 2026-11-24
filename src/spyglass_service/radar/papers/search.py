@@ -17,6 +17,7 @@ import numpy as np
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from spyglass_service.capabilities import LocalModelMissing
 from spyglass_service.embeddings import EmbeddingIndex
 from spyglass_service.models import Item
 from spyglass_service.radar.brief.llm import LlmFn, json_schema, make_llm
@@ -101,13 +102,18 @@ def _local_papers(session: Session, index: EmbeddingIndex, topic: str) -> list[d
     """Collected papers (kind "paper" with an arXiv, DOI or journal address) close to the topic.
 
     Closeness is the cosine similarity of the embeddings and must reach `LOCAL_MIN_SIMILARITY`;
-    anything below it is not a candidate however few candidates there are.
+    anything below it is not a candidate however few candidates there are. Without the local AI
+    model (an optional part of the install) the topic cannot be embedded, so there are none.
     """
     ids = list(session.exec(select(Assessment.item_id).where(Assessment.kind == "paper")).all())
     found, matrix = index.matrix_for(ids)
     if not found:
         return []
-    query = np.asarray(index.embed_query(topic), dtype=np.float32)
+    try:
+        query = np.asarray(index.embed_query(topic), dtype=np.float32)
+    except LocalModelMissing:
+        logger.info("The local AI model is not installed; collected papers are not searched")
+        return []
     norm = float(np.linalg.norm(query)) or 1.0
     sims = (matrix @ query) / norm
     order = [int(i) for i in np.argsort(-sims)[:LOCAL_MAX] if sims[i] >= LOCAL_MIN_SIMILARITY]
