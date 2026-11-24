@@ -59,6 +59,9 @@ HEALTH_WAIT_S = 30.0
 OPEN_WAIT_S = 120.0
 # The pause between two health probes while waiting.
 POLL_S = 0.25
+# How long a restart (after the first-start page moved the data) waits for the old service to
+# free the port; its own stop takes at most eight seconds.
+RESTART_WAIT_S = 30.0
 # Before a hard exit, how long the tray loop gets to remove the icon, so no dead icon lingers.
 TRAY_CLOSE_GRACE_S = 0.5
 # run()'s result when Spyglass did not start, or stopped on its own.
@@ -122,18 +125,27 @@ class Launcher:
         self._url = ""
         self._stopped = threading.Event()
 
-    def run(self, background: bool = False) -> int:
+    def run(self, background: bool = False, restart: bool = False) -> int:
         """Start Spyglass and block until it stops; return the process exit code.
 
         Order: settings, environment, lock, start decision, folder check, logs, service thread,
         health wait, the browser unless `background` (later, from a helper thread, when the
-        service has not answered yet), then the tray on this (the main) thread.
+        service has not answered yet), then the tray on this (the main) thread. On a first
+        start (desktop.json names no data folder) the default folder is created first.
+        `restart` (Spyglass restarting itself on another data folder) first waits up to
+        RESTART_WAIT_S for the old service to free the port.
         0 after a normal stop, or when another live launcher holds this folder; a refused
         folder returns its verdict (3, 4 or 5); every other failure returns 1.
         """
         config = self._read_config()
         if config is None:
             return EXIT_FAILED
+        if config.first_start:
+            try:
+                config.data_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                self._show(bad_config_message(exc))
+                return EXIT_FAILED
         if not config.data_dir.exists():
             # Before the environment (which moves into the folder) and the lock (whose file
             # would create it), so a vanished folder is reported, not silently recreated.
@@ -144,6 +156,8 @@ class Launcher:
             self._show(bad_config_message(exc))
             return EXIT_FAILED
         self._url = f"http://127.0.0.1:{settings.port}/"
+        if restart:
+            self._wait_for_free_port(settings.port, time.monotonic() + RESTART_WAIT_S)
         lock = single_instance_lock(settings.data_dir, pid_started_at=self._os.process_started_at,
                                     boot_time=self._os.boot_time)
         claim = claim_data_folder(lock, settings.data_dir, self._platform)
@@ -320,6 +334,12 @@ class Launcher:
                 return False
             time.sleep(POLL_S)
         return False
+
+    def _wait_for_free_port(self, port: int, until: float) -> None:
+        """Probe until nothing answers on `port` or the monotonic time `until` passes. What still
+        answers afterwards is judged by the usual start decision."""
+        while probe_health(port) is not None and time.monotonic() < until:
+            time.sleep(POLL_S)
 
     def _ended_during_start(self, settings: Settings) -> int:
         """The service ended, or a stop came, before the tray was shown."""

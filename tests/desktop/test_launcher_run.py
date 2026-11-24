@@ -718,7 +718,8 @@ def test_main_default_path_builds_and_runs_a_launcher(monkeypatch) -> None:
         def __init__(self, **kwargs) -> None:
             calls.append(("init", kwargs))
 
-        def run(self, background: bool = False) -> int:
+        def run(self, background: bool = False, restart: bool = False) -> int:
+            assert restart is False
             calls.append(("run", background))
             return 7
 
@@ -761,3 +762,52 @@ def test_ending_the_process_survives_missing_or_broken_streams(monkeypatch) -> N
     monkeypatch.setattr(desktop_main.sys, "stderr", Broken())
     desktop_main.end_process(1, exit_now=exits.append)
     assert exits == [1]
+
+
+def test_first_start_runs_on_the_default_folder_and_creates_it(make_rig) -> None:
+    """desktop.json naming no data folder (as setup writes it) starts on "data" beside it."""
+    rig = make_rig()
+    rig.data.rmdir()
+    rig.config.write_text(json.dumps({"data_dir": None, "vault_path": None, "port": PORT}),
+                          encoding="utf-8")
+    rig.start(background=True)
+    tray = rig.wait_for_tray()
+    assert rig.data.is_dir()
+    assert rig.platform.messages == []
+    tray.kwargs["on_quit"]()
+    assert rig.finish() == 0
+
+
+def test_a_restart_waits_for_the_old_service_to_free_the_port(make_rig, monkeypatch) -> None:
+    """After the first-start page moves the data, the new start waits instead of refusing."""
+    rig = make_rig(health=Health(__version__, "desktop"))
+    monkeypatch.setattr(launcher_mod, "RESTART_WAIT_S", WAIT)
+    threading.Timer(0.3, lambda: setattr(rig, "health", None)).start()
+    rig.thread = threading.Thread(
+        target=lambda: rig.result.append(rig.launcher.run(background=True, restart=True)),
+        daemon=True)
+    rig.thread.start()
+    tray = rig.wait_for_tray()
+    assert rig.platform.messages == []
+    tray.kwargs["on_quit"]()
+    assert rig.finish() == 0
+
+
+def test_a_restart_gives_up_waiting_and_then_refuses_as_usual(make_rig, monkeypatch) -> None:
+    rig = make_rig(health=Health("9.9.9", "desktop"))
+    monkeypatch.setattr(launcher_mod, "RESTART_WAIT_S", 0.2)
+    assert rig.launcher.run(background=True, restart=True) == 1
+    assert rig.platform.messages[0][1] == refusal_message(Health("9.9.9", "desktop"), PORT)
+
+
+def test_main_passes_the_restart_flag_to_the_launcher(monkeypatch) -> None:
+    seen: list[dict] = []
+
+    class Recorder:
+        def run(self, **kwargs) -> int:
+            seen.append(kwargs)
+            return 0
+
+    monkeypatch.setattr(launcher_mod, "Launcher", Recorder)
+    assert main(["--restart", "--background"]) == 0
+    assert seen == [{"background": True, "restart": True}]

@@ -39,6 +39,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="check that PATH suits this version; exit 0, 3 (older data) or 4 (newer)")
     parser.add_argument("--background", action="store_true",
                         help="start without opening the interface in the browser")
+    parser.add_argument("--restart", action="store_true",
+                        help="first wait for the Spyglass that started this one to free the port")
     args = parser.parse_args(argv)
     if args.check_data_dir is not None:
         # Not guarded: the installer reads this path's exit code and output, never a message box.
@@ -47,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         # Imported here so the folder check stays fast and free of the launcher's heavy imports.
         from spyglass_service.desktop.launcher import Launcher
 
-        return Launcher().run(background=args.background)
+        return Launcher().run(background=args.background, restart=args.restart)
     except Exception as exc:
         return _report_crash(exc)
 

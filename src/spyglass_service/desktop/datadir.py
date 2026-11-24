@@ -32,11 +32,25 @@ CONFIG_OVERRIDE_VAR = "SPYGLASS_DESKTOP_CONFIG"
 
 @dataclass(frozen=True)
 class DesktopConfig:
-    """What the installer decided: the data folder, an optional vault, and the port."""
+    """Where the data lives, an optional vault, and the port.
+
+    first_start is True when desktop.json names no data folder (setup writes it so): the app
+    then runs on the default folder and its first-start page asks where the data should live.
+    """
 
     data_dir: Path
     vault_path: Path | None = None
     port: int = DEFAULT_PORT
+    first_start: bool = False
+
+
+def default_data_dir(settings_file: Path | None = None) -> Path:
+    """The data folder used until the user chooses one: "data" beside desktop.json.
+
+    On Windows that is %LOCALAPPDATA%\\Spyglass\\data. A test run's scratch desktop.json gets a
+    scratch data folder beside it, so tests never touch the real one.
+    """
+    return (settings_file or config_path()).parent / "data"
 
 
 class ConfigError(ValueError):
@@ -66,8 +80,9 @@ def config_path() -> Path:
 
 def load_config(path: Path | None = None) -> DesktopConfig | None:
     """Read the settings file. Returns None when it is missing; raises ConfigError otherwise
-    when it is not UTF-8, the JSON is bad, `data_dir` is absent or not text, or the port is not
-    one a service can listen on."""
+    when it is not UTF-8, the JSON is bad, `data_dir` is neither text nor null, or the port is
+    not one a service can listen on. A file that names no data folder (absent, null or empty)
+    gives the default folder with first_start set."""
     target = path or config_path()
     try:
         # utf-8-sig also reads the byte order mark Windows PowerShell 5.1 puts before UTF-8.
@@ -86,8 +101,9 @@ def load_config(path: Path | None = None) -> DesktopConfig | None:
     if not isinstance(data, dict):
         raise ConfigError(f"{target} must hold a JSON object")
     data_dir = data.get("data_dir")
-    if not isinstance(data_dir, str) or not data_dir:
-        raise ConfigError(f"{target} needs a text value for data_dir")
+    if data_dir is not None and not isinstance(data_dir, str):
+        raise ConfigError(f"{target}: data_dir must be text or null")
+    first_start = not data_dir
     vault = data.get("vault_path")
     if vault is not None and not isinstance(vault, str):
         raise ConfigError(f"{target}: vault_path must be text or null")
@@ -98,7 +114,9 @@ def load_config(path: Path | None = None) -> DesktopConfig | None:
     # Port 0 would make the service bind a random port while the launcher opens port 0.
     if not MIN_PORT <= port <= MAX_PORT:
         raise ConfigError(f"{target}: port must be from {MIN_PORT} to {MAX_PORT}")
-    return DesktopConfig(data_dir=Path(data_dir), vault_path=Path(vault) if vault else None, port=port)
+    folder = default_data_dir(target) if first_start else Path(data_dir)
+    return DesktopConfig(data_dir=folder, vault_path=Path(vault) if vault else None, port=port,
+                         first_start=first_start)
 
 
 def save_config(config: DesktopConfig, path: Path | None = None) -> None:

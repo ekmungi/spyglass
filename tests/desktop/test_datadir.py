@@ -173,7 +173,24 @@ def test_config_defaults_and_missing_file(tmp_path: Path) -> None:
     assert loaded is not None and loaded.vault_path is None and loaded.port == 7777
 
 
-@pytest.mark.parametrize("body", ["{", "{}", '{"data_dir": 5}', '[1]', '{"data_dir": "x", "port": "7"}'])
+@pytest.mark.parametrize("body", ["{}", '{"data_dir": null, "vault_path": null, "port": 7790}',
+                                  '{"data_dir": ""}'])
+def test_a_settings_file_naming_no_data_folder_means_first_start(tmp_path: Path, body: str) -> None:
+    """Setup writes data_dir null; the app then starts on the default folder and asks."""
+    path = tmp_path / "desktop.json"
+    path.write_text(body, encoding="utf-8")
+    loaded = load_config(path)
+    assert loaded is not None and loaded.first_start is True
+    assert loaded.data_dir == tmp_path / "data"
+
+
+def test_a_settings_file_naming_a_data_folder_is_no_first_start(tmp_path: Path) -> None:
+    path = tmp_path / "desktop.json"
+    save_config(DesktopConfig(data_dir=tmp_path / "d"), path)
+    assert load_config(path).first_start is False
+
+
+@pytest.mark.parametrize("body", ["{", '{"data_dir": 5}', '[1]', '{"data_dir": "x", "port": "7"}'])
 def test_load_config_rejects_bad_json_and_missing_keys(tmp_path: Path, body: str) -> None:
     path = tmp_path / "desktop.json"
     path.write_text(body, encoding="utf-8")

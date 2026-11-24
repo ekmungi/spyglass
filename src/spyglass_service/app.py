@@ -448,6 +448,8 @@ def create_app(
         return JSONResponse(status_code=503, content={"detail": str(exc)})
 
     app.state.settings = settings
+    # The first-start page stops this process after starting Spyglass again on another folder.
+    app.state.shutdown_handler = shutdown_handler
     app.state.radar_scheduler = None
     app.state.started_by = started_by
     app.state.desktop_platform = desktop_platform

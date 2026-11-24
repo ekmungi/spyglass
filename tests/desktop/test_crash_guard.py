@@ -23,7 +23,7 @@ class FakePlatform:
 class BrokenLauncher:
     """A launcher whose run() fails the way a read-only data folder makes the lock fail."""
 
-    def run(self, background: bool = False) -> int:
+    def run(self, background: bool = False, restart: bool = False) -> int:
         raise PermissionError("the data folder is read-only")
 
 
@@ -62,7 +62,7 @@ def test_a_crash_log_that_cannot_be_written_still_shows_the_message(
 
 def test_only_the_first_line_of_a_long_error_is_shown(platform, tmp_path: Path, monkeypatch) -> None:
     class Wordy:
-        def run(self, background: bool = False) -> int:
+        def run(self, background: bool = False, restart: bool = False) -> int:
             raise RuntimeError("first line\nsecond line\nthird line")
 
     monkeypatch.setattr(launcher_mod, "Launcher", Wordy)
