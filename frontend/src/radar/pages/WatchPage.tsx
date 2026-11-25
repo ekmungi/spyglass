@@ -1,9 +1,11 @@
-// Watch page: the topics you follow, then the companies, labs and regulators Spyglass checks every day, grouped,
-// with suggestions waiting for a yes. One Add button opens every way to add; a group menu and an AI review tidy the list.
+// Watch page: the topics you follow, suggestions waiting for a yes, then the companies, labs and regulators
+// Spyglass checks every day as chips, one row per group, and the Paused list. One click on a chip pauses or
+// watches a name in place. One Add button opens every way to add; a group menu and an AI review tidy the list.
 import './watch/watch.css'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { errorMessage } from '../api/errors'
 import type { RemovedWatchEntity, SectionKey, WatchApplyResponse, WatchGroupBody } from '../api/types'
+import { navigate } from '../router'
 import { Button, Dialog, EmptyState, IconAdd, SectionHeading, Skeleton, toast, type MenuItem } from '../ui'
 import {
   addEntry,
@@ -21,16 +23,24 @@ import {
 import { AddDialog } from './watch/AddDialog'
 import { EntityDialog } from './watch/EntityDialog'
 import type { FollowFields } from './watch/FollowPane'
-import { GroupHeading, type GroupMenuAction } from './watch/GroupHeading'
+import type { GroupMenuAction } from './watch/GroupHeading'
 import { GroupDialog, type GroupDialogState } from './watch/GroupDialogs'
-import { categoryNames, organizeRegister, type OrganizedGroup } from './watch/organize'
+import { MoveDialog } from './watch/MoveDialog'
+import { categoryNames, groupSteps, type LayoutGroup } from './watch/organize'
 import { describeApplied } from './watch/reviewText'
 import { ReviewPanel } from './watch/ReviewPanel'
 import { TopicsSection } from './watch/TopicsSection'
+import { WatchingSection } from './watch/WatchingSection'
+import { useWatchLayout } from './watch/useWatchLayout'
 import { WatchRow } from './watch/WatchRow'
 import { useLoad } from './sources/useLoad'
 
-type DialogState = { kind: 'edit'; entry: WatchEntry; round: number } | { kind: 'remove'; entry: WatchEntry } | null
+/** The open per-name dialog; `group` is the group the name is shown in or labelled with. */
+type DialogState =
+  | { kind: 'edit'; entry: WatchEntry; group: string; round: number }
+  | { kind: 'move'; entry: WatchEntry; group: string }
+  | { kind: 'remove'; entry: WatchEntry }
+  | null
 
 const EXPLAINER =
   "Spyglass searches the news for each of these once a day. What it finds goes into your Feed, and the important ones appear in your brief under 'On your watch list'."
@@ -42,7 +52,7 @@ function registerOf<T extends WatchRegister>({ categories, suggested, rejected, 
 
 /** The Watch page (no props): the register by group, suggestions, topics, and every way to add or tidy. */
 export default function WatchPage() {
-  const { data, error, loading, reload, replace } = useLoad<WatchRegister>((signal) => getWatch(signal), 'watch')
+  const { data, error, loading, reload, replace, remember } = useLoad<WatchRegister>((signal) => getWatch(signal), 'watch')
   const [busyId, setBusyId] = useState<number | null>(null)
   const [busyGroup, setBusyGroup] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogState>(null)
@@ -53,7 +63,9 @@ export default function WatchPage() {
   const [reviewing, setReviewing] = useState(false)
   const [topicsToken, setTopicsToken] = useState(0)
 
-  const organized = useMemo(() => (data ? organizeRegister(data) : null), [data])
+  // Laid out once per load; a chip click changes only that chip's look until the next load.
+  const { layout, switching, toggle } = useWatchLayout(data, remember)
+
   const closeDialog = useCallback(() => setDialog(null), [])
   const closeAdd = useCallback(() => setAdding(false), [])
   const closeReview = useCallback(() => setReviewing(false), [])
@@ -90,9 +102,22 @@ export default function WatchPage() {
   const accept = (entry: WatchEntry) => act(entry, () => changeEntry(entry.id, { status: 'active' }), `Now watching ${entry.name}`)
   const dismiss = (entry: WatchEntry) =>
     act(entry, () => changeEntry(entry.id, { status: 'muted' }), `Dismissed ${entry.name}`, () => changeEntry(entry.id, { status: 'suggested' }))
-  const mute = (entry: WatchEntry) =>
-    act(entry, () => changeEntry(entry.id, { status: 'muted' }), `Muted ${entry.name}`, () => changeEntry(entry.id, { status: 'active' }))
-  const unmute = (entry: WatchEntry) => act(entry, () => changeEntry(entry.id, { status: 'active' }), `Watching ${entry.name} again`)
+
+  /** Move one name to another group; the rows change, so the list is loaded again. */
+  const moveName = async (entry: WatchEntry, to: string) => {
+    const back = entry.category
+    await changeEntry(entry.id, { category: to })
+    setDialog(null)
+    reload()
+    toast(`Moved ${entry.name} to ${to}.`, {
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          changeEntry(entry.id, { category: back }).then(reload, (cause) => toast(errorMessage(cause), { tone: 'error' }))
+        },
+      },
+    })
+  }
 
   const saveEdit = async (fields: EntryFields) => {
     if (dialog?.kind !== 'edit') return
@@ -142,12 +167,21 @@ export default function WatchPage() {
       (cause: unknown) => toast(errorMessage(cause), { tone: 'error' }),
     )
 
-  /** One whole-group change. The answer is the fresh register, so no second request is needed. */
-  const changeGroup = async (body: WatchGroupBody, message: (removed: RemovedWatchEntity[]) => string, undo?: (removed: RemovedWatchEntity[]) => Promise<unknown>) => {
+  /**
+   * One whole-group change, sent `times` times in a row (a move past hidden groups). The answer is the
+   * fresh register, so no second request is needed; the page is laid out again from it.
+   */
+  const changeGroup = async (
+    body: WatchGroupBody,
+    message: (removed: RemovedWatchEntity[]) => string,
+    undo?: (removed: RemovedWatchEntity[]) => Promise<unknown>,
+    times = 1,
+  ) => {
     setBusyGroup(body.category)
     setGroupProblem(null)
     try {
-      const result = await patchWatchGroup(body)
+      let result = await patchWatchGroup(body)
+      for (let step = 1; step < times; step += 1) result = await patchWatchGroup(body)
       replace(registerOf(result))
       setGroupDialog(null)
       toast(message(result.removed), { action: undo ? { label: 'Undo', onClick: () => void undo(result.removed) } : undefined })
@@ -160,10 +194,14 @@ export default function WatchPage() {
     }
   }
 
-  const onGroupAction = (group: OrganizedGroup, action: GroupMenuAction) => {
+  const onGroupAction = (group: LayoutGroup, action: GroupMenuAction) => {
     if (action === 'pause') void changeGroup({ category: group.name, action }, () => `Paused ${group.name}`)
     else if (action === 'resume') void changeGroup({ category: group.name, action }, () => `Watching ${group.name} again`)
-    else {
+    else if (action === 'up' || action === 'down') {
+      const order = (data?.categories ?? []).map((category) => category.name)
+      const times = groupSteps(order, layout?.groups.map((shown) => shown.name) ?? [], group.name, action)
+      if (times > 0) void changeGroup({ category: group.name, action }, () => `Moved ${group.name} ${action}`, undefined, times)
+    } else {
       const count = data?.categories.find((category) => category.name === group.name)?.entities.length ?? group.entities.length
       setGroupProblem(null)
       setGroupDialog({ kind: action, name: group.name, count })
@@ -190,22 +228,24 @@ export default function WatchPage() {
     })
   }
 
-  const openEdit = (entry: WatchEntry) => setDialog((current) => ({ kind: 'edit', entry, round: (current?.kind === 'edit' ? current.round : 0) + 1 }))
+  const openDetails = (entry: WatchEntry, group: string) =>
+    setDialog((current) => ({ kind: 'edit', entry, group, round: (current?.kind === 'edit' ? current.round : 0) + 1 }))
 
-  const menuFor = (entry: WatchEntry): MenuItem[] => [
-    { id: 'edit', label: 'Edit', onSelect: () => openEdit(entry) },
-    entry.status === 'muted'
-      ? { id: 'unmute', label: 'Watch again', onSelect: () => void unmute(entry) }
-      : { id: 'mute', label: 'Mute', hint: 'Stop checking', onSelect: () => void mute(entry) },
+  /** The rare actions on a chip; the one-click switch is the chip itself. */
+  const menuFor = (entry: WatchEntry, group: string): MenuItem[] => [
+    { id: 'details', label: 'Details', onSelect: () => openDetails(entry, group) },
+    { id: 'move', label: 'Move to another group…', onSelect: () => setDialog({ kind: 'move', entry, group }) },
+    { id: 'items', label: 'See its items in the Feed', onSelect: () => navigate({ name: 'feed', params: { q: entry.name } }) },
     { id: 'remove', label: 'Remove…', onSelect: () => setDialog({ kind: 'remove', entry }) },
   ]
 
   const suggested = data?.suggested ?? []
-  const empty = organized !== null && organized.groups.length === 0 && organized.muted.length === 0 && suggested.length === 0
+  const watching = layout !== null && (layout.groups.length > 0 || layout.paused.length > 0)
+  const empty = layout !== null && !watching && suggested.length === 0
   const groupNames = data ? categoryNames(data) : []
 
   return (
-    <div className="r-page">
+    <div className="r-page rw-page">
       <div className="rw-head">
         <h1 className="r-page-title">Watch</h1>
         <div className="rw-head__actions">
@@ -264,26 +304,8 @@ export default function WatchPage() {
         </section>
       )}
 
-      {organized?.groups.map((group, index) => (
-        <section key={group.name} aria-labelledby={`watch-group-${index}`} className={`rw-section${group.paused ? ' rw-paused' : ''}`}>
-          <GroupHeading id={`watch-group-${index}`} group={group} busy={busyGroup === group.name} onAction={(action) => onGroupAction(group, action)} />
-          <ul className="r-rows">
-            {group.entities.map((entry) => (
-              <WatchRow key={entry.id} entry={entry} busy={busyId === entry.id} menu={menuFor(entry)} />
-            ))}
-          </ul>
-        </section>
-      ))}
-
-      {organized && organized.muted.length > 0 && (
-        <details className="rw-section rw-muted">
-          <summary>Muted ({organized.muted.length})</summary>
-          <ul className="r-rows">
-            {organized.muted.map((entry) => (
-              <WatchRow key={entry.id} entry={entry} busy={busyId === entry.id} menu={menuFor(entry)} />
-            ))}
-          </ul>
-        </details>
+      {layout && watching && (
+        <WatchingSection layout={layout} busyIds={switching} busyGroup={busyGroup} menuFor={menuFor} onToggle={toggle} onGroupAction={onGroupAction} />
       )}
 
       {empty && (
@@ -308,7 +330,26 @@ export default function WatchPage() {
       {reviewing && <ReviewPanel onClose={closeReview} onApplied={applied} />}
 
       {dialog?.kind === 'edit' && (
-        <EntityDialog key={`${dialog.entry.id}-${dialog.round}`} open entry={dialog.entry} categories={groupNames} onClose={closeDialog} onSave={saveEdit} />
+        <EntityDialog
+          key={`${dialog.entry.id}-${dialog.round}`}
+          open
+          entry={dialog.entry}
+          group={dialog.group}
+          categories={groupNames}
+          onClose={closeDialog}
+          onSave={saveEdit}
+        />
+      )}
+
+      {dialog?.kind === 'move' && (
+        <MoveDialog
+          key={dialog.entry.id}
+          entry={dialog.entry}
+          from={dialog.group}
+          others={(data?.categories ?? []).map((category) => category.name).filter((name) => name !== dialog.group)}
+          onClose={closeDialog}
+          onMove={(to) => moveName(dialog.entry, to)}
+        />
       )}
 
       {groupDialog && (
@@ -346,6 +387,7 @@ export default function WatchPage() {
         }
       >
         <p className="r-meta">Spyglass stops checking this name and forgets which items mention it. The items themselves stay in your feed.</p>
+        <p className="r-meta">To stop the searches and keep the name, close this and click the name once: it turns grey.</p>
       </Dialog>
     </div>
   )

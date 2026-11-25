@@ -1,4 +1,4 @@
-// Tests for whole-group actions on the Watch page: pause, resume, rename, move and remove with undo.
+// Tests for whole-group actions on the Watch page: pause, watch again, move up and down, rename, move and remove with undo.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/errors'
@@ -6,7 +6,7 @@ import type { WatchRegister } from './api'
 import { ToastViewport } from '../../ui'
 import WatchPage from '../WatchPage'
 import { clearLoadCache } from '../sources/useLoad'
-import { entry, register } from './testFixtures'
+import { clearToasts, entry, register } from './testFixtures'
 
 const api = vi.hoisted(() => ({
   getWatch: vi.fn(),
@@ -53,30 +53,79 @@ function pausedRegister(): WatchRegister {
 
 beforeEach(() => {
   clearLoadCache()
+  clearToasts()
   vi.clearAllMocks()
   api.getWatch.mockResolvedValue(register())
   api.getTracks.mockResolvedValue([])
 })
 
+/** A register whose Imaging AI and Regulators groups both have watched names, so both are shown. */
+function twoGroups(): WatchRegister {
+  const next = register()
+  next.categories[1] = { ...next.categories[1], paused: false, entities: next.categories[1].entities.map((e) => ({ ...e, status: 'active' as const })) }
+  return next
+}
+
+/** The group names in the order the page shows them. */
+const shownGroups = () => screen.getAllByRole('heading', { level: 3 }).map((node) => node.textContent)
+
 describe('group actions', () => {
-  it('pauses a whole group in one choice and shows the answer without another request', async () => {
+  it('pauses a whole group in one choice and lays the page out again from the answer, without another request', async () => {
     api.patchWatchGroup.mockResolvedValue({ ...pausedRegister(), removed: [] })
     renderPage()
     await chooseFromGroupMenu('Imaging AI', 'Pause this group')
     await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'pause' }))
-    const group = await screen.findByRole('region', { name: 'Imaging AI' })
-    expect(within(group).getByText('Paused')).toBeInTheDocument()
     expect(await screen.findByText('Paused Imaging AI')).toBeInTheDocument()
+    // Its names are now in the Paused list with the ones paused before.
+    expect(await screen.findByText('Paused (3)')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Imaging AI' })).not.toBeInTheDocument()
     expect(api.getWatch).toHaveBeenCalledTimes(1)
   })
 
-  it('offers Resume instead of Pause on a paused group, and resumes with one click', async () => {
+  it('offers to watch a group again once each of its names was paused on this visit', async () => {
+    api.changeEntry.mockResolvedValue({})
     api.patchWatchGroup.mockResolvedValue({ ...register(), removed: [] })
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Resume Regulators' }))
-    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Regulators', action: 'resume' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Actions for the group Regulators' }))
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
+    fireEvent.click(within(group).getByRole('button', { name: 'Zeta Vision' }))
+    await waitFor(() => expect(within(group).queryAllByRole('button', { pressed: true })).toHaveLength(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for the group Imaging AI' }))
     expect(screen.queryByRole('menuitem', { name: 'Pause this group' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Watch this group again' }))
+    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'resume' }))
+  })
+
+  it('moves a group down the page, and cannot move the first group up', async () => {
+    api.getWatch.mockResolvedValue(twoGroups())
+    const swapped = twoGroups()
+    swapped.categories = [swapped.categories[1], swapped.categories[0]]
+    api.patchWatchGroup.mockResolvedValue({ ...swapped, removed: [] })
+    renderPage()
+    await screen.findByRole('group', { name: 'Regulators' })
+    expect(shownGroups()).toEqual(['Imaging AI', 'Regulators'])
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for the group Imaging AI' }))
+    expect(screen.getByRole('menuitem', { name: 'Move up' })).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move down' }))
+    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'down' }))
+    await waitFor(() => expect(shownGroups()).toEqual(['Regulators', 'Imaging AI']))
+    expect(api.patchWatchGroup).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves a group past one that is hidden because all its names are paused', async () => {
+    const withHidden = twoGroups()
+    withHidden.categories = [
+      withHidden.categories[0],
+      { name: 'Dormant', paused: true, entities: [entry({ id: 7, name: 'Quiet Co', category: 'Dormant', status: 'muted' })] },
+      withHidden.categories[1],
+    ]
+    api.getWatch.mockResolvedValue(withHidden)
+    api.patchWatchGroup.mockResolvedValue({ ...twoGroups(), removed: [] })
+    renderPage()
+    await chooseFromGroupMenu('Regulators', 'Move up')
+    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledTimes(2))
+    expect(api.patchWatchGroup).toHaveBeenNthCalledWith(1, { category: 'Regulators', action: 'up' })
+    expect(api.patchWatchGroup).toHaveBeenNthCalledWith(2, { category: 'Regulators', action: 'up' })
   })
 
   it('renames a group, and Undo renames it back', async () => {
@@ -89,10 +138,10 @@ describe('group actions', () => {
     fireEvent.change(within(dialog).getByLabelText('Group name'), { target: { value: 'Scopes' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Rename' }))
     await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'rename', to: 'Scopes' }))
-    expect(await screen.findByRole('region', { name: 'Scopes' })).toBeInTheDocument()
+    expect(await screen.findByRole('group', { name: 'Scopes' })).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(api.patchWatchGroup).toHaveBeenLastCalledWith({ category: 'Scopes', action: 'rename', to: 'Imaging AI' }))
-    expect(await screen.findByRole('region', { name: 'Imaging AI' })).toBeInTheDocument()
+    expect(await screen.findByRole('group', { name: 'Imaging AI' })).toBeInTheDocument()
   })
 
   it('refuses an empty or too long group name before asking the service', async () => {
@@ -125,7 +174,7 @@ describe('group actions', () => {
     expect(within(dialog).getByLabelText('Move to')).toHaveValue('Regulators')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Move' }))
     await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'move', to: 'Regulators' }))
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Imaging AI' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Imaging AI' })).not.toBeInTheDocument())
   })
 
   it('moves to a new group when a new name is typed', async () => {
@@ -153,11 +202,11 @@ describe('group actions', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove group' }))
     await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'remove' }))
     expect(await screen.findByText('Removed Imaging AI (2 names)')).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Imaging AI' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Imaging AI' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(api.restoreWatchGroup).toHaveBeenCalledWith(removed))
-    expect(await screen.findByRole('region', { name: 'Imaging AI' })).toBeInTheDocument()
+    expect(await screen.findByRole('group', { name: 'Imaging AI' })).toBeInTheDocument()
     expect(await screen.findByText('Restored 2 names')).toBeInTheDocument()
   })
 

@@ -1,5 +1,17 @@
-// Shared builders for the Watch page tests: a register entry, a recent item and a small register.
+// Shared builders for the Watch page tests: a register entry, a recent item and a small register, and
+// a way to clear the toasts an earlier test left on screen.
+import { dismissToast, subscribeToasts, type ToastMessage } from '../../ui/toastStore'
 import type { WatchEntry, WatchRegister } from './api'
+
+/** Dismiss every toast still queued, so a test never finds an earlier test's message or Undo. */
+export function clearToasts(): void {
+  let queued: readonly ToastMessage[] = []
+  // Subscribing hands over the current queue at once; nothing needs to stay subscribed.
+  subscribeToasts((list) => {
+    queued = list
+  })()
+  queued.forEach((item) => dismissToast(item.id))
+}
 
 const DAY = 24 * 60 * 60 * 1000
 

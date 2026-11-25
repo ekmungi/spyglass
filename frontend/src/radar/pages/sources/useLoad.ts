@@ -13,6 +13,11 @@ export interface LoadState<T> {
   reload: () => void
   /** Replace the data locally, for example after a save the server has already confirmed. */
   replace: (next: T) => void
+  /**
+   * Change only the answer remembered for the next visit, leaving the page as it is: for a change the
+   * server confirmed that the page shows in place instead of re-rendering from new data.
+   */
+  remember: (update: (current: T) => T) => void
 }
 
 const answers = new Map<string, unknown>()
@@ -90,5 +95,13 @@ export function useLoad<T>(fetcher: (signal: AbortSignal) => Promise<T>, cacheKe
     [cacheKey],
   )
 
-  return { ...snapshot, reload, replace }
+  const remember = useCallback(
+    (update: (current: T) => T) => {
+      const current = cacheKey ? (answers.get(cacheKey) as T | undefined) : undefined
+      if (cacheKey && current !== undefined) answers.set(cacheKey, update(current))
+    },
+    [cacheKey],
+  )
+
+  return { ...snapshot, reload, replace, remember }
 }

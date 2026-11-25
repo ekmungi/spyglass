@@ -36,8 +36,8 @@ describe('Watch page in sample mode', () => {
     fireEvent.click(within(suggested).getByRole('button', { name: 'Accept Arclight Endoscopy' }))
 
     await waitFor(() => expect(screen.getByRole('region', { name: 'Suggested' })).not.toHaveTextContent('Arclight Endoscopy'), { timeout: 4000 })
-    const category = screen.getByRole('region', { name: 'Imaging AI' })
-    expect(within(category).getByText('Arclight Endoscopy')).toBeInTheDocument()
+    const category = screen.getByRole('group', { name: 'Imaging AI' })
+    expect(within(category).getByRole('button', { name: 'Arclight Endoscopy', pressed: true })).toBeInTheDocument()
   })
 
   it('removes a dismissed suggestion from the list', async () => {
@@ -46,7 +46,7 @@ describe('Watch page in sample mode', () => {
     fireEvent.click(within(suggested).getByRole('button', { name: 'Dismiss Quill Robotics' }))
     await waitFor(() => expect(screen.getByRole('region', { name: 'Suggested' })).not.toHaveTextContent('Quill Robotics'), { timeout: 4000 })
     // Dismissed names are kept out of the way, not deleted.
-    expect(screen.getByText(/^Muted \(1\)$/)).toBeInTheDocument()
+    expect(screen.getByText(/^Paused \(1\)$/)).toBeInTheDocument()
   })
 })
 

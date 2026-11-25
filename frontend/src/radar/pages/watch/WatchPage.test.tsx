@@ -1,4 +1,5 @@
-// Tests for the Watch page: layout, the Add dialog's three paths, suggestions, per-name actions and errors.
+// Tests for the Watch page: layout, the watched names as chips and the Paused list, the chip menu, the
+// Add dialog's three paths, suggestions and errors.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/errors'
@@ -6,7 +7,7 @@ import { ToastViewport } from '../../ui'
 import WatchPage from '../WatchPage'
 import { clearLoadCache } from '../sources/useLoad'
 import type { DiscoverResult } from './api'
-import { entry, register } from './testFixtures'
+import { clearToasts, entry, register } from './testFixtures'
 
 const api = vi.hoisted(() => ({
   getWatch: vi.fn(),
@@ -44,6 +45,7 @@ async function openAdd(path: string | RegExp) {
 
 beforeEach(() => {
   clearLoadCache()
+  clearToasts()
   vi.clearAllMocks()
   api.getWatch.mockResolvedValue(register())
   api.changeEntry.mockResolvedValue({})
@@ -67,42 +69,34 @@ describe('WatchPage layout', () => {
     expect(screen.queryByLabelText('Find who matters for a topic')).not.toBeInTheDocument()
   })
 
-  it('shows suggestions first, then groups with recently mentioned names ahead of the rest', async () => {
+  it('shows suggestions first, then Watching: each group a heading followed by its names as chips', async () => {
     renderPage()
     expect(await screen.findByRole('heading', { name: 'Suggested' })).toBeInTheDocument()
     expect(screen.getByText('Gamma Labs')).toBeInTheDocument()
     const headings = screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)
-    expect(headings.slice(0, 4)).toEqual(['Topics you follow', 'You are not following any topics yet', 'Suggested', 'Imaging AI'])
+    expect(headings.slice(0, 4)).toEqual(['Topics you follow', 'You are not following any topics yet', 'Suggested', 'Watching'])
+    expect(screen.getByText('2 watched · 1 group')).toBeInTheDocument()
 
-    const group = screen.getByRole('region', { name: 'Imaging AI' })
-    const names = within(group).getAllByText(/^(Alpha Scopes|Zeta Vision)$/).map((node) => node.textContent)
-    expect(names).toEqual(['Zeta Vision', 'Alpha Scopes'])
-    expect(within(group).getByText(/Last mentioned/)).toBeInTheDocument()
-    expect(within(group).getByRole('link', { name: 'Zeta Vision wins clearance' })).toHaveAttribute('href', '#/item/55')
+    const group = screen.getByRole('group', { name: 'Imaging AI' })
+    expect(within(group).getByRole('heading', { level: 3, name: 'Imaging AI' })).toBeInTheDocument()
+    // The names keep the server's order, so nothing is re-sorted while the page is open.
+    const chips = within(group).getAllByRole('button', { pressed: true }).map((node) => node.textContent)
+    expect(chips).toEqual(['Alpha Scopes', 'Zeta Vision'])
   })
 
   it('says how many items each group brought into the Feed this week', async () => {
     renderPage()
-    const group = await screen.findByRole('region', { name: 'Imaging AI' })
-    expect(within(group).getByText('3 items this week')).toBeInTheDocument()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    expect(within(group).getByRole('link', { name: '3 items this week' })).toBeInTheDocument()
   })
 
-  it('shows a group whose names are all muted as paused, with a Resume action', async () => {
+  it('leaves out a group whose names are all paused, and lists them under a collapsed "Paused (1)" with their group', async () => {
     renderPage()
-    const group = await screen.findByRole('region', { name: 'Regulators' })
-    expect(within(group).getByText('Paused')).toBeInTheDocument()
-    expect(within(group).getByRole('button', { name: 'Resume Regulators' })).toBeInTheDocument()
-    expect(within(group).getByText('FDA')).toBeInTheDocument()
+    const list = (await screen.findByText('Paused (1)')).closest('details') as HTMLElement
+    expect(list).not.toHaveAttribute('open')
+    expect(screen.queryByRole('group', { name: 'Regulators' })).not.toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: 'FDA, in Regulators' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.queryByText(/^Muted \(/)).not.toBeInTheDocument()
-  })
-
-  it('keeps a name muted inside a followed group in a collapsed pile at the end', async () => {
-    const mixed = register()
-    mixed.categories[0].entities.push(entry({ id: 4, name: 'Old Scopes', status: 'muted' }))
-    api.getWatch.mockResolvedValue(mixed)
-    renderPage()
-    const summary = await screen.findByText('Muted (1)')
-    expect(summary.closest('details')).not.toHaveAttribute('open')
   })
 
   it('accepts a suggestion by making it active and reloads the list', async () => {
@@ -118,21 +112,9 @@ describe('WatchPage layout', () => {
     await waitFor(() => expect(api.changeEntry).toHaveBeenCalledWith(9, { status: 'muted' }))
   })
 
-  it('edits a name through its menu and sends the search query', async () => {
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Actions for Alpha Scopes' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
-    const dialog = screen.getByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText('Search query'), { target: { value: 'Alpha Scopes polyp' } })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
-    await waitFor(() =>
-      expect(api.changeEntry).toHaveBeenCalledWith(1, { name: 'Alpha Scopes', kind: 'company', category: 'Imaging AI', query: 'Alpha Scopes polyp' }),
-    )
-  })
-
   it('asks before removing a name', async () => {
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Actions for Alpha Scopes' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions for Alpha Scopes' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Remove…' }))
     expect(api.deleteWatch).not.toHaveBeenCalled()
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove' }))
@@ -148,11 +130,155 @@ describe('WatchPage layout', () => {
   })
 
   it('shows an empty state whose button opens the Add dialog', async () => {
-    api.getWatch.mockResolvedValue({ categories: [], suggested: [] })
+    api.getWatch.mockResolvedValue({ categories: [], suggested: [], rejected: [], sections: [] })
     renderPage()
     expect(await screen.findByText('Nothing on your watch list yet')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Add something to watch' }))
     expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Find who matters for a topic/ })).toBeInTheDocument()
+  })
+})
+
+/** Open a chip's menu and choose an item. */
+async function chooseFromChipMenu(name: string, item: string) {
+  fireEvent.click(await screen.findByRole('button', { name: `More actions for ${name}` }))
+  fireEvent.click(screen.getByRole('menuitem', { name: item }))
+}
+
+describe('Watching chips', () => {
+  it('pauses a name with one click: the chip stays in its group, unpressed, and the toast offers Undo', async () => {
+    renderPage()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    const chip = within(group).getByRole('button', { name: 'Zeta Vision' })
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(chip)
+    await waitFor(() => expect(api.changeEntry).toHaveBeenCalledWith(2, { status: 'muted' }))
+    expect(within(group).getByRole('button', { name: 'Zeta Vision' })).toHaveAttribute('aria-pressed', 'false')
+    expect(await screen.findByText('Paused Zeta Vision. Spyglass stops searching for it. Nothing is deleted.')).toBeInTheDocument()
+    // Nothing reloads, so nothing moves: the Paused list is still the one from the load.
+    expect(api.getWatch).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Paused (1)')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(api.changeEntry).toHaveBeenLastCalledWith(2, { status: 'active' }))
+    await waitFor(() => expect(within(group).getByRole('button', { name: 'Zeta Vision' })).toHaveAttribute('aria-pressed', 'true'))
+  })
+
+  it('watches a name again with a second click, in place', async () => {
+    renderPage()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
+    await screen.findByText(/^Paused Alpha Scopes\./)
+    fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
+    await waitFor(() => expect(api.changeEntry).toHaveBeenLastCalledWith(1, { status: 'active' }))
+    expect(await screen.findByText('Watching Alpha Scopes again. Spyglass searches for it from the next run.')).toBeInTheDocument()
+    expect(within(group).getByRole('button', { name: 'Alpha Scopes' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('watches a paused name again from the Paused list, where it stays', async () => {
+    renderPage()
+    const list = (await screen.findByText('Paused (1)')).closest('details') as HTMLElement
+    fireEvent.click(within(list).getByRole('button', { name: 'FDA, in Regulators' }))
+    await waitFor(() => expect(api.changeEntry).toHaveBeenCalledWith(3, { status: 'active' }))
+    expect(within(list).getByRole('button', { name: 'FDA, in Regulators' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByText('Watching FDA again. Spyglass searches for it from the next run.')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Regulators' })).not.toBeInTheDocument()
+    expect(api.getWatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a name paused on this visit in the Paused list as soon as the page is opened again', async () => {
+    const view = renderPage()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    fireEvent.click(within(group).getByRole('button', { name: 'Zeta Vision' }))
+    await screen.findByText(/^Paused Zeta Vision\./)
+    view.unmount()
+    // The fresh answer has not arrived yet, so the page shows the one it remembered.
+    api.getWatch.mockReturnValue(new Promise(() => {}))
+    renderPage()
+    expect(await screen.findByText('Paused (2)')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Zeta Vision, in Imaging AI' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('puts the chip back and says why when the change fails', async () => {
+    api.changeEntry.mockRejectedValue(new ApiError('Spyglass is not reachable.', { status: 0, kind: 'network', path: '/watch/1' }))
+    renderPage()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
+    expect(await screen.findByText('Spyglass is not reachable.')).toBeInTheDocument()
+    expect(within(group).getByRole('button', { name: 'Alpha Scopes' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByText(/^Paused Alpha Scopes/)).not.toBeInTheDocument()
+  })
+
+  it('ignores another click on a chip while its change is on the way', async () => {
+    let finish: (value: unknown) => void = () => {}
+    api.changeEntry.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    renderPage()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
+    fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
+    expect(api.changeEntry).toHaveBeenCalledTimes(1)
+    finish({})
+    expect(await screen.findByText(/^Paused Alpha Scopes\./)).toBeInTheDocument()
+  })
+
+  it("offers Details, Move to another group, See its items and Remove in a chip's menu", async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions for Alpha Scopes' }))
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Details', 'Move to another group…', 'See its items in the Feed', 'Remove…'])
+  })
+
+  it('shows the reason and the latest items in Details, above the form that edits the name', async () => {
+    renderPage()
+    await chooseFromChipMenu('Zeta Vision', 'Details')
+    const dialog = screen.getByRole('dialog', { name: 'Zeta Vision' })
+    expect(within(dialog).getByText(/^Company · Imaging AI · watched · last found \S/)).toBeInTheDocument()
+    expect(within(dialog).getByText('Cleared a new endoscopy model.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('link', { name: 'Zeta Vision wins clearance' })).toHaveAttribute('href', '#/item/55')
+    fireEvent.change(within(dialog).getByLabelText('Search query'), { target: { value: 'Zeta Vision endoscopy' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(api.changeEntry).toHaveBeenCalledWith(2, { name: 'Zeta Vision', kind: 'company', category: 'Imaging AI', query: 'Zeta Vision endoscopy' }),
+    )
+    await waitFor(() => expect(api.getWatch).toHaveBeenCalledTimes(2))
+  })
+
+  it('says in Details that a name has no items yet, and that it is paused', async () => {
+    renderPage()
+    await chooseFromChipMenu('FDA', 'Details')
+    const dialog = screen.getByRole('dialog', { name: 'FDA' })
+    expect(within(dialog).getByText('Regulator · Regulators · paused')).toBeInTheDocument()
+    expect(within(dialog).getByText('No items mention it yet.')).toBeInTheDocument()
+  })
+
+  it('moves a name to another group, reloads the list, and Undo moves it back', async () => {
+    renderPage()
+    await chooseFromChipMenu('Alpha Scopes', 'Move to another group…')
+    const dialog = screen.getByRole('dialog', { name: 'Move Alpha Scopes' })
+    expect(within(dialog).getByText('Now in Imaging AI.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('radio', { name: 'Regulators' })).toBeChecked()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Move' }))
+    await waitFor(() => expect(api.changeEntry).toHaveBeenCalledWith(1, { category: 'Regulators' }))
+    await waitFor(() => expect(api.getWatch).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('Moved Alpha Scopes to Regulators.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(api.changeEntry).toHaveBeenLastCalledWith(1, { category: 'Imaging AI' }))
+    await waitFor(() => expect(api.getWatch).toHaveBeenCalledTimes(3))
+  })
+
+  it('shows a refused move inside the dialog', async () => {
+    api.changeEntry.mockRejectedValue(new ApiError('That group name is too long.', { status: 422, kind: 'http', path: '/watch/1' }))
+    renderPage()
+    await chooseFromChipMenu('Alpha Scopes', 'Move to another group…')
+    const dialog = screen.getByRole('dialog', { name: 'Move Alpha Scopes' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Move' }))
+    expect(await within(dialog).findByText('That group name is too long.')).toBeInTheDocument()
+    expect(api.getWatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the Feed searched for the name from "See its items in the Feed"', async () => {
+    window.history.replaceState(null, '', '/#/watch')
+    renderPage()
+    await chooseFromChipMenu('Alpha Scopes', 'See its items in the Feed')
+    expect(window.location.hash).toBe('#/feed?q=Alpha+Scopes')
   })
 })
 

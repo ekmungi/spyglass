@@ -1,6 +1,7 @@
-// layoutRegister: the one-time layout of the Watch page (groups, paused names, suggestion rows, rejected names).
+// layoutRegister: the one-time layout of the Watch page (groups, paused names, suggestion rows, rejected
+// names); withStatus: one name's look changed in place; groupSteps: how far "Move up" and "Move down" go.
 import { describe, expect, it } from 'vitest'
-import { layoutRegister } from './organize'
+import { groupSteps, layoutRegister, registerWithStatus, withStatus } from './organize'
 import { entry, register } from './testFixtures'
 
 describe('layoutRegister', () => {
@@ -101,5 +102,70 @@ describe('layoutRegister', () => {
   it('passes the rejected names through for the Not of interest list', () => {
     const reg = { ...register(), rejected: [entry({ id: 30, name: 'Nope Inc', status: 'rejected' })] }
     expect(layoutRegister(reg).rejected.map((e) => e.name)).toEqual(['Nope Inc'])
+  })
+
+  it("carries each group's weekly count, or null when the server did not send one", () => {
+    const reg = {
+      ...register(),
+      categories: [
+        { name: 'Counted', week_count: 4, entities: [entry({ id: 1, name: 'A' })] },
+        { name: 'Uncounted', entities: [entry({ id: 2, name: 'B' })] },
+      ],
+    }
+    expect(layoutRegister(reg).groups.map((g) => [g.name, g.weekCount])).toEqual([
+      ['Counted', 4],
+      ['Uncounted', null],
+    ])
+  })
+})
+
+describe('withStatus', () => {
+  it('changes one name where it is shown and moves nothing', () => {
+    const layout = layoutRegister(register())
+    const paused = withStatus(layout, 1, 'muted')
+    expect(paused.groups[0].entities.map((e) => [e.name, e.status])).toEqual([
+      ['Alpha Scopes', 'muted'],
+      ['Zeta Vision', 'active'],
+    ])
+    expect(paused.paused.map((p) => p.entity.name)).toEqual(['FDA'])
+    // The layout it was given is left as it was.
+    expect(layout.groups[0].entities[0].status).toBe('active')
+  })
+
+  it('changes a name in the Paused list in place', () => {
+    const resumed = withStatus(layoutRegister(register()), 3, 'active')
+    expect(resumed.paused.map((p) => [p.entity.name, p.entity.status, p.group])).toEqual([['FDA', 'active', 'Regulators']])
+    expect(resumed.groups.map((g) => g.name)).toEqual(['Imaging AI'])
+  })
+})
+
+describe('registerWithStatus', () => {
+  it('changes one followed name in a copy, so the next layout puts it where its status says', () => {
+    const before = register()
+    const after = registerWithStatus(before, 2, 'muted')
+    expect(layoutRegister(after).paused.map((p) => p.entity.name)).toEqual(['Zeta Vision', 'FDA'])
+    expect(before.categories[0].entities[1].status).toBe('active')
+  })
+})
+
+describe('groupSteps', () => {
+  const order = ['First', 'Hidden', 'Middle', 'Last']
+  const shown = ['First', 'Middle', 'Last']
+
+  it('moves one place when the neighbour is shown', () => {
+    expect(groupSteps(order, shown, 'Last', 'up')).toBe(1)
+    expect(groupSteps(order, shown, 'Middle', 'down')).toBe(1)
+  })
+
+  it('moves past a hidden group so the shown order changes', () => {
+    expect(groupSteps(order, shown, 'First', 'down')).toBe(2)
+    expect(groupSteps(order, shown, 'Middle', 'up')).toBe(2)
+  })
+
+  it('is 0 at either end of the shown groups, or for a group it does not know', () => {
+    expect(groupSteps(order, shown, 'First', 'up')).toBe(0)
+    expect(groupSteps(order, shown, 'Last', 'down')).toBe(0)
+    expect(groupSteps(['Hidden', 'Only'], ['Only'], 'Only', 'up')).toBe(0)
+    expect(groupSteps(order, shown, 'Nowhere', 'down')).toBe(0)
   })
 })
