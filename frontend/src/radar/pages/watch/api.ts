@@ -12,6 +12,7 @@ export {
   deleteTrack,
   patchWatchGroup,
   restoreWatchGroup,
+  setSuggestionStatus,
   reviewWatch,
   applyWatchReview,
 } from '../../api/client'

@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { setFetchForTesting } from '../api/transport'
-import { parseProfileReply } from '../api/client'
+import { getWatch, parseProfileReply, patchWatchGroup, setSuggestionStatus } from '../api/client'
 import { clearResourceCache } from '../hooks/useResource'
 import { mockFetch, resetMockState } from '../mock'
 import ProfilePage from './ProfilePage'
@@ -47,6 +47,39 @@ describe('Watch page in sample mode', () => {
     await waitFor(() => expect(screen.getByRole('region', { name: 'Suggested' })).not.toHaveTextContent('Quill Robotics'), { timeout: 4000 })
     // Dismissed names are kept out of the way, not deleted.
     expect(screen.getByText(/^Muted \(1\)$/)).toBeInTheDocument()
+  })
+})
+
+describe('Watch register in sample mode', () => {
+  it('sends profile sections, suggestion counts and a rejected name like the service', async () => {
+    const reg = await getWatch()
+    expect(reg.sections.map((section) => section.key)).toContain('health')
+    expect(reg.rejected.map((entity) => entity.name)).toEqual(['Dormant Analytics'])
+    const arclight = reg.suggested.find((entity) => entity.name === 'Arclight Endoscopy')
+    expect(arclight).toMatchObject({ section: 'health', count: 4, topic: null })
+    expect(reg.suggested.some((entity) => entity.topic)).toBe(true)
+    // Followed groups hold followed names only.
+    const followed = reg.categories.flatMap((category) => category.entities)
+    expect(followed.every((entity) => entity.status === 'active' || entity.status === 'muted')).toBe(true)
+  })
+
+  it('rejects a suggestion and takes it back through the status route', async () => {
+    const rejected = await setSuggestionStatus([21], 'rejected')
+    expect(rejected.changed).toEqual([21])
+    expect(rejected.suggested.map((entity) => entity.name)).not.toContain('Quill Robotics')
+    expect(rejected.rejected.map((entity) => entity.name)).toContain('Quill Robotics')
+
+    const back = await setSuggestionStatus([21, 1], 'suggested') // id 1 is followed, so it is left alone
+    expect(back.changed).toEqual([21])
+    expect(back.suggested.map((entity) => entity.name)).toContain('Quill Robotics')
+  })
+
+  it('moves a group up and down', async () => {
+    const before = (await getWatch()).categories.map((category) => category.name)
+    const down = await patchWatchGroup({ category: before[0], action: 'down' })
+    expect(down.categories.map((category) => category.name).slice(0, 2)).toEqual([before[1], before[0]])
+    const up = await patchWatchGroup({ category: before[0], action: 'up' })
+    expect(up.categories.map((category) => category.name)).toEqual(before)
   })
 })
 

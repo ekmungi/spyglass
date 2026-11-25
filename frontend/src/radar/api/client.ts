@@ -62,6 +62,8 @@ import type {
   WatchResponse,
   WatchRestoreResponse,
   WatchReview,
+  WatchSuggestionStatusResponse,
+  SuggestionStatus,
   RemovedWatchEntity,
 } from './types'
 
@@ -247,7 +249,10 @@ export const patchWatch = (id: number, body: WatchPatchBody) => request<WatchEnt
 export const deleteWatch = (id: number) => request<unknown>('DELETE', `/watch/${id}`)
 export const patchWatchGroup = (body: WatchGroupBody) => request<WatchGroupResponse>('PATCH', '/watch/groups', body)
 export const restoreWatchGroup = (entries: RemovedWatchEntity[]) => request<WatchRestoreResponse>('POST', '/watch/groups/restore', { entries })
-export const reviewWatch = (signal?: AbortSignal) => request<WatchReview>('POST', '/watch/review', {}, signal)
+/** Send suggestions to "not of interest" (rejected) or take them back (suggested); the reply is the fresh register plus the ids that changed. */
+export const setSuggestionStatus = (ids: number[], status: SuggestionStatus) =>
+  request<WatchSuggestionStatusResponse>('POST', '/watch/suggestions/status', { ids, status })
+export const reviewWatch =(signal?: AbortSignal) => request<WatchReview>('POST', '/watch/review', {}, signal)
 export const applyWatchReview = (body: WatchApplyBody) => request<WatchApplyResponse>('POST', '/watch/review/apply', body)
 
 /* ---------- papers ---------- */

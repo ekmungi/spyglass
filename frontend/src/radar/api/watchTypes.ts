@@ -2,7 +2,21 @@
 // POST /watch/review, POST /watch/review/apply). The register itself is in pageTypes.ts.
 import type { WatchEntity, WatchKind, WatchResponse } from './pageTypes'
 
-export type WatchGroupAction = 'pause' | 'resume' | 'rename' | 'move' | 'remove'
+export type WatchGroupAction = 'pause' | 'resume' | 'rename' | 'move' | 'remove' | 'up' | 'down'
+
+/** A suggestion can be sent to "not of interest" or taken back to "suggested". */
+export type SuggestionStatus = 'rejected' | 'suggested'
+
+/** POST /watch/suggestions/status. */
+export interface WatchSuggestionStatusBody {
+  ids: number[]
+  status: SuggestionStatus
+}
+
+/** The fresh register plus the ids whose status really changed. */
+export interface WatchSuggestionStatusResponse extends WatchResponse {
+  changed: number[]
+}
 
 export interface WatchGroupBody {
   category: string

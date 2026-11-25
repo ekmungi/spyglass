@@ -1,6 +1,6 @@
 // Sample-mode routes for whole-group changes on the Watch page and for the AI review of the register.
 // They change the in-memory register, so a click-through behaves like the service.
-import type { WatchApplyBody, WatchEntity, WatchGroupBody, WatchReview } from '../api/types'
+import type { SuggestionStatus, WatchApplyBody, WatchEntity, WatchGroupBody, WatchReview } from '../api/types'
 import { groupWatch } from './catalog'
 import { mockState } from './store'
 
@@ -35,12 +35,44 @@ function storedName(value: unknown): string | null {
 }
 
 const inGroup = (entity: WatchEntity, name: string) => (entity.category || 'Other').toLowerCase() === name.toLowerCase()
+const isFollowed = (entity: WatchEntity) => entity.status === 'active' || entity.status === 'muted'
+
+/** Move a group one place up or down among the followed groups (the sample register's order is the order of its entries). */
+function moveGroup(body: WatchGroupBody): Response {
+  const current = mockState()
+  const names = register().categories.map((category) => category.name)
+  const from = names.findIndex((name) => name.toLowerCase() === body.category.toLowerCase())
+  if (from < 0) return json({ detail: `There is no group called ${body.category}.` }, 404)
+  const to = body.action === 'up' ? from - 1 : from + 1
+  if (to >= 0 && to < names.length) [names[from], names[to]] = [names[to], names[from]]
+  const followed = current.watch.filter(isFollowed)
+  const others = current.watch.filter((entity) => !isFollowed(entity))
+  current.watch = [...names.flatMap((name) => followed.filter((entity) => inGroup(entity, name))), ...others]
+  return json({ ...register(), removed: [] })
+}
+
+/** POST /watch/suggestions/status: reject suggestions, or take rejected names back to suggested. */
+function suggestionStatusRoute(body: { ids?: number[]; status?: SuggestionStatus }): Response {
+  const current = mockState()
+  const status = body.status
+  if (status !== 'rejected' && status !== 'suggested') return json({ detail: 'The status must be "rejected" or "suggested".' }, 422)
+  const from = status === 'rejected' ? 'suggested' : 'rejected'
+  const ids = new Set(body.ids ?? [])
+  const changed: number[] = []
+  current.watch = current.watch.map((entity) => {
+    if (!ids.has(entity.id) || entity.status !== from) return entity
+    changed.push(entity.id)
+    return { ...entity, status }
+  })
+  return json({ ...register(), changed })
+}
 
 /** PATCH /watch/groups: pause, resume, rename, move or remove every followed name of a group. */
 function groupRoute(body: WatchGroupBody): Response {
   const current = mockState()
-  const members = current.watch.filter((entity) => inGroup(entity, body.category) && entity.status !== 'suggested')
+  const members = current.watch.filter((entity) => inGroup(entity, body.category) && isFollowed(entity))
   if (members.length === 0) return json({ detail: `There is no group called ${body.category}.` }, 404)
+  if (body.action === 'up' || body.action === 'down') return moveGroup(body)
   if (body.action === 'rename' || body.action === 'move') {
     const to = storedName(body.to)
     if (to === null) return json({ detail: 'A group name must be one line of up to 60 characters.' }, 422)
@@ -102,6 +134,7 @@ export async function watchManageRoute(method: string, parts: string[], body: Re
   if (method === 'POST' && parts[1] === 'groups' && parts[2] === 'restore') {
     return restoreRoute((body.entries as (WatchEntity & { links?: unknown })[]) ?? [])
   }
+  if (method === 'POST' && parts[1] === 'suggestions' && parts[2] === 'status') return suggestionStatusRoute(body as { ids?: number[]; status?: SuggestionStatus })
   if (method === 'POST' && parts[1] === 'review' && parts.length === 2) {
     await wait(REVIEW_MS, signal)
     return json(sampleReview())
@@ -149,7 +182,7 @@ function applyRoute(body: WatchApplyBody): Response {
       ...current.watch,
       {
         id: current.nextWatchId++, name: add.name, kind: add.kind, category: storedName(add.category) ?? '', topic: null, aliases: [],
-        query: add.query || `"${add.name}"`, website: null, status: 'active', why: add.why || null, added_via: 'discovered', last_hit_at: null,
+        query: add.query || `"${add.name}"`, website: null, status: 'active', section: '', count: 0, why: add.why || null, added_via: 'discovered', last_hit_at: null,
       },
     ]
     applied.added += 1

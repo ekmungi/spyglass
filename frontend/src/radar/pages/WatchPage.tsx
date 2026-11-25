@@ -36,8 +36,8 @@ const EXPLAINER =
   "Spyglass searches the news for each of these once a day. What it finds goes into your Feed, and the important ones appear in your brief under 'On your watch list'."
 
 /** The register without the extra keys a group or review answer carries. */
-function registerOf<T extends WatchRegister>({ categories, suggested }: T): WatchRegister {
-  return { categories, suggested }
+function registerOf<T extends WatchRegister>({ categories, suggested, rejected, sections }: T): WatchRegister {
+  return { categories, suggested, rejected, sections }
 }
 
 /** The Watch page (no props): the register by group, suggestions, topics, and every way to add or tidy. */

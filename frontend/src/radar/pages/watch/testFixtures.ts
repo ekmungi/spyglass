@@ -12,6 +12,8 @@ export function entry(over: Partial<WatchEntry> & { id: number; name: string }):
     aliases: [],
     website: null,
     status: 'active',
+    section: '',
+    count: 0,
     why: null,
     added_via: 'seed',
     last_hit_at: null,
@@ -25,7 +27,7 @@ export function recentItem(id: number, headline: string) {
   return { id, title: headline, headline, published_at: new Date().toISOString(), fetched_at: new Date().toISOString() }
 }
 
-/** Two groups: Imaging AI (two active names, 3 items this week) and Regulators (one muted name, so paused), plus one suggestion. */
+/** Two groups: Imaging AI (two active names, 3 items this week) and Regulators (one muted name, so paused), plus one suggestion; no profile sections and nothing rejected. */
 export function register(): WatchRegister {
   return {
     categories: [
@@ -53,5 +55,7 @@ export function register(): WatchRegister {
       },
     ],
     suggested: [entry({ id: 9, name: 'Gamma Labs', kind: 'lab', status: 'suggested', topic: 'agents', why: 'Builds agent tooling.' })],
+    rejected: [],
+    sections: [],
   }
 }
