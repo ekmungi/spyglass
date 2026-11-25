@@ -1,4 +1,5 @@
-// Tests for the Today masthead's quiet notice when a brief was made with part of the judging missing.
+// Tests for the Today masthead and the line about unjudged items: that line now closes the page
+// (TodayPage puts it at the end of the article), so the masthead never shows it.
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { BriefDoc } from '../api/types'
@@ -13,18 +14,12 @@ function brief(over: Partial<BriefDoc> = {}): BriefDoc {
 
 const show = (value: BriefDoc) => render(<Masthead brief={value} days={[value.day]} latestDay={value.day} onAsk={() => undefined} />)
 
-describe('Masthead notice', () => {
-  it('shows the notice as one quiet line under the opening when the brief is degraded', () => {
-    show(brief({ degraded: true, unjudged: 40, notice: '40 items could not be judged yet; they will appear tomorrow.' }))
-    const notice = screen.getByText('40 items could not be judged yet; they will appear tomorrow.')
-    expect(notice).toHaveClass('r-masthead__notice')
-    expect(notice).not.toHaveAttribute('role', 'alert')
-    const opening = screen.getByText('A calm day in your fields.')
-    expect(opening.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  it('shows no notice for a complete brief, even when one is sent', () => {
-    show(brief({ degraded: false, notice: 'Should not show.' }))
-    expect(screen.queryByText('Should not show.')).toBeNull()
+describe('Masthead', () => {
+  it('shows the opening and leaves the line about unjudged items to the end of the page', () => {
+    const notice = "40 collected items are still waiting to be judged, so a story may be missing from today's selection."
+    const { container } = show(brief({ degraded: true, unjudged: 40, notice }))
+    expect(screen.getByText('A calm day in your fields.')).toHaveClass('r-masthead__opening')
+    expect(screen.queryByText(notice)).toBeNull()
+    expect(container.querySelector('.r-masthead__notice')).toBeNull()
   })
 })

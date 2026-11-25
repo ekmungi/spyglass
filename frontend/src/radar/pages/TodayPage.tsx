@@ -1,5 +1,6 @@
-// Today: the finite daily brief. Date, meta, opening, then the sections in a fixed order, then
-// "You are caught up". j/k move, Enter opens, s saves.
+// Today: the finite daily brief. Date, meta, opening, then the sections in a fixed order, each with a
+// slider over its stories, then "You are caught up" and, when some items were not judged yet, a line
+// saying so. j/k move, Enter opens, s saves.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getBrief, getToday } from '../api/client'
 import { ApiError, errorMessage } from '../api/errors'
@@ -12,11 +13,12 @@ import { useListKeys } from '../hooks/useListKeys'
 import { useResource } from '../hooks/useResource'
 import { navigate } from '../router'
 import { toggleSave } from '../state/itemState'
+import { setReadingList } from '../state/readingList'
+import { BriefSection } from '../today/BriefSection'
 import { BriefSkeleton, CaughtUp, EmptyBrief } from '../today/BriefStates'
 import { Masthead } from '../today/Masthead'
-import { orderedSections, sectionTitle } from '../today/sections'
-import { StoryRow } from '../today/StoryRow'
-import { Button, EmptyState, SectionHeading } from '../ui'
+import { orderedSections, sectionStories } from '../today/sections'
+import { Button, EmptyState } from '../ui'
 import '../today/today.css'
 
 /** Point the assistant at a day's brief and put the cursor in its composer. */
@@ -37,12 +39,18 @@ interface BriefBodyProps {
   askRef: (element: HTMLElement | null) => void
 }
 
-/** The brief body: sections, rows and the end marker; owns keyboard navigation. */
+/** The brief body: sections, the end marker and the line about unjudged items; owns keyboard navigation. */
 function BriefBody({ brief, days, latestDay, active, unopenedDays, filingLine, askRef }: BriefBodyProps) {
   const sections = useMemo(() => orderedSections(brief), [brief])
-  const flat: Story[] = useMemo(() => sections.flatMap((section) => section.stories), [sections])
+  // Every story of the page in page order: section by section, picked before unpicked. j and k walk
+  // this list (a section turns its slider to the selected story), and the reader's previous and next
+  // follow it through the reading list.
+  const flat: Story[] = useMemo(() => sections.flatMap((section) => sectionStories(section)), [sections])
   // Index of each section's first story in the flat list, for keyboard selection.
-  const starts = useMemo(() => sections.map((_, index) => sections.slice(0, index).reduce((total, section) => total + section.stories.length, 0)), [sections])
+  const starts = useMemo(
+    () => sections.map((_, index) => sections.slice(0, index).reduce((total, section) => total + sectionStories(section).length, 0)),
+    [sections],
+  )
   const [container, setContainer] = useState<HTMLElement | null>(null)
 
   const onOpen = useCallback((index: number) => flat[index] && openItem(flat[index].item_id), [flat])
@@ -53,26 +61,19 @@ function BriefBody({ brief, days, latestDay, active, unopenedDays, filingLine, a
     if (active) setAssistTarget({ kind: 'brief', day: brief.day })
   }, [active, brief.day])
 
+  useEffect(() => {
+    if (active) setReadingList('Today', flat.map((story) => story.item_id))
+  }, [active, flat])
+
   return (
     <article className="r-brief" ref={setContainer}>
       <Masthead brief={brief} days={days} latestDay={latestDay} onAsk={() => askAboutBrief(brief.day)} askRef={askRef} unopenedDays={unopenedDays} filingLine={filingLine} />
-      {sections.map((section, sectionIndex) => {
-        const start = starts[sectionIndex]
-        const headingId = `brief-${section.key}`
-        return (
-          <section key={section.key} className={`r-brief__section r-brief__section--${section.key}`} aria-labelledby={headingId}>
-            <SectionHeading id={headingId} note={section.note}>
-              {sectionTitle(section)}
-            </SectionHeading>
-            <ul className="r-brief__list">
-              {section.stories.map((story, i) => (
-                <StoryRow key={story.id} story={story} section={section.key} index={start + i} selected={selected === start + i} />
-              ))}
-            </ul>
-          </section>
-        )
-      })}
+      {sections.map((section, index) => (
+        // Keyed by day as well, so an earlier brief opens every section on its first page.
+        <BriefSection key={`${brief.day}:${section.key}`} section={section} start={starts[index]} selected={selected} />
+      ))}
       <CaughtUp filteredOut={brief.filtered_out} />
+      {brief.degraded && brief.notice && <p className="r-meta r-brief__endnote">{brief.notice}</p>}
     </article>
   )
 }

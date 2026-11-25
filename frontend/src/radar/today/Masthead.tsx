@@ -1,5 +1,5 @@
 // Masthead: the date as the title, one line of meta, the day switcher, "Ask about today", and
-// the brief's opening sentences.
+// the brief's opening sentences. The line about items not judged yet closes the page instead.
 import type { BriefDoc } from '../api/types'
 import { formatDayShort, formatDayTitle } from '../lib/format'
 import { navigate } from '../router'
@@ -70,7 +70,6 @@ export function Masthead({ brief, days, latestDay, onAsk, askRef, unopenedDays =
         </p>
       )}
       {brief.opening && <p className="r-masthead__opening">{brief.opening}</p>}
-      {brief.degraded && brief.notice && <p className="r-masthead__notice">{brief.notice}</p>}
     </header>
   )
 }

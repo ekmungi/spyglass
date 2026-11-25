@@ -1,5 +1,5 @@
-// Section order and fallback headings for the daily brief.
-import type { BriefDoc, BriefSection, BriefSectionKey } from '../api/types'
+// Section order, fallback headings and the stories of each section of the daily brief.
+import type { BriefDoc, BriefSection, BriefSectionKey, Story } from '../api/types'
 
 /** The order sections appear in, whatever order the document lists them. */
 export const SECTION_ORDER: BriefSectionKey[] = ['top', 'watch', 'notable', 'papers', 'from_you', 'skim']
@@ -18,6 +18,15 @@ export const DEFAULT_SECTION_TITLES: Record<BriefSectionKey, string> = {
 export function sectionTitle(section: Pick<BriefSection, 'key' | 'title'>): string {
   const own = typeof section.title === 'string' ? section.title.trim() : ''
   return own || DEFAULT_SECTION_TITLES[section.key] || ''
+}
+
+/**
+ * Every story a section holds, in page order: the picked stories, then the unpicked ones (judged for
+ * the section that day and left out, best first). A brief composed before unpicked stories were
+ * stored has no `more`, so its sections hold their picked stories only.
+ */
+export function sectionStories(section: Pick<BriefSection, 'stories' | 'more'>): Story[] {
+  return section.more ? [...section.stories, ...section.more] : section.stories
 }
 
 /** Sections in display order, with empty ones removed. */

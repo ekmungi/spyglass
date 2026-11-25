@@ -1,6 +1,8 @@
-/* Today: masthead, sections and story rows of the daily brief. */
+/* Today: masthead, sections and their sliders, and story rows of the daily brief. */
 
+/* Today is wider than the shared column, so the top section can set its stories in two columns. */
 .r-page--brief {
+  max-width: 940px;
   padding-top: var(--space-16);
 }
 
@@ -41,8 +43,8 @@
   font-size: var(--text-sm);
   color: var(--muted);
 }
-/* The opening and the notice span the whole column, as the story rows and the Feed's rows do; the
-   column itself (--measure) already keeps lines to a readable length. */
+/* The opening spans the whole column, as the lead story does; a character cap made it wrap narrower
+   than the rows. */
 .r-masthead__opening {
   margin: var(--space-6) 0 0;
   font-family: var(--font-serif);
@@ -50,14 +52,6 @@
   line-height: 1.5;
   color: var(--ink-2);
   text-wrap: pretty;
-}
-
-/* A brief made with part of the judging missing says so in one quiet line, never in an alarm colour. */
-.r-masthead__notice {
-  margin: var(--space-3) 0 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-ui);
 }
 
 /* Sections */
@@ -68,6 +62,52 @@
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+/* The slider beside a section heading: the count ("4-6 of 15"), then the two arrows. */
+.r-brief__pager {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-1) / 2);
+}
+.r-brief__count {
+  margin-right: calc(var(--space-1) * 1.5);
+  font-variant-numeric: tabular-nums;
+}
+.r-brief__pager .r-iconbtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+/* A turned page slides in from the side it came from (reduced motion zeroes the duration). */
+.r-brief__list[data-slide] {
+  animation: r-brief-slide var(--dur) var(--ease-enter);
+}
+.r-brief__list[data-slide="next"] {
+  --r-slide-from: calc(var(--shift) * 2);
+}
+.r-brief__list[data-slide="previous"] {
+  --r-slide-from: calc(var(--shift) * -2);
+}
+@keyframes r-brief-slide {
+  from {
+    opacity: 0;
+    transform: translateX(var(--r-slide-from));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The top section: two columns; on its first page the lead story runs across both with a larger
+   headline. */
+.r-brief__section--top .r-brief__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--space-10);
+}
+.r-brief__list--lead > .r-story:first-child {
+  grid-column: 1 / -1;
 }
 
 /* Story rows: the headline link stretches over the whole row. */
@@ -207,10 +247,25 @@
 .r-story--top:last-child {
   border-bottom: 0;
 }
+/* In two columns the last row has no line under it: the last story, and the one beside it. */
+.r-brief__list--lead > .r-story--top:nth-last-child(2):nth-child(even),
+.r-brief__section--top .r-brief__list:not(.r-brief__list--lead) > .r-story--top:nth-last-child(2):nth-child(odd) {
+  border-bottom: 0;
+}
 .r-story--top .r-story__headline {
-  font-size: var(--text-h2);
-  line-height: 1.22;
+  font-size: var(--text-h3);
+  line-height: 1.3;
+}
+.r-story--top .r-story__why {
+  font-size: var(--text-base);
+}
+.r-brief__list--lead > .r-story:first-child .r-story__headline {
+  font-size: calc(var(--text-h2) * 1.25);
+  line-height: 1.2;
   letter-spacing: -0.008em;
+}
+.r-brief__list--lead > .r-story:first-child .r-story__why {
+  font-size: calc(17px * var(--type-scale, 1));
 }
 
 /* Watch list: a thin accent rule on the left, no alarm colours. */
@@ -267,6 +322,45 @@
 }
 .r-story__expand.is-open svg {
   transform: rotate(180deg);
+}
+
+/* The two labelled parts of a story's text, "What it says" and "Why it matters"; each paragraph keeps
+   the look of the one older text. */
+.r-story__parts {
+  display: grid;
+  gap: calc(var(--space-1) * 1.5);
+  margin-top: var(--space-2);
+}
+.r-story--notable .r-story__parts {
+  margin-top: var(--space-1);
+}
+.r-story__parts > .r-story__why {
+  margin: 0;
+}
+.r-story__part {
+  margin-right: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* The grey ring before the headline of a story that was judged and not picked. It rises above the
+   row's stretched link, so pointing at it shows its tip. */
+.r-story__ring {
+  position: relative;
+  top: -0.1em;
+  z-index: 1;
+  display: inline-block;
+  box-sizing: border-box;
+  width: calc(8px * var(--type-scale, 1));
+  height: calc(8px * var(--type-scale, 1));
+  margin-right: var(--space-2);
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+  vertical-align: middle;
 }
 
 /* Papers */
@@ -335,6 +429,14 @@
   margin: 0;
   color: var(--muted);
   font-size: var(--text-sm);
+}
+
+/* The line about items not judged yet closes the page, under the end marker, in the quiet meta type
+   (never an alarm colour), and spans the column like the opening. */
+.r-brief__endnote {
+  margin: var(--space-10) 0 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--rule);
 }
 
 /* Composing progress */

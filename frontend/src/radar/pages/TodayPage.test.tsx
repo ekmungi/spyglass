@@ -1,15 +1,27 @@
 // Tests for Today: rendering the brief from the sample fixture (section order, empty sections
-// omitted, caught-up marker), opening the reader, and the no-brief Compose now flow.
+// omitted, caught-up marker), opening the reader, the no-brief Compose now flow, the line about
+// unjudged items at the end, the reading list, and a brief composed before unpicked stories existed.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setFetchForTesting } from '../api/transport'
-import type { BriefDoc, TodayResponse } from '../api/types'
+import type { BriefDoc, BriefSection, TodayResponse } from '../api/types'
 import { clearResourceCache, STALE_AFTER_MS } from '../hooks/useResource'
 import { buildBrief } from '../mock/brief'
 import { buildItems } from '../mock/items'
 import { resetItemState } from '../state/itemState'
+import { resetReadingList, useReadingList } from '../state/readingList'
 import { orderedSections, sectionTitle } from '../today/sections'
 import { TodayPage } from './TodayPage'
+
+/** Shows the current reading list as JSON, so a test can read what Today set. */
+function ReadingListProbe() {
+  return <output data-testid="reading-list">{JSON.stringify(useReadingList())}</output>
+}
+
+/** A section as a brief composed before unpicked stories were stored has it: no `more`, no `pool`. */
+function withoutUnpicked({ key, title, note, stories }: BriefSection): BriefSection {
+  return { key, title, note, stories }
+}
 
 const DAY = '2026-11-12'
 
@@ -29,6 +41,7 @@ function serve(today: TodayResponse | (() => TodayResponse), generated?: BriefDo
 beforeEach(() => {
   clearResourceCache()
   resetItemState()
+  resetReadingList()
   window.history.replaceState(null, '', '/#/today')
 })
 
@@ -164,6 +177,58 @@ describe('TodayPage', () => {
     fireEvent.keyDown(window, { key: 'j' })
     fireEvent.keyDown(document.body, { key: 'Enter' })
     expect(window.location.hash).toBe('#/item/104')
+  })
+
+  it('walks onto the next page of a section with j and opens the story there with Enter', async () => {
+    serve({ brief: buildBrief(buildItems(), DAY), days: [DAY], status: {} })
+    render(<TodayPage />)
+    await screen.findByText('Top stories')
+    expect(screen.getByText('1-5 of 6')).toBeInTheDocument()
+    for (let press = 0; press < 6; press += 1) fireEvent.keyDown(window, { key: 'j' })
+    expect(screen.getByText('6-6 of 6')).toBeInTheDocument()
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    expect(window.location.hash).toBe('#/item/143')
+  })
+
+  it('puts the line about unjudged items at the end of the article, not in the masthead', async () => {
+    const notice = "40 collected items are still waiting to be judged, so a story may be missing from today's selection."
+    serve({ brief: { ...buildBrief(buildItems(), DAY), degraded: true, unjudged: 40, notice }, days: [DAY], status: {} })
+    render(<TodayPage />)
+    await screen.findByText('Top stories')
+    const article = document.querySelector('article.r-brief') as HTMLElement
+    expect(article.lastElementChild?.textContent).toBe(notice)
+    expect(document.querySelector('.r-masthead')?.textContent).not.toContain(notice)
+    expect(screen.getAllByText(notice)).toHaveLength(1)
+  })
+
+  it('sets the reading list to Today with every story, picked before unpicked within each section', async () => {
+    const brief = buildBrief(buildItems(), DAY)
+    serve({ brief, days: [DAY], status: {} })
+    render(
+      <>
+        <TodayPage />
+        <ReadingListProbe />
+      </>,
+    )
+    await screen.findByText('Top stories')
+    const list = JSON.parse(screen.getByTestId('reading-list').textContent ?? 'null')
+    const expected = orderedSections(brief).flatMap((section) => [...section.stories, ...(section.more ?? [])]).map((story) => story.item_id)
+    expect(list.label).toBe('Today')
+    expect(list.ids).toEqual(expected)
+    // The top section's three picked stories, its three unpicked ones, then the watch list.
+    expect(list.ids.slice(0, 8)).toEqual([101, 104, 103, 141, 142, 143, 102, 117])
+  })
+
+  it('shows a brief composed before unpicked stories were stored, with every story and no arrows', async () => {
+    const full = buildBrief(buildItems(), DAY)
+    const older: BriefDoc = { ...full, sections: full.sections.map(withoutUnpicked) }
+    serve({ brief: older, days: [DAY], status: {} })
+    render(<TodayPage />)
+    await screen.findByText('Top stories')
+    const notable = document.querySelector('.r-brief__section--notable') as HTMLElement
+    expect(within(notable).getAllByRole('listitem')).toHaveLength(8)
+    expect(screen.queryAllByRole('button', { name: 'More stories in this section' })).toHaveLength(0)
+    expect(screen.queryByText('The brief could not be loaded')).toBeNull()
   })
 
   it('offers Compose now when there is no brief, then shows the composed brief', async () => {
