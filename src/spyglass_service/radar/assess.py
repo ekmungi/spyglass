@@ -2,8 +2,8 @@
 
 Triage scores up to 20 items per model call from title, publication and snippet. Items that
 pass the gate, and every item the reader sent in, are then digested: their text is fetched
-(through the reader package when it is installed), read, and given a headline, a line on why it
-matters, key points, entities and an event key. Every item's Assessment is committed on its
+(through the reader package when it is installed), read, and given a headline, what the page
+reports, why it matters, key points, entities and an event key. Every item's Assessment is committed on its
 own, so a crash loses at most the item in flight. The model call is injectable (`llm`), so
 tests never touch the network.
 """
@@ -235,7 +235,7 @@ def triage_fields(judge: Judge, result: TriageResult | None, error: str | None,
     return {
         "stage": "triage", "score": result.score,
         "tier": tier_for(result.score, from_user=from_user), "section": result.section,
-        "kind": result.kind, "headline": None, "why": None, "key_points": None,
+        "kind": result.kind, "headline": None, "what": "", "why": None, "key_points": None,
         "entities": None, "event_key": None, "model": judge.triage_model,
         "profile_version": judge.version, "error": None, "digest_attempts": 0,
     }
@@ -289,7 +289,7 @@ def _digest_fields(judge: Judge, result: DigestResult, from_user: bool) -> dict:
     return {
         "stage": "digest", "score": result.score,
         "tier": tier_for(result.score, from_user=from_user), "section": result.section,
-        "kind": result.kind, "headline": result.headline, "why": result.why or None,
+        "kind": result.kind, "headline": result.headline, "what": result.what, "why": result.why or None,
         "key_points": dumps(list(result.key_points)), "entities": dumps(list(result.entities)),
         "event_key": result.event_key or None, "model": judge.digest_model,
         "profile_version": judge.version,

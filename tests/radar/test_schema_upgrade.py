@@ -42,3 +42,21 @@ def test_old_radar_tables_gain_the_new_columns_and_keep_their_rows(tmp_path) -> 
         assert tuple(row) == (40, 0, 0, None)
     finally:
         engine.dispose()
+
+
+def test_old_assessment_tables_gain_what(tmp_path) -> None:
+    """An assessment row judged before the second text existed reads back with an empty `what`."""
+    engine = create_db_engine(tmp_path / "old.db")
+    try:
+        with Session(engine) as session:
+            session.exec(text(_OLD_TABLES[0]))
+            session.exec(text("INSERT INTO assessment (item_id, stage, score) VALUES (1, 'digest', 70)"))
+            session.commit()
+        init_db(engine)
+        init_db(engine)  # a second start changes nothing and does not fail
+        assert "what" in _columns(engine, "assessment")
+        with Session(engine) as session:
+            row = session.exec(text("SELECT what, score FROM assessment WHERE item_id = 1")).one()
+        assert tuple(row) == ("", 70)
+    finally:
+        engine.dispose()

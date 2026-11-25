@@ -42,8 +42,10 @@ PROJECTS_NOTE = ("The reader's project names (from the vault's projects folder) 
 
 
 def _extra_lines(item: dict, qa: str, approved: dict | None) -> list[str | None]:
-    """The block lines after the common fields: why, key points, organisations, conversation."""
+    """The block lines after the common fields: what, why, key points, organisations, conversation."""
     lines: list[str | None] = []
+    what = one_line(item.get("what"), 600)
+    lines.append(f"What it says: {what}" if what else None)
     why = one_line(item.get("why"), 600)
     lines.append(f"Why it matters: {why}" if why else None)
     points = [one_line(p, 400) for p in (item.get("key_points") or [])[:KEY_POINTS_MAX]

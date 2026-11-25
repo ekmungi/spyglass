@@ -73,7 +73,10 @@ class Assessment(SQLModel, table=True):
     kind: str = "news"
     # A plain rewritten headline of at most about 12 words.
     headline: str | None = None
-    # One or two sentences: why this matters to this reader.
+    # Two or three plain sentences saying what the page reports. Empty for an item judged before
+    # this text existed; nothing judges it again.
+    what: str = ""
+    # Two or three sentences on why this matters in general, never addressed to the reader.
     why: str | None = None
     # JSON list[str] of at most 4 short key points (the summary shown above the reader).
     key_points: str | None = None

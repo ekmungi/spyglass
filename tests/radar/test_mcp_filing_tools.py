@@ -45,7 +45,8 @@ def state(tmp_path):
             session.add(item)
             session.commit()
             session.add(Assessment(item_id=item.id, tier="top", section="health", kind="news",
-                                   score=80, headline=f"Headline {n}", why="Because."))
+                                   score=80, headline=f"Headline {n}",
+                                   what="It happened." if n == 1 else "", why="Because."))
             session.commit()
     for item_id in (1, 2, 3):
         filing_queue.enqueue(engine, item_id)
@@ -168,3 +169,10 @@ async def test_mark_filed_keeps_the_best_guess_flag(state, tmp_path):
                      best_guess=True)
     assert out["best_guess"] is True
     assert [e.item_id for e in filing_queue.waiting(state.engine)] == [1, 3]
+
+
+async def test_the_filing_view_carries_what_when_the_item_has_one(state):
+    body = await call(state, "radar_filing_queue")
+    material = {i["id"]: i["material"] for i in body["items"]}
+    assert "What it says: It happened." in material[1] and "Why it matters: Because." in material[1]
+    assert "What it says" not in material[2] and "Why it matters: Because." in material[2]

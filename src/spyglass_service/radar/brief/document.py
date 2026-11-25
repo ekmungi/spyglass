@@ -60,6 +60,7 @@ def story_dict(story: Story, items: dict[int, dict]) -> dict:
         "id": f"s-{lead['id']}",
         "item_id": lead["id"],
         "headline": lead["headline"] or lead["title"],
+        "what": lead["what"],
         "why": lead["why"],
         "section": lead["section"],
         "section_label": lead["section_label"],
@@ -108,18 +109,25 @@ def fallback_opening(sections: list[dict], quiet: bool) -> str:
 
 
 def _opening_messages(sections: list[dict], quiet: bool) -> list[dict]:
-    """The prompt: only top and watch headlines with their reasons, no other reader detail."""
+    """The prompt: only top and watch headlines with what each reports and why it matters.
+
+    A text that is empty (an item judged before the second text existed) adds no line.
+    """
     lines = []
     for section in sections:
         if section["key"] in ("top", "watch"):
             for st in section["stories"]:
-                lines.append(f"- [{section['title']}] {st['headline']}" + (f" ({st['why']})" if st["why"] else ""))
+                lines.append(f"- [{section['title']}] {st['headline']}")
+                if st.get("what"):
+                    lines.append(f"  What it says: {st['what']}")
+                if st.get("why"):
+                    lines.append(f"  Why it matters: {st['why']}")
     day = "Today was a quiet day with little of note." if quiet else "Today had real news."
     return [
         {"role": "system", "content": (
             "You write the two-sentence opening of a daily news brief. Write exactly two plain "
             "sentences saying what the day was about, in a neutral tone with no hype and no "
-            "greeting. Use only the headlines given. If the day was quiet, say so plainly. "
+            "greeting. Use only the headlines and notes given. If the day was quiet, say so plainly. "
             'Return JSON: {"opening": "..."}.')},
         {"role": "user", "content": f"{day}\nHeadlines:\n" + ("\n".join(lines) or "(none)")},
     ]

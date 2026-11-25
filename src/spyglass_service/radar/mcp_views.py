@@ -86,7 +86,8 @@ def item_for_claude(engine: Engine, item_id: int) -> dict | None:
     text = stored.get("markdown") if stored and stored.get("status") == "ok" else None
     cut = bool(text) and len(text) > FULL_TEXT_MAX
     points = item.get("key_points") or []
-    extra: list[str | None] = [_field("Why it matters", item.get("why"), 600)]
+    extra: list[str | None] = [_field("What it says", item.get("what"), 600),
+                               _field("Why it matters", item.get("why"), 600)]
     if isinstance(points, list) and points:
         extra.append("Key points:")
         extra += [f"- {one_line(p, 400)}" for p in points[:12] if isinstance(p, str) and p.strip()]
@@ -122,6 +123,9 @@ def _story_lines(story: dict) -> list[str]:
     except (TypeError, ValueError):
         number = 0
     lines = [f"- [item {number}] {headline}{more}"]
+    what = one_line(story.get("what"), 400)
+    if what:
+        lines.append(f"  What: {what}")
     why = one_line(story.get("why"), 400)
     if why:
         lines.append(f"  Why: {why}")

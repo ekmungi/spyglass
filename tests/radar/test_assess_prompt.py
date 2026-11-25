@@ -5,6 +5,7 @@ import json
 import pytest
 
 from spyglass_service.radar.assess_prompt import (
+    DIGEST_TASK,
     RUBRIC,
     TEXT_CHARS,
     build_digest_messages,
@@ -47,6 +48,32 @@ def test_digest_schema_requires_every_field() -> None:
     schema = digest_schema(KEYS)["schema"]
     assert set(schema["required"]) == set(schema["properties"])
     assert schema["additionalProperties"] is False
+
+
+def test_the_digest_asks_for_what_and_a_general_why() -> None:
+    """The digest writes two texts: what the page reports, and a why that never names the reader."""
+    assert ("what: 2 or 3 sentences that say what the page reports: who did what, with the "
+            "numbers the source gives. Plain statements, no opinion.") in DIGEST_TASK
+    assert ("why: 2 or 3 sentences on why this matters in general: what it changes, for whom, "
+            "and how firm the evidence is. Do not address the reader, do not write \"you\" or "
+            "\"your\", and do not mention the reader's work, profile or projects.") in DIGEST_TASK
+    assert "addressed to the reader" not in DIGEST_TASK
+    assert "never generic" not in DIGEST_TASK
+
+
+def test_the_digest_schema_requires_what() -> None:
+    """The reply must carry `what` as a string."""
+    schema = digest_schema(KEYS)["schema"]
+    assert schema["properties"]["what"] == {"type": "string"}
+    assert "what" in schema["required"]
+
+
+def test_parse_digest_keeps_what() -> None:
+    """`what` is kept with its whitespace tidied; a reply without it leaves it empty, as `why` does."""
+    raw = {"headline": "Lab ships model", "score": 60, "what": "  The lab   released it. ",
+           "why": "It cuts cost."}
+    assert parse_digest(raw, KEYS).what == "The lab released it."
+    assert parse_digest({"headline": "Lab ships model", "score": 60}, KEYS).what == ""
 
 
 def test_clean_snippet_strips_markup_and_arxiv_prefix() -> None:

@@ -81,7 +81,8 @@ def db(tmp_path: Path) -> Iterator:
 
 
 def add_item(db, title: str = "Robot completes surgery", text: str | None = "Body text. " * 20,
-             *, url: str = "https://example.org/a", note: str | None = None) -> int:
+             *, url: str = "https://example.org/a", note: str | None = None,
+             what: str = "") -> int:
     """Insert an item (with assessment, optional full text and reader note); return its id."""
     with Session(db) as session:
         item = Item(source="rss", external_id=url, title=title, url=url, origin="Example News")
@@ -90,7 +91,7 @@ def add_item(db, title: str = "Robot completes surgery", text: str | None = "Bod
         session.refresh(item)
         session.add(Assessment(item_id=item.id, stage="digest", score=80, tier="top",
                                section="health", kind="news", headline="A robot did surgery",
-                               why="Relevant to endoscopy work.",
+                               what=what, why="Relevant to endoscopy work.",
                                key_points=dumps(["First point", "Second point"]),
                                entities=dumps(["Acme Robotics"])))
         if note:

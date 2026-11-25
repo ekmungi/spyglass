@@ -52,6 +52,8 @@ _ADDED_COLUMNS = [
     ("assessment", "triage_attempts", "INTEGER NOT NULL DEFAULT 0"),
     ("assessment", "digest_attempts", "INTEGER NOT NULL DEFAULT 0"),
     ("assessment", "error", "VARCHAR"),
+    # Radar: the plain statement of what the page reports, next to the general "why".
+    ("assessment", "what", "VARCHAR NOT NULL DEFAULT ''"),
     # Radar: when the reader last sent an item in (drives the brief's "From you" window).
     ("itemstate", "captured_at", "DATETIME"),
     # Radar: a brief's last regeneration, kept apart from its first composition time.

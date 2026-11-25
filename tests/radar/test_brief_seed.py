@@ -44,6 +44,7 @@ def add_item(
     from_user: bool = False,
     hidden: bool = False,
     headline: str | None = None,
+    what: str = "",
     why: str | None = "Matters for the reader.",
     entities: list[str] | None = None,
     upvotes: int | None = None,
@@ -72,7 +73,7 @@ def add_item(
             session.add(
                 Assessment(
                     item_id=item.id, stage="digest", score=score, tier=tier, section=section,
-                    kind=kind, headline=headline, why=why, event_key=event_key,
+                    kind=kind, headline=headline, what=what, why=why, event_key=event_key,
                     entities=dumps(entities) if entities is not None else None,
                 )
             )

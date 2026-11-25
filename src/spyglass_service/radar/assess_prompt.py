@@ -1,10 +1,11 @@
 """Prompts, schemas and parsing for the two assessment stages: triage and digest.
 
 Triage judges up to 20 items per call from title, publication and the first lines of text.
-Digest reads one item's text and writes what the reader sees: a plain headline, why it matters
-to them, key points, organisations named and an event key. Both stages share one rubric so a
-score means the same at either stage. The static rubric and the reader's profile come first in
-the system message, so provider-side prompt caching can reuse that prefix across calls.
+Digest reads one item's text and writes what the reader sees: a plain headline, what the page
+reports, why it matters in general, key points, organisations named and an event key. Both stages
+share one rubric so a score means the same at either stage. The static rubric and the reader's
+profile come first in the system message, so provider-side prompt caching can reuse that prefix
+across calls.
 """
 
 import html
@@ -101,8 +102,11 @@ them. No opinion, no repetition of the headline.
 - entities: organisations named (companies, labs, universities, regulators), at most 8.
 - headline: what happened, in plain words, at most 12 words. Lead with who did it. No \
 clickbait, no question, no "X: Y" subtitle, no hype words.
-- why: at most 2 sentences addressed to the reader as "you": what you can do with this, or what \
-it changes for you, tied to your topics. Concrete; never generic ("this is relevant to AI").
+- what: 2 or 3 sentences that say what the page reports: who did what, with the numbers the \
+source gives. Plain statements, no opinion.
+- why: 2 or 3 sentences on why this matters in general: what it changes, for whom, and how firm \
+the evidence is. Do not address the reader, do not write "you" or "your", and do not mention \
+the reader's work, profile or projects.
 - event_key: a lowercase slug naming the underlying event so two reports of the same event \
 get the same key: 3 to 5 words, actor-action-object, e.g. "openai-gpt-6-release" or \
 "fda-clears-olympus-polyp-ai". Name the company that acted, never the outlet reporting it; no \
@@ -128,6 +132,7 @@ class DigestResult:
     """One item's digest: the final judgement plus the text the reader sees."""
 
     headline: str
+    what: str
     why: str
     key_points: tuple[str, ...]
     entities: tuple[str, ...]
@@ -175,6 +180,7 @@ def digest_schema(keys: list[str]) -> dict:
         "key_points": strings,
         "entities": strings,
         "headline": {"type": "string"},
+        "what": {"type": "string"},
         "why": {"type": "string"},
         "event_key": {"type": "string"},
         "section": {"type": "string", "enum": _section_enum(keys)},
@@ -307,6 +313,7 @@ def parse_digest(raw: object, keys: list[str]) -> DigestResult:
         raise ValueError("digest reply has no headline")
     return DigestResult(
         headline=headline,
+        what=" ".join(str(raw.get("what") or "").split()),
         why=" ".join(str(raw.get("why") or "").split()),
         key_points=_strings(raw.get("key_points"), 4),
         entities=_strings(raw.get("entities"), 10),

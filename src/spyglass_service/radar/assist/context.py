@@ -83,8 +83,11 @@ def render_brief(doc: dict) -> str:
         lines.append(f"\n{section.get('title', '')}")
         for story in section.get("stories") or []:
             names = ", ".join(s.get("name", "") for s in story.get("sources") or [] if s.get("name"))
-            lines.append(f"- {story.get('headline', '')}: {story.get('why') or ''}"
-                         + (f" ({names})" if names else ""))
+            lines.append(f"- {story.get('headline', '')}" + (f" ({names})" if names else ""))
+            if story.get("what"):
+                lines.append(f"  What it says: {story['what']}")
+            if story.get("why"):
+                lines.append(f"  Why it matters: {story['why']}")
     return "\n".join(line for line in lines if line is not None).strip()
 
 
@@ -130,8 +133,10 @@ def _item_block(db: DbEngine, session: Session, item_id: int) -> str:
     ]
     if item.get("key_points"):
         head.append("Key points:\n" + "\n".join(f"- {p}" for p in item["key_points"]))
+    if item.get("what"):
+        head.append(f"What it says: {item['what']}")
     if item.get("why"):
-        head.append(f"Why it may matter to the reader: {item['why']}")
+        head.append(f"Why it matters: {item['why']}")
     if state and state.user_note:
         head.append(f"The reader's own note on it: {state.user_note}")
     stored = content_store.get_fulltext(db, item_id)

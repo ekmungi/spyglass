@@ -315,3 +315,26 @@ def test_from_user_item_outside_the_recency_rule_can_still_appear_as_news(tmp_pa
     assert "from_you" not in stories_of(doc)
     assert [s["item_id"] for s in stories_of(doc)["top"]] == [item_id]
     engine.dispose()
+
+
+def test_the_opening_prompt_gets_both_texts(tmp_path) -> None:
+    """The model that writes the opening reads what each story reports and why it matters, and an
+    older story with no `what` adds no empty label."""
+    engine = make_engine(tmp_path)
+    add_item(engine, "Lab ships a model", score=90, what="The lab released a model with 12 languages.",
+             why="It lowers translation cost for small teams.")
+    add_item(engine, "Older story", score=85, age_hours=5, what="", why="Matters in general.")
+    calls = []
+
+    def llm(messages, schema):
+        calls.append(messages)
+        return {"opening": "x"}
+
+    doc = compose_brief(engine, SETTINGS, None, llm=llm, now=NOW)
+    prompt = calls[0][1]["content"]
+    assert "What it says: The lab released a model with 12 languages." in prompt
+    assert "Why it matters: It lowers translation cost for small teams." in prompt
+    assert prompt.count("What it says:") == 1 and prompt.count("Why it matters:") == 2
+    stories = {s["headline"] or s["id"]: s for sec in doc["sections"] for s in sec["stories"]}
+    assert {s["what"] for s in stories.values()} == {"The lab released a model with 12 languages.", ""}
+    engine.dispose()

@@ -99,6 +99,7 @@ def radar_items(session: Session, item_ids: Iterable[int]) -> list[dict]:
                 "section_label": section_label(session, section),
                 "tier": a.tier if judged else "unjudged",
                 "score": a.score if judged else None,
+                "what": a.what if judged else "",
                 "why": a.why if judged else None,
                 "key_points": loads(a.key_points, []) if a else [],
                 "entities": loads(a.entities, []) if a else [],

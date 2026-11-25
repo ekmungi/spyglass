@@ -75,6 +75,8 @@ def render_item(item: dict) -> str:
     meta = (f"  {item.get('origin') or 'unknown publication'} | {day} | "
             f"{item.get('section_label') or 'no section'} | tier {item.get('tier') or 'unjudged'}")
     lines = [head, meta]
+    if item.get("what"):
+        lines.append(f"  What it says: {_clip(item['what'], _WHY_CHARS)}")
     if item.get("why"):
         lines.append(f"  Why it matters: {_clip(item['why'], _WHY_CHARS)}")
     lines += [f"  - {_clip(p, _POINT_CHARS)}"

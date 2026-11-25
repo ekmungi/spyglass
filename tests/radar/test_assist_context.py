@@ -21,6 +21,33 @@ def test_system_prompt_has_role_profile_and_item(db):
     assert "The robot cut the tissue precisely." in system
 
 
+def test_the_assistant_context_has_both_texts(db):
+    item_id = add_item(db, what="A robot completed a surgery in Berlin.")
+    system = context.build_system(db, item_id=item_id)
+    assert "What it says: A robot completed a surgery in Berlin." in system
+    assert "Why it matters: Relevant to endoscopy work." in system
+    assert "to the reader" not in system
+
+
+def test_an_older_item_gives_the_assistant_one_text_without_an_empty_label(db):
+    older = add_item(db, what="", url="https://example.org/older")
+    system = context.build_system(db, item_id=older)
+    assert "Why it matters: Relevant to endoscopy work." in system
+    assert "What it says" not in system
+
+
+def test_the_brief_for_the_assistant_lists_both_texts_and_skips_an_empty_one(db):
+    doc = {"day": "2026-11-12", "opening": "A busy day.", "sections": [
+        {"key": "top", "title": "Top stories", "stories": [
+            {"headline": "Big launch", "what": "A lab shipped it.", "why": "Changes pricing.",
+             "sources": [{"name": "Wire"}]},
+            {"headline": "Older story", "what": "", "why": "Matters.", "sources": []}]}]}
+    text = context.render_brief(doc)
+    assert "- Big launch (Wire)\n  What it says: A lab shipped it.\n  Why it matters: Changes pricing." in text
+    assert "- Older story\n  Why it matters: Matters." in text
+    assert text.count("What it says") == 1
+
+
 def test_system_prompt_budgets_long_text_and_handles_missing_text(db, monkeypatch):
     monkeypatch.setattr(context, "TEXT_BUDGET", 500)
     long_id = add_item(db, text="word " * 5000, url="https://example.org/long")
@@ -49,7 +76,7 @@ def test_system_prompt_for_a_brief_day_renders_sections(db):
         session.commit()
     system = context.build_system(db, brief_day="2026-11-12")
     assert "A busy day." in system and "Top stories" in system
-    assert "- Big launch: Changes pricing. (Wire)" in system
+    assert "- Big launch (Wire)\n  Why it matters: Changes pricing." in system
     assert "No brief for that day" in context.build_system(db, brief_day="2020-01-01")
 
 

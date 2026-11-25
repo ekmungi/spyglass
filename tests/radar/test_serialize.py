@@ -18,7 +18,7 @@ def engine(tmp_path):
     eng.dispose()
 
 
-def _add(engine, title: str, headline: str | None = None) -> int:
+def _add(engine, title: str, headline: str | None = None, what: str = "") -> int:
     """Insert an item (and, with a headline, its assessment); return the id."""
     with Session(engine) as session:
         item = Item(source="news", external_id=title, title=title, url="https://example.org/a")
@@ -26,7 +26,8 @@ def _add(engine, title: str, headline: str | None = None) -> int:
         session.commit()
         if headline is not None:
             session.add(Assessment(item_id=item.id, stage="digest", score=60, tier="notable",
-                                   section="industry", kind="news", headline=headline))
+                                   section="industry", kind="news", headline=headline,
+                                   what=what, why="It changes pricing."))
             session.commit()
         return item.id
 
@@ -53,3 +54,15 @@ def test_no_ids_gives_no_items(engine) -> None:
     """An empty request returns an empty list without querying."""
     with Session(engine) as session:
         assert radar_items(session, []) == []
+
+
+def test_an_item_and_a_story_carry_what(engine) -> None:
+    """The plain statement of what the page reports travels with the item; an older item has none."""
+    judged = _add(engine, "Title", headline="Lab ships model", what="The lab released a model.")
+    older = _add(engine, "Older title", headline="Older headline")
+    unjudged = _add(engine, "No assessment")
+    with Session(engine) as session:
+        first, second, third = radar_items(session, [judged, older, unjudged])
+    assert first["what"] == "The lab released a model." and first["why"] == "It changes pricing."
+    assert second["what"] == ""
+    assert third["what"] == "" and third["why"] is None

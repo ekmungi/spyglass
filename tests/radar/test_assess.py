@@ -209,6 +209,7 @@ def test_digest_one_stores_the_digest(engine, tmp_path) -> None:
     assert loads(row.key_points) == ["Point one with 42 cases.", "Point two.", "Point three."]
     assert loads(row.entities) == ["Olympus", "FDA"]
     assert row.event_key == "fda-clears-olympus-polyp-ai"
+    assert row.what == "The FDA cleared Olympus's polyp detector for use in colonoscopy."
     assert (row.model, row.profile_version) == ("d-model", 3)
     assert "polyp detection" in llm.calls[0][1][1]["content"]
 

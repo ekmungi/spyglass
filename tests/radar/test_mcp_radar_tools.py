@@ -49,7 +49,8 @@ def state(tmp_path):
 
 
 def add_item(engine, n: int, *, title: str, headline: str | None = None, note: str | None = None,
-             from_user: bool = False, captured_days_ago: float = 1, body: str | None = None) -> int:
+             from_user: bool = False, captured_days_ago: float = 1, body: str | None = None,
+             what: str = "") -> int:
     """One judged item; returns its id."""
     with Session(engine) as session:
         item = Item(source="capture" if from_user else "rss", external_id=f"e{n}", title=title,
@@ -58,7 +59,7 @@ def add_item(engine, n: int, *, title: str, headline: str | None = None, note: s
         session.add(item)
         session.commit()
         session.add(Assessment(item_id=item.id, tier="top", section="health", kind="news",
-                               score=88, headline=headline or title, why="Matters because.",
+                               score=88, headline=headline or title, what=what, why="Matters because.",
                                key_points=dumps(["Point A", "Point B"]), entities=dumps([])))
         if from_user or note:
             session.add(ItemState(item_id=item.id, from_user=from_user, user_note=note,
@@ -110,6 +111,24 @@ async def test_get_item_marks_every_web_field_and_keeps_only_app_values_outside(
         assert expected in text
     assert HOSTILE not in json.dumps({k: v for k, v in out.items() if k != "material"})
     assert out["full_text_truncated"] is False and out["has_full_text"] is True
+
+
+async def test_the_connector_views_return_what(state):
+    judged = add_item(state.engine, 1, title="Scan triage", what="A clinic reported 30 scans.")
+    older = add_item(state.engine, 2, title="Older scan")
+    out = await call(state, "radar_get_item", item_id=judged)
+    assert "What it says: A clinic reported 30 scans." in out["material"]
+    assert "What it says" not in (await call(state, "radar_get_item", item_id=older))["material"]
+    story = {"id": f"s-{judged}", "item_id": judged, "headline": "Scan triage", "what": "A clinic reported 30 scans.",
+             "why": "Why.", "source_count": 1, "sources": []}
+    bare = {**story, "item_id": older, "what": ""}
+    doc = {"day": "2026-11-12", "opening": "x", "sections": [
+        {"key": "top", "title": "Top stories", "stories": [story, bare]}]}
+    with Session(state.engine) as session:
+        session.add(RadarBrief(day="2026-11-12", doc=dumps(doc)))
+        session.commit()
+    text = (await call(state, "radar_today"))["text"]
+    assert "  What: A clinic reported 30 scans." in text and text.count("  What:") == 1
 
 
 async def test_get_item_caps_the_full_text(state):

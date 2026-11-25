@@ -44,7 +44,8 @@ def world(db):
         ids = [make_item(session, index, f"Capsule endoscopy study {n}", topic="capsule",
                          headline=f"Headline {n}") for n in range(3)]
         robot = make_item(session, index, "Robot assisted surgery", topic="robot", age_days=2)
-    detail_up(db, ids[0], why="Directly on your field.", section="health",
+    detail_up(db, ids[0], what="A capsule trial reported 40 patients.", why="Directly on your field.",
+              section="health",
               key_points=dumps(["First", "Second", "Third"]))
     return db, index, ids, robot
 
@@ -62,6 +63,7 @@ def test_block_lists_retrieved_items_with_markers_and_details(world):
     first = text[text.index(f"[#{ids[0]}]"):].split("\n\n")[0]
     assert "Headline 0" in first
     assert "tier notable" in first and "Why it matters: Directly on your field." in first
+    assert "What it says: A capsule trial reported 40 patients." in first
     assert "- First" in first and "- Second" in first and "- Third" not in first
 
 
@@ -267,3 +269,11 @@ def test_message_endpoint_accepts_the_feed_presets_and_rejects_others(client, mo
     assert frames[-1]["type"] == "done" and frames[-1]["retrieved"] == []
     bad = client.post(f"/api/radar/threads/{tid}/messages", json={"action": "feed_year"})
     assert bad.status_code == 422
+
+
+def test_an_item_without_what_has_no_empty_label_in_the_feed_block(world):
+    db, index, ids, _robot = world
+    text, _shown = block(db, index, question="What do I have about capsule endoscopy?")
+    older = text[text.index(f"[#{ids[1]}]"):].split("\n\n")[0]
+    assert "What it says" not in older
+    assert text.count("What it says:") == 1

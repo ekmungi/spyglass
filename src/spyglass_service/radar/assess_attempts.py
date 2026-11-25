@@ -35,7 +35,7 @@ def failure_fields(judge_model: str, profile_version: int, error: str) -> dict:
     """Assessment columns for a failed triage (the attempt counter is bumped separately)."""
     return {
         "stage": FAILED_STAGE, "score": 0, "tier": UNJUDGED_TIER, "section": "", "kind": "news",
-        "headline": None, "why": None, "key_points": None, "entities": None, "event_key": None,
+        "headline": None, "what": "", "why": None, "key_points": None, "entities": None, "event_key": None,
         "model": judge_model, "profile_version": profile_version, "error": error[:500],
     }
 
