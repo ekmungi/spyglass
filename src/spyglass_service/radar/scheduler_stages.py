@@ -65,7 +65,8 @@ class StagesMixin:
         """Link items to watched organisations and rebuild the suggested ones.
 
         Runs after the pipeline, because linking by mention and choosing suggestions read each
-        item's assessment. `suggested` holds the refresh's counts (added, removed, kept, aliases).
+        item's assessment. `suggested` holds the refresh's counts (added, removed, kept, aliases) and
+        `aliases_added`, the aliases it gave followed entries.
         """
         from spyglass_service.radar.watch.suggest import refresh_suggestions
         from spyglass_service.radar.watch.sweep import link_mentions, link_watch_items

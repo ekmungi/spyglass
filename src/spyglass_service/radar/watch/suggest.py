@@ -298,12 +298,14 @@ def _plan(session: Session, now: datetime, llm: LlmFn | None) -> _Plan:
     )
 
 
-def _add_aliases(session: Session, spellings: list[tuple[str, int]], taken: set[str]) -> int:
-    """Save each spelling as an alias of its entry while the entry is still followed; returns how many.
+def _add_aliases(session: Session, spellings: list[tuple[str, int]], taken: set[str]) -> list[list[str]]:
+    """Save each spelling as an alias of its entry while the entry is still followed.
 
-    A spelling that is already a name or alias in the register (`taken`) is skipped.
+    Returns `[alias, entry name]` for each alias added, and logs each at INFO: an alias links every
+    item that names it to the entry, and a wrong `same_as` from the model is otherwise unseen. A
+    spelling that is already a name or alias in the register (`taken`) is skipped.
     """
-    added = 0
+    added: list[list[str]] = []
     for spelling, entity_id in spellings:
         entity = session.get(WatchEntity, entity_id)
         if entity is None or entity.status not in FOLLOWED or norm_name(spelling) in taken:
@@ -311,12 +313,14 @@ def _add_aliases(session: Session, spellings: list[tuple[str, int]], taken: set[
         entity.aliases = dumps([*(loads(entity.aliases, []) or []), spelling])
         session.add(entity)
         taken.add(norm_name(spelling))
-        added += 1
+        added.append([spelling, entity.name])
+        logger.info("Watch suggestions: added the alias %r to %r", spelling, entity.name)
     return added
 
 
 def _apply(session: Session, plan: _Plan, now: datetime) -> dict:
-    """Write the plan in one commit, checked against the register as it is now; returns the counts.
+    """Write the plan in one commit, checked against the register as it is now; returns the counts
+    and the aliases added (`aliases_added`, as `[alias, entry name]`).
 
     Only suggested rows are added, updated or deleted; a followed entry at most gains an alias.
     """
@@ -348,7 +352,8 @@ def _apply(session: Session, plan: _Plan, now: datetime) -> dict:
         delete_with_links(session, entity)
     aliases = _add_aliases(session, plan.spellings, taken)
     session.commit()
-    return {"added": added, "removed": len(stale), "kept": len(kept), "aliases": aliases}
+    return {"added": added, "removed": len(stale), "kept": len(kept), "aliases": len(aliases),
+            "aliases_added": aliases}
 
 
 def refresh_suggestions(engine: Engine, settings, *, now: datetime | None = None,
@@ -375,7 +380,8 @@ def refresh_suggestions(engine: Engine, settings, *, now: datetime | None = None
         llm: `(messages, schema) -> dict`, the model to classify names with.
 
     Returns:
-        The counts `{"added", "removed", "kept", "aliases"}`.
+        The counts `{"added", "removed", "kept", "aliases"}` and `aliases_added`, each alias added
+        to a followed entry as `[alias, entry name]` (also logged at INFO).
     """
     when = now or utcnow().replace(tzinfo=None)
     with Session(engine) as session:

@@ -1,11 +1,13 @@
 """Tests for the name classification's chunks, prompt and cache freshness (radar/watch/suggest.py).
 
 The model is asked about at most `suggest.CHUNK` names per call, so a failed call loses only its
-own names; two spellings of one organisation fold into one suggestion; and a cached answer is
-asked again when the register or the groups it was given have changed in a way that matters.
+own names; two spellings of one organisation fold into one suggestion; a cached answer is asked
+again when the register or the groups it was given have changed in a way that matters; and every
+alias a refresh adds to a followed entry is logged and reported.
 """
 
 import json
+import logging
 
 import pytest
 from sqlmodel import Session
@@ -116,3 +118,18 @@ def test_names_cached_with_a_renamed_group_are_asked_again_and_keep_a_category(e
 
     assert sent_names(llm) == ["Org A"]  # Org B had no group, so its answer still holds
     assert suggested(engine)["Org A"].category == "Medical imaging"
+
+
+def test_every_alias_a_refresh_adds_is_logged_and_reported(engine, caplog) -> None:
+    """A wrong `same_as` that names a real entry still adds an alias, so the reader can see it in the log."""
+    add(engine, "DeepMind (Alphabet/Google)", category="AI labs")
+    named(engine, ["Google"], 4)
+
+    with caplog.at_level(logging.INFO, logger=suggest.__name__):
+        result = refresh(engine, FakeLlm([row("Google", same_as="DeepMind (Alphabet/Google)")]))
+
+    assert result["aliases"] == 1
+    assert result["aliases_added"] == [["Google", "DeepMind (Alphabet/Google)"]]
+    logged = [r for r in caplog.records if r.levelno == logging.INFO and "alias" in r.getMessage()]
+    assert len(logged) == 1
+    assert "Google" in logged[0].getMessage() and "DeepMind (Alphabet/Google)" in logged[0].getMessage()

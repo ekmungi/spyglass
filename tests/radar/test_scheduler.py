@@ -109,7 +109,7 @@ def test_the_watch_stage_reports_the_refresh(tmp_path, monkeypatch) -> None:
         assert result == {
             "linked_by_search": 0,
             "linked_by_mention": 0,
-            "suggested": {"added": 1, "removed": 0, "kept": 0, "aliases": 0},
+            "suggested": {"added": 1, "removed": 0, "kept": 0, "aliases": 0, "aliases_added": []},
         }
     finally:
         engine.dispose()

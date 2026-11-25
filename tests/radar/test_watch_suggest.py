@@ -211,7 +211,7 @@ def test_five_per_section_at_least_three_items(engine) -> None:
 
     result = refresh(engine, llm)
 
-    assert result == {"added": 5, "removed": 0, "kept": 0, "aliases": 0}
+    assert result == {"added": 5, "removed": 0, "kept": 0, "aliases": 0, "aliases_added": []}
     rows = suggested(engine)
     assert set(rows) == {"Org A", "Org B", "Org C", "Org D", "Org E"}
     first = rows["Org A"]
@@ -289,7 +289,8 @@ def test_a_spelling_of_a_watched_name_becomes_an_alias_and_is_not_suggested(engi
 
     result = refresh(engine, llm)
 
-    assert result == {"added": 0, "removed": 0, "kept": 0, "aliases": 2}
+    assert result == {"added": 0, "removed": 0, "kept": 0, "aliases": 2, "aliases_added": [
+        ["Johnson & Johnson", "Johnson & Johnson / Ethicon"], ["Olympus", "Olympus Corporation"]]}
     assert suggested(engine) == {}
     after = snapshot(engine, [watched, paused])
     assert after[watched]["aliases"] == ["Johnson & Johnson"] and after[watched]["status"] == "active"
@@ -308,7 +309,7 @@ def test_a_spelling_of_a_rejected_name_is_dropped_without_an_alias(engine) -> No
 
     result = refresh(engine, llm)
 
-    assert result == {"added": 0, "removed": 0, "kept": 0, "aliases": 0}
+    assert result == {"added": 0, "removed": 0, "kept": 0, "aliases": 0, "aliases_added": []}
     assert suggested(engine) == {}
     after = snapshot(engine, [rejected])[rejected]
     assert after["status"] == "rejected" and after["aliases"] == []
@@ -337,7 +338,7 @@ def test_a_suggestion_no_longer_selected_is_deleted_and_followed_and_rejected_ro
     named(engine, ["Staying Co"], 1)
     second = refresh(engine, llm, now=NOW_NAIVE + timedelta(days=1))  # Fading Co's items leave the window
 
-    assert second == {"added": 0, "removed": 1, "kept": 2, "aliases": 0}
+    assert second == {"added": 0, "removed": 1, "kept": 2, "aliases": 0, "aliases_added": []}
     rows = suggested(engine)
     assert set(rows) == {"Staying Co", "Rogue Co"}
     assert (rows["Staying Co"].suggest_count, rows["Staying Co"].why) == (4, "named in 4 items")
@@ -356,7 +357,7 @@ def test_topic_search_names_stay_thirty_days_then_go(engine) -> None:
 
     result = refresh(engine, llm)
 
-    assert result == {"added": 0, "removed": 3, "kept": 0, "aliases": 0}
+    assert result == {"added": 0, "removed": 3, "kept": 0, "aliases": 0, "aliases_added": []}
     rows = suggested(engine)
     assert set(rows) == {"Aidoc"} and rows["Aidoc"].id == young
     assert (rows["Aidoc"].topic, rows["Aidoc"].section, rows["Aidoc"].suggest_count) == ("RSNA", "", 0)
@@ -373,7 +374,7 @@ def test_the_first_run_clears_old_mention_suggestions(engine) -> None:
 
     result = refresh(engine, FakeLlm([row("Some Person", "person"), row("Kept Org")]))
 
-    assert result == {"added": 0, "removed": 2, "kept": 1, "aliases": 0}
+    assert result == {"added": 0, "removed": 2, "kept": 1, "aliases": 0, "aliases_added": []}
     kept = suggested(engine)
     assert set(kept) == {"Kept Org"}
     entity = kept["Kept Org"]
@@ -396,7 +397,7 @@ def test_without_a_model_only_cached_names_are_selected_and_the_rest_wait(engine
     result = refresh(engine)
 
     assert purposes == ["watch_suggest"]
-    assert result == {"added": 1, "removed": 1, "kept": 0, "aliases": 0}
+    assert result == {"added": 1, "removed": 1, "kept": 0, "aliases": 0, "aliases_added": []}
     assert set(suggested(engine)) == {"Cached Org", "Fresh Find"}  # the uncached topic name stays too
     refresh(engine, FakeLlm([row("New Org")]))
     assert "New Org" in suggested(engine)
@@ -425,7 +426,7 @@ def test_a_click_made_while_the_model_is_asked_is_respected(engine) -> None:
 
     result = refresh(engine, reader_clicks_meanwhile)
 
-    assert result == {"added": 0, "removed": 0, "kept": 0, "aliases": 0}
+    assert result == {"added": 0, "removed": 0, "kept": 0, "aliases": 0, "aliases_added": []}
     after = snapshot(engine, [brand, clicked])
     assert (after[brand]["status"], after[brand]["aliases"]) == ("rejected", [])
     assert after[clicked]["status"] == "active"
