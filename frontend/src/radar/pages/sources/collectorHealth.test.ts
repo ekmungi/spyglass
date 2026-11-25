@@ -2,7 +2,7 @@
 // source that is only not set up does not, and the Searches mark counts its failing searches.
 import { describe, expect, it } from 'vitest'
 import type { CollectorRow } from './api'
-import { failingSearchesAlert, fdaAlert } from './collectorHealth'
+import { failingSearchesAlert, fdaAlert, fromYouAlert } from './collectorHealth'
 
 const row = (key: string, over: Partial<CollectorRow> = {}): CollectorRow => ({
   key,
@@ -23,6 +23,15 @@ describe('failingSearchesAlert', () => {
 
   it('is empty when no search fails, or one is only not set up', () => {
     expect(failingSearchesAlert([row('news'), row('hn', { status: 'skipped' })])).toBeUndefined()
+  })
+})
+
+describe('fromYouAlert', () => {
+  it('counts the channels that are set up but failing, and not one that is only not set up', () => {
+    expect(fromYouAlert([row('slack', { status: 'error' }), row('raindrop')])).toBe('1 channel is failing')
+    expect(fromYouAlert([row('slack', { status: 'error' }), row('newsletter', { status: 'error' })])).toBe('2 channels are failing')
+    expect(fromYouAlert([row('slack', { status: 'error', enabled: false }), row('raindrop', { status: 'skipped' })])).toBeUndefined()
+    expect(fromYouAlert([row('news', { status: 'error' })])).toBeUndefined()
   })
 })
 

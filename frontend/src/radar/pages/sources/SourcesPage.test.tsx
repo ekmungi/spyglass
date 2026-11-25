@@ -161,6 +161,24 @@ describe('SourcesPage', () => {
     expect(within(screen.getByRole('tab', { name: /^FDA decisions/ })).getByRole('img', { name: 'The FDA check is failing' })).toBeInTheDocument()
   })
 
+  it('puts an alert on the From you tab for a channel that is set up but failing, and none for one only not set up', async () => {
+    api.loadSources.mockResolvedValue({
+      ...view(),
+      collectors: [...view().collectors.filter((row) => row.key !== 'raindrop'), collector({ key: 'raindrop', label: 'Raindrop bookmarks', status: 'error', detail: '401 Unauthorized' })],
+    })
+    const first = render(<SourcesPage />)
+    const fromYou = await screen.findByRole('tab', { name: /^From you/ })
+    expect(within(fromYou).getByRole('img', { name: '1 channel is failing' })).toBeInTheDocument()
+    expect(screen.getByText('Set up, but failing')).toBeInTheDocument()
+    first.unmount()
+    clearLoadCache()
+    // Slack is only not set up in the usual view: no mark.
+    api.loadSources.mockResolvedValue(view())
+    render(<SourcesPage />)
+    expect(within(await screen.findByRole('tab', { name: /^From you/ })).queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.getByText('Not configured')).toBeInTheDocument()
+  })
+
   it('puts no alert on a tab whose source is only not set up', async () => {
     api.loadSources.mockResolvedValue({
       ...view(),

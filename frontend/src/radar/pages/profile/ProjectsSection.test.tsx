@@ -189,6 +189,20 @@ describe('ProjectsSection folding', () => {
     expect(screen.queryByText('Garden')).not.toBeInTheDocument()
   })
 
+  it('still offers to fold the list after the reader types into every project without a line and empties it again', async () => {
+    api.loadProjects.mockResolvedValue([...rows(), { name: 'Garden', description: '', in_vault: true }])
+    render(<Page />)
+    await screen.findByText('Imaging AI')
+    showOthers()
+    for (const name of ['Agent harness', 'Garden']) {
+      fireEvent.change(line(name), { target: { value: 'x' } })
+      fireEvent.change(line(name), { target: { value: '' } })
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Show only the shared projects' }))
+    expect(screen.queryByText('Agent harness')).not.toBeInTheDocument()
+    expect(screen.queryByText('Garden')).not.toBeInTheDocument()
+  })
+
   it('says the AI sees none of them when no project has a line, and still offers them all', async () => {
     api.loadProjects.mockResolvedValue(rows().map((row) => ({ ...row, description: '' })))
     render(<Page />)

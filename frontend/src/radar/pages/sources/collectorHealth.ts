@@ -1,8 +1,16 @@
-// The alert marks for the Searches and the FDA decisions tabs. The rule that marks a row "Failing" (its
-// status reads as a problem) marks its tab too, so a source that is only not set up gets no mark.
+// The alert marks for the From you, Searches and FDA decisions tabs. The rule that marks a row as failing
+// marks its tab too, so a source that is only not set up gets no mark.
 import type { CollectorRow } from './api'
 import { collectorStatus } from './describe'
+import { CHANNELS, channelRow, isChannelFailing } from './fromYouChannels'
 import { signalRows } from './signalRows'
+
+/** The alert text for the From you tab ("1 channel is failing"), or undefined when no channel is set up but failing. */
+export function fromYouAlert(collectors: readonly CollectorRow[]): string | undefined {
+  const count = CHANNELS.filter((channel) => isChannelFailing(channelRow(channel, collectors))).length
+  if (count === 0) return undefined
+  return count === 1 ? '1 channel is failing' : `${count} channels are failing`
+}
 
 /** Whether a collector's row reads "Failing". */
 function isFailing(row: CollectorRow): boolean {

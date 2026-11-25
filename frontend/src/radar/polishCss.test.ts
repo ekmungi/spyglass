@@ -168,6 +168,12 @@ describe('thumbs', () => {
     expect(valueOf(selected, 'opacity')).toBe('1')
     expect(valueOf(selected, 'pointer-events')).toBe('auto')
   })
+
+  it("show on the Feed's selected row, as Save does, so the keyboard selection reveals them", () => {
+    const selected = ruleFor(feedCss, '.r-feedrow.is-selected .r-votes')
+    expect(valueOf(selected, 'opacity')).toBe('1')
+    expect(valueOf(selected, 'pointer-events')).toBe('auto')
+  })
 })
 
 describe('hidden panels', () => {

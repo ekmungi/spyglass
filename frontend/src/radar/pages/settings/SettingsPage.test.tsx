@@ -528,6 +528,27 @@ describe('The list of AI engines', () => {
     expect(visibleEngines()).toHaveLength(1)
   })
 
+  it('still offers to fold the list after the reader unfolds it and changes every engine that is not set up', async () => {
+    api.loadEngines.mockResolvedValue([
+      engine({ id: 'e1', label: 'Engine One' }),
+      engine({ id: 'claude_code', label: 'Claude Code', kind: 'cli', available: false, reason: 'Switched off', enabled: false, models: [] }),
+    ])
+    // Switched on, the program is still not found on this computer, so the engine stays not set up.
+    api.configureEngine.mockImplementation(async (id: string, change: { enabled?: boolean }) => ({
+      ...engine({ id, label: 'Claude Code', kind: 'cli', models: [] }),
+      enabled: change.enabled,
+      available: false,
+      reason: 'The program was not found.',
+    }))
+    render(<SettingsPage />)
+    openTab('AI engines')
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the 1 engine that is not set up' }))
+    fireEvent.click(await screen.findByRole('switch', { name: 'Use Claude Code' }))
+    expect(await screen.findByText('Switched on.')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Show only the engines that are set up' }))
+    expect(visibleEngines()).toHaveLength(1)
+  })
+
   it('counts a custom server the reader added as set up, so it does not vanish when its server is down', async () => {
     api.loadEngines.mockResolvedValue([
       engine({ id: 'e1', label: 'Engine One' }),

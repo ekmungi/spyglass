@@ -8,40 +8,7 @@ import { captureLink, type CollectorRow } from './api'
 import { collectorStatus, isNotConfigured } from './describe'
 import { DetailsButton } from './DetailsButton'
 import { formatWhen } from './format'
-
-interface Channel {
-  id: string
-  /** Collector keys that report on this channel, in order of preference. */
-  keys: string[]
-  name: string
-  how: string
-  /** What the channel needs, in a few words (shown before the pointer to the settings file). */
-  needs: string
-}
-
-const CHANNELS: Channel[] = [
-  {
-    id: 'slack',
-    keys: ['slack'],
-    name: 'Slack channel',
-    how: 'Post a link in your Spyglass channel and it appears under From you.',
-    needs: 'Slack needs a bot token and the channel to read.',
-  },
-  {
-    id: 'raindrop',
-    keys: ['raindrop'],
-    name: 'Raindrop',
-    how: 'Bookmark a page in Raindrop and it arrives here.',
-    needs: 'Raindrop needs your access token.',
-  },
-  {
-    id: 'gmail',
-    keys: ['gmail', 'newsletter'],
-    name: 'Gmail label',
-    how: 'Mail yourself a link under the label Spyglass, or label newsletters Newsletters.',
-    needs: 'Gmail needs your address and an app password.',
-  },
-]
+import { CHANNELS, channelRow, isChannelFailing, type Channel } from './fromYouChannels'
 
 export interface FromYouProps {
   collectors: readonly CollectorRow[]
@@ -54,7 +21,7 @@ export function FromYou({ collectors }: FromYouProps) {
       <SectionHeading id="sources-from-you">From you</SectionHeading>
       <ul className="r-rows">
         {CHANNELS.map((channel) => (
-          <ChannelRow key={channel.id} channel={channel} row={channel.keys.map((key) => collectors.find((c) => c.key === key)).find(Boolean)} />
+          <ChannelRow key={channel.id} channel={channel} row={channelRow(channel, collectors)} />
         ))}
         <li className="rs-row rs-row--stack">
           <AddLink />
@@ -70,7 +37,9 @@ function ChannelRow({ channel, row }: { channel: Channel; row: CollectorRow | un
   const notSet = isNotConfigured(row)
   const status = row && !notSet ? collectorStatus(row) : null
   const waiting = row?.status === 'never' && !notSet
-  const label = notSet ? 'Not configured' : waiting ? 'Waiting for its first run' : status?.tone === 'problem' ? 'Set up, but failing' : 'Configured'
+  // The same rule puts the alert mark on the From you tab.
+  const failing = isChannelFailing(row)
+  const label = notSet ? 'Not configured' : waiting ? 'Waiting for its first run' : failing ? 'Set up, but failing' : 'Configured'
   return (
     <li className="rs-row">
       <div className="rs-main">
@@ -78,10 +47,10 @@ function ChannelRow({ channel, row }: { channel: Channel; row: CollectorRow | un
           <span className="rs-name" id={nameId}>
             {channel.name}
           </span>
-          <span className={notSet ? 'r-meta' : status?.tone === 'problem' ? 'rs-problem' : 'rs-ok'}>{label}</span>
+          <span className={notSet ? 'r-meta' : failing ? 'rs-problem' : 'rs-ok'}>{label}</span>
         </div>
         {/* A failure stays in view: the reader has to act on it, so it is not part of the details. */}
-        {status?.tone === 'problem' && <p className="rs-problem">{status.text}</p>}
+        {failing && status && <p className="rs-problem">{status.text}</p>}
         {open && (
           <>
             <p className="rs-sub">{channel.how}</p>

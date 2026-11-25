@@ -77,7 +77,8 @@ export function EnginesSection({ engines, loading, error, onRetry, onEngines, sa
               />
             ))}
           </ul>
-          {hiddenCount > 0 && (
+          {/* Unfolded, the button stays while any engine is not set up, even when every such row was changed. */}
+          {(showAll ? folded.size > 0 : hiddenCount > 0) && (
             <Button
               variant="quiet"
               size="sm"

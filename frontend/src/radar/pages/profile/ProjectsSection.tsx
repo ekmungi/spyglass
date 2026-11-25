@@ -22,6 +22,8 @@ export function ProjectsSection({ projects }: ProjectsSectionProps) {
   const touched = useStayListed<string>()
   const listedWhenFolded = current.filter((row) => isShared(row) || touched.pinned.has(row.name))
   const others = current.length - listedWhenFolded.length
+  // Unfolded, the fold button stays while any row has no line, even when the reader typed into each of them.
+  const offerFold = showAll ? current.some((row) => !isShared(row)) : others > 0
 
   let body
   if (load.error && !load.data) {
@@ -80,7 +82,7 @@ export function ProjectsSection({ projects }: ProjectsSectionProps) {
             ) : null,
           )}
         </ul>
-        {others > 0 && (
+        {offerFold && (
           <Button
             variant="quiet"
             size="sm"

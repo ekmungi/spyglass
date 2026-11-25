@@ -224,6 +224,12 @@
     opacity: 1;
   }
 }
+/* The selected row shows its thumbs too, as it shows Save: the keyboard selection moves without the
+   pointer or the focus, which would otherwise reveal them. */
+.r-feedrow.is-selected .r-votes {
+  opacity: 1;
+  pointer-events: auto;
+}
 .r-feedrow.is-read .r-feedrow__headline,
 .r-feedrow.is-out .r-feedrow__headline {
   color: var(--muted);
