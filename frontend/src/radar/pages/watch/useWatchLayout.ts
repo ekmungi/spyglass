@@ -1,14 +1,17 @@
 // useWatchLayout: lay the Watch page out once per load and keep that layout. A chip click changes one
 // name's status in place (watched, paused, a suggestion watched, rejected or taken back), asks the
-// server, and puts the earlier look back if the server refuses. A name changed on this visit keeps its
-// place, and its look, when new data arrives, until the page calls `restructure` for an action that
-// changes the structure.
+// server, and puts the earlier look back if the server refuses; a group pause or "watch again" does the
+// same for every name its row shows. A name changed on this visit keeps its place, and its look, when
+// new data arrives, until the page calls `restructure` for an action that changes the structure.
 import { useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../../api/errors'
 import type { SuggestionStatus, WatchStatus } from '../../api/types'
 import { toast } from '../../ui'
-import { changeEntry, setSuggestionStatus, type WatchEntry, type WatchRegister } from './api'
-import { layoutRegister, registerWithStatuses, withStatuses, type StatusById, type WatchLayout } from './organize'
+import { changeEntry, patchWatchGroup, setSuggestionStatus, type WatchEntry, type WatchRegister } from './api'
+import { layoutRegister, registerWithStatuses, withStatuses, type LayoutGroup, type StatusById, type WatchLayout } from './organize'
+
+/** The two looks a followed name can have. */
+type FollowedLook = 'active' | 'muted'
 
 export interface WatchLayoutState {
   /** The layout of the last load with the looks changed since; null before the first load. */
@@ -27,6 +30,11 @@ export interface WatchLayoutState {
    * from the number that really changed, and its Undo moves those back.
    */
   changeMany: (entities: readonly WatchEntry[], to: SuggestionStatus, done: (count: number) => string) => void
+  /**
+   * Pause ("muted") or watch again ("active") every name the group's row shows, in place and in one
+   * request; the toast's Undo takes back exactly the names that changed.
+   */
+  changeGroup: (group: LayoutGroup, to: FollowedLook) => void
   /**
    * Call before an action that changes the structure (add, remove, move, a group action, an applied
    * review): its answer then lays the names changed on this visit out where their status puts them,
@@ -93,6 +101,12 @@ function switchedText(name: string, to: WatchStatus): string {
   return to === 'active'
     ? `Watching ${name} again. Spyglass searches for it from the next run.`
     : `Paused ${name}. Spyglass stops searching for it. Nothing is deleted.`
+}
+
+/** The toast after a group's shown names are switched, as the approved prototype words it: "Paused all 3 names in Labs." */
+function groupText(group: string, count: number, to: FollowedLook): string {
+  const names = count === 1 ? 'the one name' : `all ${count} names`
+  return to === 'active' ? `Watching ${names} in ${group} again.` : `Paused ${names} in ${group}.`
 }
 
 /**
@@ -184,6 +198,34 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
     }
   }
 
+  /**
+   * Switch `entities`, names shown in one group's row, to the look `to` with one group request that
+   * names them; each entity carries its look just before it. Only the names whose status really
+   * changed take the new look; the others, and all of them on a failure, keep that earlier look, and
+   * nothing moves. The Undo switches back only the names that still show `to` with no change on the way.
+   */
+  const switchGroup = async (group: string, entities: readonly WatchEntry[], to: FollowedLook, done?: (count: number) => string) => {
+    setLooks(entities, () => to, true)
+    try {
+      const action = to === 'muted' ? 'pause' : 'resume'
+      const { changed = [] } = await patchWatchGroup({ category: group, action, ids: entities.map((entity) => entity.id) })
+      const moved = new Set(changed)
+      setLooks(entities, (entity) => (moved.has(entity.id) ? to : entity.status), false)
+      remember((current) => registerWithStatuses(current, new Map(changed.map((id) => [id, to]))))
+      if (done) {
+        const back = entities.filter((entity) => moved.has(entity.id)).map((entity) => ({ ...entity, status: to }))
+        const undo = () => {
+          const still = back.filter((entity) => stillShows(entity.id, to))
+          if (still.length > 0) void switchGroup(group, still, to === 'muted' ? 'active' : 'muted')
+        }
+        toast(done(back.length), { action: { label: 'Undo', onClick: undo } })
+      }
+    } catch (cause) {
+      setLooks(entities, (entity) => entity.status, false)
+      toast(errorMessage(cause), { tone: 'error' })
+    }
+  }
+
   const change = (entity: WatchEntry, to: WatchStatus, done: string) => {
     if (!switching.has(entity.id)) void switchName(entity, to, done)
   }
@@ -198,8 +240,16 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
     if (free.length > 0) void switchMany(free, to, done)
   }
 
+  // Only the names the row shows: a name paused before this visit waits in the Paused list and is not
+  // touched. The toast counts every shown name that has the new look afterwards.
+  const changeGroup = (group: LayoutGroup, to: FollowedLook) => {
+    const free = group.entities.filter((entity) => entity.status !== to && !switching.has(entity.id))
+    const already = group.entities.filter((entity) => entity.status === to).length
+    if (free.length > 0) void switchGroup(group.name, free, to, (count) => groupText(group.name, already + count, to))
+  }
+
   const restructure = () =>
     setView((current) => ({ ...current, switches: new Map([...current.switches].filter(([, item]) => item.pending)) }))
 
-  return { layout: view.layout, switching, toggle, change, changeMany, restructure }
+  return { layout: view.layout, switching, toggle, change, changeMany, changeGroup, restructure }
 }

@@ -74,6 +74,34 @@ def test_pause_resume_rename_and_move_answer_the_fresh_register(client) -> None:
     assert [c["name"] for c in moved["categories"]] == ["Devices"]
 
 
+def test_a_group_pause_or_resume_with_ids_changes_only_those_entries(client) -> None:
+    """The page pauses (or watches again) the names a group's row shows, and Undo takes back exactly those."""
+    alpha, beta, gamma = add(client, "Alpha Scopes"), add(client, "Beta Vision"), add(client, "Gamma Optics")
+    other = add(client, "Delta Labs", "AI labs")
+    client.patch(f"/watch/{gamma['id']}", json={"status": "muted"})
+
+    def statuses(body: dict) -> dict[str, str]:
+        return {e["name"]: e["status"] for c in body["categories"] for e in c["entities"]}
+
+    sent = [alpha["id"], gamma["id"], other["id"], 9999]
+    paused = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "pause", "ids": sent})
+    assert paused.status_code == 200
+    # Gamma was paused already, Delta is in another group and 9999 does not exist.
+    assert paused.json()["changed"] == [alpha["id"]] and paused.json()["removed"] == []
+    assert statuses(paused.json()) == {"Alpha Scopes": "muted", "Beta Vision": "active", "Gamma Optics": "muted",
+                                       "Delta Labs": "active"}
+
+    resumed = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "resume", "ids": [alpha["id"]]})
+    assert resumed.json()["changed"] == [alpha["id"]]
+    assert statuses(resumed.json())["Gamma Optics"] == "muted"  # paused before, so it stays paused
+    assert beta["id"] not in resumed.json()["changed"]
+
+    renamed = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "rename", "to": "X", "ids": [1]})
+    assert renamed.status_code == 422
+    nowhere = client.patch("/watch/groups", json={"category": "Nowhere", "action": "pause", "ids": [alpha["id"]]})
+    assert nowhere.status_code == 404
+
+
 def test_remove_returns_the_entries_and_restore_brings_them_back(client) -> None:
     entity = add(client, "Alpha Scopes")
     add(client, "Beta Vision")

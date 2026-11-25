@@ -69,7 +69,7 @@ export default function WatchPage() {
 
   // Laid out once per load; a chip click changes only that chip's look, and the chip keeps its place
   // until an action that changes the structure. Every reload and replace below is such an action.
-  const { layout, switching, toggle, change, changeMany, restructure } = useWatchLayout(data, loaded.remember)
+  const { layout, switching, toggle, change, changeMany, changeGroup: switchGroup, restructure } = useWatchLayout(data, loaded.remember)
   const reload = () => {
     restructure()
     loaded.reload()
@@ -184,8 +184,8 @@ export default function WatchPage() {
   }
 
   const onGroupAction = (group: LayoutGroup, action: GroupMenuAction) => {
-    if (action === 'pause') void changeGroup({ category: group.name, action }, () => `Paused ${group.name}`)
-    else if (action === 'resume') void changeGroup({ category: group.name, action }, () => `Watching ${group.name} again`)
+    // A pause or "watch again" changes the looks of the row's names in place, like a chip click.
+    if (action === 'pause' || action === 'resume') switchGroup(group, action === 'pause' ? 'muted' : 'active')
     else if (action === 'up' || action === 'down') {
       const order = (data?.categories ?? []).map((category) => category.name)
       const times = groupSteps(order, layout?.groups.map((shown) => shown.name) ?? [], group.name, action)

@@ -40,16 +40,8 @@ async function chooseFromGroupMenu(group: string, item: string) {
   fireEvent.click(screen.getByRole('menuitem', { name: item }))
 }
 
-/** The register after every Imaging AI name was muted. */
-function pausedRegister(): WatchRegister {
-  const next = register()
-  next.categories[0] = {
-    ...next.categories[0],
-    paused: true,
-    entities: next.categories[0].entities.map((e) => ({ ...e, status: 'muted' as const })),
-  }
-  return next
-}
+/** The Undo button of the toast that says `message`. */
+const undoOf = (message: string) => within(screen.getByText(message).closest('.r-toast') as HTMLElement).getByRole('button', { name: 'Undo' })
 
 beforeEach(() => {
   clearLoadCache()
@@ -57,6 +49,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.getWatch.mockResolvedValue(register())
   api.getTracks.mockResolvedValue([])
+  api.changeEntry.mockResolvedValue({})
+  // A pause or resume that names its names changes every one of them.
+  api.patchWatchGroup.mockImplementation((body: { ids?: number[] }) => Promise.resolve({ ...register(), removed: [], changed: body.ids ?? [] }))
 })
 
 /** A register whose Imaging AI and Regulators groups both have watched names, so both are shown. */
@@ -73,21 +68,54 @@ const shownGroups = () =>
     .map((node) => node.textContent)
 
 describe('group actions', () => {
-  it('pauses a whole group in one choice and lays the page out again from the answer, without another request', async () => {
-    api.patchWatchGroup.mockResolvedValue({ ...pausedRegister(), removed: [] })
+  it('pauses a group in place: the row and its chips stay and look paused, and Undo watches them again', async () => {
     renderPage()
     await chooseFromGroupMenu('Imaging AI', 'Pause this group')
-    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'pause' }))
-    expect(await screen.findByText('Paused Imaging AI')).toBeInTheDocument()
-    // Its names are now in the Paused list with the ones paused before.
-    expect(await screen.findByText('Paused (3)')).toBeInTheDocument()
-    expect(screen.queryByRole('group', { name: 'Imaging AI' })).not.toBeInTheDocument()
+    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'pause', ids: [1, 2] }))
+    expect(await screen.findByText('Paused all 2 names in Imaging AI.')).toBeInTheDocument()
+    // Nothing moves before the next visit: the row stays where it was, its chips grey, the Paused list as it was.
+    const group = screen.getByRole('group', { name: 'Imaging AI' })
+    expect(within(group).queryAllByRole('button', { pressed: true })).toHaveLength(0)
+    expect(within(group).getAllByRole('button', { pressed: false }).map((node) => node.textContent)).toEqual(['Alpha Scopes', 'Zeta Vision'])
+    expect(screen.getByText('Paused (1)')).toBeInTheDocument()
     expect(api.getWatch).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(undoOf('Paused all 2 names in Imaging AI.'))
+    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenLastCalledWith({ category: 'Imaging AI', action: 'resume', ids: [1, 2] }))
+    await waitFor(() => expect(within(group).getAllByRole('button', { pressed: true })).toHaveLength(2))
   })
 
-  it('offers to watch a group again once each of its names was paused on this visit', async () => {
-    api.changeEntry.mockResolvedValue({})
-    api.patchWatchGroup.mockResolvedValue({ ...register(), removed: [] })
+  it('keeps a name paused before the group pause paused after its Undo, and leaves a name changed since alone', async () => {
+    renderPage()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
+    await screen.findByText(/^Paused Alpha Scopes\./)
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for the group Imaging AI' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pause this group' }))
+    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'pause', ids: [2] }))
+    await screen.findByText('Paused all 2 names in Imaging AI.')
+
+    fireEvent.click(undoOf('Paused all 2 names in Imaging AI.'))
+    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenLastCalledWith({ category: 'Imaging AI', action: 'resume', ids: [2] }))
+    await waitFor(() => expect(within(group).getByRole('button', { name: 'Zeta Vision' })).toHaveAttribute('aria-pressed', 'true'))
+    expect(within(group).getByRole('button', { name: 'Alpha Scopes' })).toHaveAttribute('aria-pressed', 'false')
+
+    // A late Undo does nothing to a name the reader has switched since.
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for the group Imaging AI' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pause this group' }))
+    await screen.findByText('Paused all 2 names in Imaging AI.')
+    fireEvent.click(within(group).getByRole('button', { name: 'Zeta Vision' }))
+    await screen.findByText(/^Watching Zeta Vision again\./)
+    const calls = api.patchWatchGroup.mock.calls.length
+    fireEvent.click(undoOf('Paused all 2 names in Imaging AI.'))
+    await waitFor(() => expect(within(group).getByRole('button', { name: 'Zeta Vision' })).toHaveAttribute('aria-pressed', 'true'))
+    expect(api.patchWatchGroup).toHaveBeenCalledTimes(calls)
+  })
+
+  it('watches again, in place, only the names the row shows, and Undo pauses exactly those again', async () => {
+    const withPaused = register()
+    withPaused.categories[0].entities.push(entry({ id: 4, name: 'Beta Optics', status: 'muted' }))
+    api.getWatch.mockResolvedValue(withPaused)
     renderPage()
     const group = await screen.findByRole('group', { name: 'Imaging AI' })
     fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
@@ -96,7 +124,15 @@ describe('group actions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Actions for the group Imaging AI' }))
     expect(screen.queryByRole('menuitem', { name: 'Pause this group' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Watch this group again' }))
-    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'resume' }))
+    // Beta Optics was paused before this visit and waits in the Paused list; it is not resumed.
+    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenCalledWith({ category: 'Imaging AI', action: 'resume', ids: [1, 2] }))
+    expect(await screen.findByText('Watching all 2 names in Imaging AI again.')).toBeInTheDocument()
+    expect(within(group).getAllByRole('button', { pressed: true })).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Beta Optics, in Imaging AI' })).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(undoOf('Watching all 2 names in Imaging AI again.'))
+    await waitFor(() => expect(api.patchWatchGroup).toHaveBeenLastCalledWith({ category: 'Imaging AI', action: 'pause', ids: [1, 2] }))
+    await waitFor(() => expect(within(group).queryAllByRole('button', { pressed: true })).toHaveLength(0))
   })
 
   it('moves a group down the page, and cannot move the first group up', async () => {
@@ -234,11 +270,13 @@ describe('group actions', () => {
     expect(await screen.findByText('Restored 2 names')).toBeInTheDocument()
   })
 
-  it('reports a failed pause in a toast', async () => {
+  it('puts the looks back and reports a failed group pause in a toast', async () => {
     api.patchWatchGroup.mockRejectedValue(new ApiError('Spyglass is not reachable.', { status: 0, kind: 'network', path: '/watch/groups' }))
     renderPage()
     await chooseFromGroupMenu('Imaging AI', 'Pause this group')
     expect(await screen.findByText('Spyglass is not reachable.')).toBeInTheDocument()
-    expect(entry({ id: 1, name: 'x' }).status).toBe('active')
+    const group = screen.getByRole('group', { name: 'Imaging AI' })
+    expect(within(group).getAllByRole('button', { pressed: true })).toHaveLength(2)
+    expect(screen.queryByText(/^Paused all/)).not.toBeInTheDocument()
   })
 })

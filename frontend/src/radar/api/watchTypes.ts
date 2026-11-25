@@ -23,6 +23,8 @@ export interface WatchGroupBody {
   action: WatchGroupAction
   /** The new name, for rename and move. */
   to?: string
+  /** Pause or resume only these names of the group (the names its row shows). */
+  ids?: number[]
 }
 
 /** An entry as removed with its group: everything needed to put it back. */
@@ -33,6 +35,8 @@ export interface RemovedWatchEntity extends WatchEntity {
 /** The fresh register plus the entries a "remove" took out (empty for the other actions). */
 export interface WatchGroupResponse extends WatchResponse {
   removed: RemovedWatchEntity[]
+  /** With `ids` in the request: the ids whose status really changed. */
+  changed?: number[]
 }
 
 export interface WatchRestoreResponse extends WatchResponse {

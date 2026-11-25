@@ -25,11 +25,15 @@ Status = Literal["active", "suggested", "muted", "rejected"]
 
 
 class GroupBody(BaseModel):
-    """Body of PATCH /watch/groups: one action on every entry of a group ("up" and "down" move the group in the page order)."""
+    """Body of PATCH /watch/groups: one action on every entry of a group ("up" and "down" move the group in the page order).
+
+    `ids`, only with "pause" or "resume", limits the action to those entries of the group.
+    """
 
     category: str = Field(min_length=1, max_length=groups.MAX_CATEGORY)
     action: Literal["pause", "resume", "rename", "move", "remove", "up", "down"]
     to: str | None = Field(default=None, max_length=200)
+    ids: list[int] | None = Field(default=None, max_length=500)
 
 
 class LinkBody(BaseModel):
@@ -116,16 +120,22 @@ def change_group(body: GroupBody, request: Request) -> dict:
     """Pause, resume, rename, move or remove every entry of a group, or move the group up or down the page; answers the fresh register.
 
     The answer also carries `removed`, the removed entries (empty unless the action is "remove"),
-    which `POST /watch/groups/restore` takes back for Undo.
+    which `POST /watch/groups/restore` takes back for Undo. With `ids` (pause or resume only) just
+    those entries of the group change, and the answer also carries `changed`, the ids that did.
     """
+    changed: list[int] | None = None
     with Session(request.app.state.engine) as session:
         try:
-            removed = groups.apply_group_action(session, body.category, body.action, to=body.to)
+            if body.ids is None:
+                removed = groups.apply_group_action(session, body.category, body.action, to=body.to)
+            else:
+                removed, changed = [], groups.switch_names(session, body.category, body.action, body.ids)
         except groups.GroupNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except groups.GroupError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {**_register(request), "removed": removed}
+    extra = {} if changed is None else {"changed": changed}
+    return {**_register(request), "removed": removed, **extra}
 
 
 @router.post("/watch/groups/restore")

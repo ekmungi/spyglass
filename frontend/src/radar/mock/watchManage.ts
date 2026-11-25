@@ -86,8 +86,15 @@ function groupRoute(body: WatchGroupBody): Response {
   }
   const from = body.action === 'pause' ? 'active' : 'muted'
   const status = body.action === 'pause' ? 'muted' : 'active'
-  current.watch = current.watch.map((entity) => (members.includes(entity) && entity.status === from ? { ...entity, status } : entity))
-  return json({ ...register(), removed: [] })
+  // With `ids`, only those names of the group change, and the answer says which did.
+  const named = body.ids ? new Set(body.ids) : null
+  const changed: number[] = []
+  current.watch = current.watch.map((entity) => {
+    if (!members.includes(entity) || entity.status !== from || (named && !named.has(entity.id))) return entity
+    changed.push(entity.id)
+    return { ...entity, status }
+  })
+  return json({ ...register(), removed: [], ...(named ? { changed } : {}) })
 }
 
 /** POST /watch/groups/restore: put removed names back (names already present are skipped). */

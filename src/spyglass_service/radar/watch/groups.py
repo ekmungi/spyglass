@@ -113,6 +113,31 @@ def apply_group_action(session: Session, category: str, action: str, *, to: str 
     return removed
 
 
+def switch_names(session: Session, category: str, action: str, ids: list[int]) -> list[int]:
+    """Pause or resume only the given entries of a group, in one commit; returns the ids that changed.
+
+    The watch page pauses (or watches again) exactly the names a group's row shows, and its Undo
+    takes back exactly the names that changed. Only the group's followed entries are touched: an id
+    in another group, a suggestion, a rejected name or an unknown id is ignored, and so is an entry
+    already in the wanted status. The changed ids keep the order of `ids`.
+
+    Raises GroupError for an action other than "pause" or "resume", GroupNotFound when the group has
+    no followed entries.
+    """
+    if action not in ("pause", "resume"):
+        raise GroupError("Only pause and resume can name the entries they change.")
+    group = {e.id: e for e in members(session, category, followed_only=True)}
+    if not group:
+        raise GroupNotFound(f"There is no group called {category}.")
+    before, after = ("active", "muted") if action == "pause" else ("muted", "active")
+    changed = [i for i in dict.fromkeys(ids) if i in group and group[i].status == before]
+    for entity_id in changed:
+        group[entity_id].status = after
+        session.add(group[entity_id])
+    session.commit()
+    return changed
+
+
 def _shown_name(category: str) -> str:
     """The name the page shows for a group; entries with no category show as "Other"."""
     return OTHER if category.casefold() == OTHER.casefold() else category
