@@ -174,3 +174,47 @@ def test_up_and_down_reorder_the_groups_and_answer_the_fresh_register(client) ->
     again = client.patch("/watch/groups", json={"category": "Beta", "action": "down"}).json()
     assert [c["name"] for c in again["categories"]] == ["Alpha", "Beta"]
     assert client.patch("/watch/groups", json={"category": "Nowhere", "action": "up"}).status_code == 404
+
+
+def suggest(client, name: str, status: str = "suggested") -> int:
+    """Store a name as a suggestion (or another status) through the API; returns its id."""
+    entity = add(client, name)
+    assert client.patch(f"/watch/{entity['id']}", json={"status": status}).status_code == 200
+    return entity["id"]
+
+
+def test_hide_the_rest_rejects_only_undecided_suggestions(client) -> None:
+    first, second = suggest(client, "Alpha Scopes"), suggest(client, "Beta Vision")
+    already = suggest(client, "Gamma Optics", "rejected")
+    response = client.post("/watch/suggestions/status", json={"ids": [first, second, already], "status": "rejected"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["changed"] == [first, second]
+    assert body["suggested"] == []
+    assert sorted(e["name"] for e in body["rejected"]) == ["Alpha Scopes", "Beta Vision", "Gamma Optics"]
+
+
+def test_the_same_route_takes_them_back(client) -> None:
+    ids = [suggest(client, "Alpha Scopes"), suggest(client, "Beta Vision")]
+    client.post("/watch/suggestions/status", json={"ids": ids, "status": "rejected"})
+    back = client.post("/watch/suggestions/status", json={"ids": ids, "status": "suggested"}).json()
+    assert back["changed"] == ids
+    assert back["rejected"] == []
+    assert sorted(e["name"] for e in back["suggested"]) == ["Alpha Scopes", "Beta Vision"]
+
+
+def test_followed_ids_are_ignored(client) -> None:
+    watched = add(client, "Alpha Scopes")["id"]
+    paused = suggest(client, "Beta Vision", "muted")
+    suggestion = suggest(client, "Gamma Optics")
+    body = client.post(
+        "/watch/suggestions/status", json={"ids": [watched, paused, suggestion, 9999], "status": "rejected"}
+    ).json()
+    assert body["changed"] == [suggestion]
+    statuses = {e["name"]: e["status"] for c in body["categories"] for e in c["entities"]}
+    assert statuses == {"Alpha Scopes": "active", "Beta Vision": "muted"}
+
+
+def test_suggestion_status_rejects_a_followed_status_and_too_many_ids(client) -> None:
+    assert client.post("/watch/suggestions/status", json={"ids": [1], "status": "active"}).status_code == 422
+    assert client.post("/watch/suggestions/status", json={"ids": list(range(501)), "status": "rejected"}).status_code == 422

@@ -1,6 +1,7 @@
 """Watch endpoints for whole groups and for the AI review of the register.
 
-PATCH /watch/groups, POST /watch/groups/restore, POST /watch/review and POST /watch/review/apply.
+PATCH /watch/groups, POST /watch/groups/restore, POST /watch/suggestions/status, POST /watch/review
+and POST /watch/review/apply.
 They are included by `api/watch.py` ahead of its `/watch/{id}` routes so "groups" is never read
 as an id. Each change answers with the fresh register (the `GET /watch` payload).
 """
@@ -11,8 +12,9 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from sqlmodel import Session
+from sqlmodel import Session, select
 
+from spyglass_service.radar.models import WatchEntity
 from spyglass_service.radar.watch import groups, registry, review, review_apply
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,13 @@ class RestoreBody(BaseModel):
     """Body of POST /watch/groups/restore."""
 
     entries: list[RestoreEntry] = Field(max_length=200)
+
+
+class SuggestionsBody(BaseModel):
+    """Body of POST /watch/suggestions/status: undecided suggestions to hide ("rejected") or take back ("suggested")."""
+
+    ids: list[int] = Field(max_length=500)
+    status: Literal["rejected", "suggested"]
 
 
 class AddProposal(BaseModel):
@@ -126,6 +135,28 @@ def restore_group(body: RestoreBody, request: Request) -> dict:
     with Session(request.app.state.engine) as session:
         restored = groups.restore_entries(session, entries)
     return {**_register(request), "restored": restored}
+
+
+@router.post("/watch/suggestions/status")
+def set_suggestions_status(body: SuggestionsBody, request: Request) -> dict:
+    """Hide many suggestions at once ("rejected"), or take them back ("suggested"); answers the fresh register.
+
+    Only names that are currently a suggestion or rejected are touched, so a watched or paused
+    name can never be changed through this route; such ids, and unknown ids, are ignored. The
+    answer also carries `changed`, the ids whose status actually changed, in the order sent.
+    """
+    wanted = list(dict.fromkeys(body.ids))
+    with Session(request.app.state.engine) as session:
+        rows = session.exec(
+            select(WatchEntity).where(WatchEntity.id.in_(wanted), WatchEntity.status.in_(("suggested", "rejected")))
+        ).all()
+        by_id = {row.id: row for row in rows}
+        changed = [i for i in wanted if i in by_id and by_id[i].status != body.status]
+        for i in changed:
+            by_id[i].status = body.status
+            session.add(by_id[i])
+        session.commit()
+    return {**_register(request), "changed": changed}
 
 
 @router.post("/watch/review")
