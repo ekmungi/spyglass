@@ -64,7 +64,8 @@ two short texts, one about what the piece says and one about why it matters in g
   small arrows pages through the stories that were judged for that section and not picked, after
   the picked ones. A grey ring before a headline marks a story that was not picked. A section keeps
   at most twelve of them, and the count says when more were judged. A brief composed earlier has no
-  such stories and shows no arrows.
+  such stories and shows no arrows. While you page through a section it keeps the height of its
+  tallest page, so the sections below it stay where they are.
 - **Thumbs on every row.** A thumbs-up and a thumbs-down sit at the end of every story on Today and
   every row of the Feed, as well as in the reader's bar. They appear when you point at a row, tab to
   it or select it, and a vote that is set stays visible. They replace "More like this" and "Less
