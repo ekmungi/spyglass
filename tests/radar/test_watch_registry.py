@@ -3,7 +3,7 @@
 import pytest
 from sqlmodel import Session, select
 
-from spyglass_service.radar import feed_views
+from spyglass_service.radar import feed_views, profile_defaults
 from spyglass_service.radar.models import ItemEntity
 from spyglass_service.radar.watch import groups, registry, review
 
@@ -80,7 +80,9 @@ def test_grouped_sorts_categories_limits_recent_and_separates_suggested(tmp_path
 def test_grouped_empty(tmp_path) -> None:
     engine = make_engine(tmp_path)
     with Session(engine) as s:
-        assert registry.grouped(s) == {"categories": [], "suggested": []}
+        picture = registry.grouped(s)
+        assert picture["categories"] == [] and picture["suggested"] == [] and picture["rejected"] == []
+        assert picture["sections"] and set(picture["sections"][0]) == {"key", "label"}
     engine.dispose()
 
 
@@ -129,4 +131,40 @@ def test_update_can_reject_a_name_and_an_unknown_status_is_refused(tmp_path) -> 
         assert registry.update_entity(s, entity.id, {"status": "rejected"}).status == "rejected"
         with pytest.raises(ValueError):
             registry.update_entity(s, entity.id, {"status": "banned"})
+    engine.dispose()
+
+
+def test_grouped_uses_the_stored_order_then_the_alphabet(tmp_path) -> None:
+    """Groups named in the stored order come first, in that order; the rest follow alphabetically."""
+    engine = make_engine(tmp_path)
+    with Session(engine) as s:
+        for name, category in (("A1", "Alpha"), ("B1", "Beta"), ("C1", "Gamma"), ("D1", "Delta"), ("E1", "")):
+            registry.create_entity(s, name, category=category)
+        registry.create_entity(s, "Held", category="Muted only", status="suggested")
+        assert [c["name"] for c in registry.grouped(s)["categories"]] == ["Alpha", "Beta", "Delta", "Gamma", "Other"]
+        groups.save_group_order(s, ["Gamma", "Missing", "Other", "Alpha"])
+        assert groups.group_order(s) == ["Gamma", "Missing", "Other", "Alpha"]
+        shown = [c["name"] for c in registry.grouped(s)["categories"]]
+        assert shown == ["Gamma", "Other", "Alpha", "Beta", "Delta"]
+    engine.dispose()
+
+
+def test_grouped_returns_rejected_names_and_profile_sections(tmp_path) -> None:
+    engine = make_engine(tmp_path)
+    with Session(engine) as s:
+        registry.create_entity(s, "Zed Labs", category="Endoscopy AI", status="rejected")
+        registry.create_entity(s, "Abe Labs", category="Endoscopy AI", status="rejected")
+        held = registry.create_entity(s, "Maybe Co", status="suggested")
+        held.section, held.suggest_count = "Competitors", 2
+        s.add(held)
+        s.commit()
+        picture = registry.grouped(s)
+        assert [r["name"] for r in picture["rejected"]] == ["Abe Labs", "Zed Labs"]
+        assert picture["rejected"][0]["status"] == "rejected"
+        assert picture["categories"] == []
+        assert [(x["name"], x["section"], x["count"]) for x in picture["suggested"]] == [("Maybe Co", "Competitors", 2)]
+        assert all(set(x) == {"key", "label"} for x in picture["sections"])
+        assert picture["sections"] == [
+            {"key": x["key"], "label": x["label"]} for x in profile_defaults.load_profile(s)["sections"]
+        ]
     engine.dispose()

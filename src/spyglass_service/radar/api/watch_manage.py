@@ -23,10 +23,10 @@ Status = Literal["active", "suggested", "muted", "rejected"]
 
 
 class GroupBody(BaseModel):
-    """Body of PATCH /watch/groups: one action on every entry of a group."""
+    """Body of PATCH /watch/groups: one action on every entry of a group ("up" and "down" move the group in the page order)."""
 
     category: str = Field(min_length=1, max_length=groups.MAX_CATEGORY)
-    action: Literal["pause", "resume", "rename", "move", "remove"]
+    action: Literal["pause", "resume", "rename", "move", "remove", "up", "down"]
     to: str | None = Field(default=None, max_length=200)
 
 
@@ -104,7 +104,7 @@ def _register(request: Request) -> dict:
 
 @router.patch("/watch/groups")
 def change_group(body: GroupBody, request: Request) -> dict:
-    """Pause, resume, rename, move or remove every entry of a group; answers the fresh register.
+    """Pause, resume, rename, move or remove every entry of a group, or move the group up or down the page; answers the fresh register.
 
     The answer also carries `removed`, the removed entries (empty unless the action is "remove"),
     which `POST /watch/groups/restore` takes back for Undo.

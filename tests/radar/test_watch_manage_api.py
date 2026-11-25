@@ -163,3 +163,14 @@ def test_apply_refuses_a_bad_group_name_and_changes_nothing(client) -> None:
     assert client.post("/watch/review/apply", json={"add": [{"name": ""}]}).status_code == 422
     with Session(client.engine) as s:
         assert registry.grouped(s)["categories"][0]["entities"][0]["status"] == "active"
+
+
+def test_up_and_down_reorder_the_groups_and_answer_the_fresh_register(client) -> None:
+    add(client, "Alpha Scopes", "Alpha")
+    add(client, "Beta Vision", "Beta")
+    moved = client.patch("/watch/groups", json={"category": "Beta", "action": "up"})
+    assert moved.status_code == 200 and [c["name"] for c in moved.json()["categories"]] == ["Beta", "Alpha"]
+    assert moved.json()["removed"] == []
+    again = client.patch("/watch/groups", json={"category": "Beta", "action": "down"}).json()
+    assert [c["name"] for c in again["categories"]] == ["Alpha", "Beta"]
+    assert client.patch("/watch/groups", json={"category": "Nowhere", "action": "up"}).status_code == 404

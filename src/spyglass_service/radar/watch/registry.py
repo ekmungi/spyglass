@@ -9,7 +9,9 @@ from sqlmodel import Session, select
 
 from spyglass_service.models import Item
 from spyglass_service.radar.models import Assessment, ItemEntity, WatchEntity, dumps, loads, utcnow
+from spyglass_service.radar.profile_defaults import load_profile
 from spyglass_service.radar.serialize import radar_items
+from spyglass_service.radar.watch.group_order import group_order, ordered
 
 KINDS = ("company", "lab", "regulator", "person", "publication")
 STATUSES = ("active", "suggested", "muted", "rejected")
@@ -238,11 +240,15 @@ def _week_item_ids(session: Session, entity_ids: list[int], now: datetime | None
 
 
 def grouped(session: Session, *, now: datetime | None = None) -> dict:
-    """The `GET /watch` payload: categories (by name) with entities and recent items, plus suggestions.
+    """The `GET /watch` payload: the whole picture the watch page draws.
 
-    Every entity carries `week_count` (items it brought into the Feed in the last 7 days), and
-    every category carries the same for the whole group (an item found by two names counts once)
-    and `paused`, true when every name in it is muted. `now` (naive UTC) is only for tests.
+    `categories` holds the followed names only (active or paused), group by group, in the stored
+    group order and then alphabetically. Every name carries `week_count` (items it brought into
+    the Feed in the last 7 days) and its recent items, and every category carries the same count
+    for the whole group (an item found by two names counts once) and `paused`, true when every
+    name in it is muted. `suggested` and `rejected` list those names, each as `entity_dict`
+    (suggestions carry their `section` and `count`). `sections` is the profile's sections as
+    `{"key", "label"}`. `now` (naive UTC) is only for tests.
     """
     entities = session.exec(select(WatchEntity)).all()
     followed = [e for e in entities if e.status in FOLLOWED]
@@ -260,7 +266,7 @@ def grouped(session: Session, *, now: datetime | None = None) -> dict:
         }
         categories.setdefault(name, []).append(entry)
         group_items.setdefault(name, set()).update(week.get(e.id, ()))
-    suggested = [entity_dict(e) for e in sorted(entities, key=lambda x: x.name.lower()) if e.status == "suggested"]
+    by_name = sorted(entities, key=lambda x: x.name.lower())
     return {
         "categories": [
             {
@@ -269,7 +275,12 @@ def grouped(session: Session, *, now: datetime | None = None) -> dict:
                 "week_count": len(group_items[n]),
                 "paused": all(e["status"] == "muted" for e in categories[n]),
             }
-            for n in sorted(categories, key=str.lower)
+            for n in ordered(categories, group_order(session))
         ],
-        "suggested": suggested,
+        "suggested": [entity_dict(e) for e in by_name if e.status == "suggested"],
+        "rejected": [entity_dict(e) for e in by_name if e.status == "rejected"],
+        "sections": [
+            {"key": str(s.get("key")), "label": str(s.get("label") or s.get("key"))}
+            for s in load_profile(session).get("sections", [])
+        ],
     }

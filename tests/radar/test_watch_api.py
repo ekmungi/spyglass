@@ -26,7 +26,10 @@ def client(tmp_path):
 
 
 def test_empty_register(client) -> None:
-    assert client.get("/watch").json() == {"categories": [], "suggested": []}
+    body = client.get("/watch").json()
+    assert set(body) == {"categories", "suggested", "rejected", "sections"}
+    assert body["categories"] == [] and body["suggested"] == [] and body["rejected"] == []
+    assert all(set(s) == {"key", "label"} for s in body["sections"])
 
 
 def test_add_patch_delete_flow(client) -> None:
