@@ -6,11 +6,12 @@ from types import SimpleNamespace
 from sqlmodel import Session, select
 
 from spyglass_service.models import Feed, Item
+from spyglass_service.radar.brief.candidates import load_candidates
 from spyglass_service.radar.brief.compose import briefed_item_ids, brief_tz, compose_brief, local_today
 from spyglass_service.radar.brief.document import fallback_opening, refresh_states, story_item_ids
 from spyglass_service.radar.models import ItemState, RadarBrief, loads
 
-from .test_brief_seed import NOW, add_item, make_engine, make_index
+from .test_brief_seed import NOW, NOW_NAIVE, add_item, make_engine, make_index
 
 SETTINGS = SimpleNamespace(radar_timezone="UTC", radar_writer_model="m", openrouter_api_key=None)
 
@@ -147,6 +148,30 @@ def test_eligibility_filters(tmp_path) -> None:
     doc = compose_brief(engine, SETTINGS, None, llm=lambda m, s: {"opening": "x"}, now=NOW)
     shown = {s["item_id"] for sec in doc["sections"] for s in sec["stories"]}
     assert shown == {ok, undated}
+    engine.dispose()
+
+
+def test_a_story_voted_less_like_this_leaves_the_next_briefs_but_a_link_sent_in_stays(tmp_path) -> None:
+    """A thumbs down keeps a news story out of the candidates, so it is neither picked nor listed
+    among the unpicked stories; an item the reader sent in and voted down still reaches From you."""
+    engine = make_engine(tmp_path)
+    kept = add_item(engine, "Still wanted", score=80)
+    voted = add_item(engine, "Not for me", score=90)
+    mine = add_item(engine, "Link I sent and disliked", score=60, from_user=True)
+    with Session(engine) as session:
+        session.add(ItemState(item_id=voted, vote="less"))
+        state = session.exec(select(ItemState).where(ItemState.item_id == mine)).one()
+        state.vote = "less"
+        session.add(state)
+        session.commit()
+    with Session(engine) as session:
+        loaded = {c.item_id for c in load_candidates(session, NOW_NAIVE, set(), NOW_NAIVE - timedelta(days=2), None)}
+    assert loaded == {kept, mine}
+    doc = compose_brief(engine, SETTINGS, None, llm=lambda m, s: {"opening": "x"}, now=NOW)
+    listed = {s["item_id"] for sec in doc["sections"] for key in ("stories", "more") for s in sec.get(key, [])}
+    assert voted not in listed
+    assert kept in listed
+    assert mine in {s["item_id"] for s in stories_of(doc)["from_you"]}
     engine.dispose()
 
 

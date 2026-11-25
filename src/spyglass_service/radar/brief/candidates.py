@@ -3,8 +3,9 @@
 News candidates are judged items (tier top, notable or skim) published inside the window.
 "From you" candidates are items the reader sent in since the previous brief's cut-off, measured
 by when the reader sent them (`ItemState.captured_at`, else the item's fetch time for rows from
-before that column existed), whatever their judgement. Items of a feed the reader switched off
-are left out, except items the reader sent in. A story is labelled with a watched organisation
+before that column existed), whatever their judgement. Items of a feed the reader switched off,
+and news items the reader voted "less like this", are left out, except items the reader sent
+in. A story is labelled with a watched organisation
 only when it names it (`watch.registry.item_is_about`).
 """
 
@@ -36,6 +37,11 @@ def captured_at():
 def _feed_allowed():
     """SQL condition: not from a switched-off feed, unless the reader sent the item in."""
     return or_(Feed.id.is_(None), Feed.enabled.is_(True), ItemState.from_user.is_(True))
+
+
+def _voted_less(state: ItemState | None) -> bool:
+    """True when the reader voted the item "less like this"."""
+    return state is not None and state.vote == "less"
 
 
 def publication(item: Item) -> str:
@@ -90,11 +96,12 @@ def load_candidates(
 ) -> list[Candidate]:
     """Eligible items as Candidates.
 
-    News candidates are judged items inside the window. "From you" candidates are items the
-    reader sent in after `mine_since` (by `captured_at`), kept even when unassessed or judged
-    out; `mine_cap` limits them to the newest few. Items in `skip` (shown in an earlier brief)
-    are never candidates. A from-user item outside those rules can still appear as ordinary
-    news, but without the from-user mark.
+    News candidates are judged items inside the window that the reader has not voted "less like
+    this": a thumbs down, on a picked or an unpicked story, keeps it out of the later briefs.
+    "From you" candidates are items the reader sent in after `mine_since` (by `captured_at`),
+    kept even when unassessed, judged out or voted down; `mine_cap` limits them to the newest
+    few. Items in `skip` (shown in an earlier brief) are never candidates. A from-user item
+    outside those rules can still appear as ordinary news, but without the from-user mark.
     """
     when = func.coalesce(Item.published_at, Item.fetched_at)
     news = and_(Assessment.id.is_not(None), Assessment.tier.in_(NEWS_TIERS),
@@ -122,7 +129,8 @@ def load_candidates(
     keep_mine = {i.id for i, _ in (recent_mine if mine_cap is None else recent_mine[:mine_cap])}
     rows = [
         r for r in rows
-        if r[0].id in keep_mine or (r[1] is not None and r[1].tier in NEWS_TIERS and in_window(r[0], ref))
+        if r[0].id in keep_mine or (r[1] is not None and r[1].tier in NEWS_TIERS and in_window(r[0], ref)
+                                    and not _voted_less(r[2]))
     ]
     upvotes = _upvotes(session, [i.id for i, a, _ in rows if a is not None and a.kind == "paper"])
     watch_of, competitors = _watch_links(session, rows)
