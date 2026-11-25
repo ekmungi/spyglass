@@ -227,12 +227,15 @@
   position: relative;
   display: inline-flex;
 }
-/* A tooltip that is pointed at or focused rises above every pinned bar (the highest, the slot of the
-   assistant pill, is at 30). The doubled class outranks the row rules in today.css and feed.css,
-   which keep a row's buttons at layer 1 above the row's link and load after this sheet. */
+/* While its bubble shows, a tooltip rises above every pinned bar (the highest, the slot of the
+   assistant pill, is at 30) and stays under an open menu list (50). It uses the bubble's own
+   conditions below: :focus-within would also hold after a mouse click, which leaves the focus on
+   the button, and keep a clicked row's button over the bars once the list scrolls. The doubled
+   class outranks the row rules in today.css and feed.css, which keep a row's buttons at layer 1
+   above the row's link and load after this sheet. */
 .r-tip.r-tip:hover,
-.r-tip.r-tip:focus-within {
-  z-index: 60;
+.r-tip.r-tip:has(:focus-visible) {
+  z-index: 40;
 }
 .r-tip__bubble {
   position: absolute;
@@ -516,11 +519,14 @@
 }
 
 /* VoteButtons (components/VoteButtons.tsx): the thumbs. On a row they show while the row is pointed
-   at or holds the focus, and whenever a vote is set; in the reader bar they always show. */
+   at or holds the focus, and whenever a vote is set; in the reader bar they always show. Hidden,
+   they take no pointer, so a tap on a touch screen cannot vote on a button it cannot see; the
+   keyboard still reaches them, and its focus reveals them. */
 .r-votes {
   display: inline-flex;
   gap: 2px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--dur-fast) var(--ease-enter);
 }
 li:hover .r-votes,
@@ -529,4 +535,5 @@ li:focus-within .r-votes,
 .r-votes.is-voted,
 .r-votes--always {
   opacity: 1;
+  pointer-events: auto;
 }

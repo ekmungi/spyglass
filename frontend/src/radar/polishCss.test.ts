@@ -1,5 +1,6 @@
 // Guards for the stylesheet polish that jsdom cannot render: each rule is looked up in the CSS text.
-// They cover row details, form controls, tooltips over the pinned bars, section headings and widths.
+// They cover row details, form controls, tooltips over the pinned bars, the thumbs, section headings
+// and widths.
 /// <reference types="node" />
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -47,9 +48,11 @@ function valueOf(body: string, property: string): string {
 }
 
 /** How many class, attribute and pseudo-class parts a selector has (the middle number of its
- *  specificity). The selectors compared here have no ids, :is() or :not(). */
+ *  specificity). A :has(), :is() or :not() counts as its argument, as in CSS, and a :where() counts
+ *  nothing. The selectors compared here have no ids and give those functions a single argument. */
 function classWeight(selector: string): number {
-  return (selector.match(/\.[\w-]+|\[[^\]]*\]|:(?!:)[\w-]+/g) ?? []).length
+  const counted = selector.replace(/:where\([^)]*\)/g, '').replace(/:(?:has|is|not)\(/g, '(')
+  return (counted.match(/\.[\w-]+|\[[^\]]*\]|:(?!:)[\w-]+/g) ?? []).length
 }
 
 const FIELD_SHADE = 'color-mix(in srgb, var(--ink) 6%, var(--paper))'
@@ -99,19 +102,57 @@ describe('form controls', () => {
 })
 
 describe('tooltips over the pinned bars', () => {
-  it('raises a pointed-at or focused tooltip to layer 60, over the row rules that keep it at 1', () => {
-    const raised = rules(primitivesCss).find((entry) => valueOf(entry.body, 'z-index') === '60' && entry.selectors.some((selector) => selector.includes('.r-tip')))
-    expect(raised).toBeDefined()
-    const selectors = raised?.selectors ?? []
-    expect(selectors.some((selector) => selector.endsWith(':hover'))).toBe(true)
-    expect(selectors.some((selector) => selector.endsWith(':focus-within'))).toBe(true)
+  /** The rule that raises a tooltip's wrapper: a `.r-tip` selector ending in :hover, with a layer. */
+  const raisedRule = () =>
+    rules(primitivesCss).find((entry) => valueOf(entry.body, 'z-index') !== '' && entry.selectors.some((selector) => /^\.r-tip[.\w-]*:hover$/.test(selector)))
 
+  it('raises the wrapper only while its bubble shows: on hover, or on keyboard focus and not after a click', () => {
+    const selectors = raisedRule()?.selectors ?? []
+    expect(selectors).toHaveLength(2)
+    expect(selectors.some((selector) => selector.endsWith(':hover'))).toBe(true)
+    expect(selectors.some((selector) => selector.endsWith(':has(:focus-visible)'))).toBe(true)
+    // A mouse click leaves the focus on the button, so :focus-within would keep a clicked row's
+    // button over the pinned bars after the list scrolls.
+    expect(selectors.join(' ')).not.toMatch(/focus-within/)
+    // Each raising condition is a condition that shows the bubble.
+    const showing = rules(primitivesCss)
+      .filter((entry) => valueOf(entry.body, 'opacity') === '1')
+      .flatMap((entry) => entry.selectors)
+    for (const selector of selectors) expect(showing).toContain(`${selector.replace('.r-tip.r-tip', '.r-tip')} .r-tip__bubble`)
+  })
+
+  it('lifts it to layer 40: over the highest pinned bar and under an open menu list', () => {
+    const layer = Number(valueOf(raisedRule()?.body ?? '', 'z-index'))
+    expect(layer).toBe(40)
+    const highestBar = Number(valueOf(ruleFor(read('./assistant/assistant.css'), '.r-askpill-slot'), 'z-index'))
+    const menuList = Number(valueOf(ruleFor(primitivesCss, '.r-menu__list'), 'z-index'))
+    expect(highestBar).toBe(30)
+    expect(layer).toBeGreaterThan(highestBar)
+    expect(layer).toBeLessThan(menuList)
+  })
+
+  it('outranks the row rules that keep a row button at layer 1, which stay', () => {
+    const selectors = raisedRule()?.selectors ?? []
+    expect(selectors.length).toBeGreaterThan(0)
     // The row rules stay: they keep a row's buttons above the row's stretched link.
     for (const [source, row] of [[todayCss, '.r-story .r-tip'], [feedCss, '.r-feedrow .r-tip']] as const) {
       expect(valueOf(ruleFor(source, row), 'z-index')).toBe('1')
       // The page sheets load after the kit, so the raising rule must outrank them, not tie with them.
       for (const selector of selectors) expect(classWeight(selector)).toBeGreaterThan(classWeight(row))
     }
+  })
+})
+
+describe('thumbs', () => {
+  it('take no pointer while hidden, so a tap cannot vote on an invisible button, and take it again wherever they show', () => {
+    const rest = ruleFor(primitivesCss, '.r-votes')
+    expect(valueOf(rest, 'opacity')).toBe('0')
+    expect(valueOf(rest, 'pointer-events')).toBe('none')
+    const reveal = rules(primitivesCss).find((entry) => entry.selectors.includes('.r-votes--always'))
+    // Keyboard focus still reveals them: the pointer setting does not affect focus.
+    expect(reveal?.selectors).toEqual(expect.arrayContaining(['li:hover .r-votes', 'li:focus-within .r-votes', '.r-votes:focus-within', '.r-votes.is-voted', '.r-votes--always']))
+    expect(valueOf(reveal?.body ?? '', 'opacity')).toBe('1')
+    expect(valueOf(reveal?.body ?? '', 'pointer-events')).toBe('auto')
   })
 })
 
