@@ -31,6 +31,15 @@
   gap: 2px;
   min-width: 0;
 }
+/* A step at the end of the list is marked disabled (aria-disabled) so it keeps the keyboard focus; it
+   looks like a disabled icon button and does not press. */
+.r-readerbar__nav .r-iconbtn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.r-readerbar__nav .r-iconbtn[aria-disabled="true"]:active {
+  translate: none;
+}
 .r-readerbar__count {
   margin-left: var(--space-2);
   white-space: nowrap;

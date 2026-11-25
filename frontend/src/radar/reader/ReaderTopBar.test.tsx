@@ -117,14 +117,21 @@ describe('previous and next story', () => {
     expect(window.location.hash).toBe(`#/item/${IDS[0]}`)
   })
 
-  it('shows the key in each tooltip and disables a step past either end of the list', () => {
+  it('shows the key in each tooltip and marks a step past either end disabled, keeping it focusable', () => {
     openedFrom('#/today', IDS[0])
     setReadingList('Today', IDS, 'today')
     renderBar({ ...detail, id: IDS[0] })
     expect(tipOf(screen.getByRole('button', { name: 'Previous story' }))).toBe('Previous story (K)')
     expect(tipOf(screen.getByRole('button', { name: 'Next story' }))).toBe('Next story (J)')
-    expect(screen.getByRole('button', { name: 'Previous story' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Next story' })).toBeEnabled()
+    const previous = screen.getByRole('button', { name: 'Previous story' })
+    // Marked rather than disabled, so the focus stays on it when the walk reaches the end.
+    expect(previous).toHaveAttribute('aria-disabled', 'true')
+    expect(previous).not.toBeDisabled()
+    previous.focus()
+    fireEvent.click(previous)
+    expect(window.location.hash).toBe(`#/item/${IDS[0]}`)
+    expect(document.activeElement).toBe(previous)
+    expect(screen.getByRole('button', { name: 'Next story' })).not.toHaveAttribute('aria-disabled')
   })
 
   it('shows none of the three controls without a reading list, or when the item is not in it', () => {

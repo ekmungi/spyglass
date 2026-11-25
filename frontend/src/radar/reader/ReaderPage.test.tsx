@@ -1,10 +1,12 @@
 // Tests for the reader page's wait (the preparing message shows from the click until the copy is
 // ready, gives way to the unavailable view when the copy fails, and offers Try again after a long
-// wait), the line under the title, the next-story block at the end, and the J and K keys.
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+// wait), the line under the title, the next-story block at the end, the J and K keys, the bar while
+// the item is loading or failed, and when the open signal is sent.
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ItemDetail, ReaderStatus, TodayResponse } from '../api/types'
 import { clearResourceCache, useResource } from '../hooks/useResource'
+import { effectiveState, resetItemState } from '../state/itemState'
 import { resetReadingList, setReadingList } from '../state/readingList'
 import { ReaderPage } from './ReaderPage'
 
@@ -54,6 +56,7 @@ async function advance(ms: number) {
 beforeEach(() => {
   clearResourceCache()
   resetReadingList()
+  resetItemState()
   vi.clearAllMocks()
   api.sendSignal.mockResolvedValue(undefined)
 })
@@ -332,5 +335,56 @@ describe('a reader opened from another page than the reading list', () => {
     fireEvent.keyDown(window, { key: 'j' })
     fireEvent.keyDown(window, { key: 'k' })
     expect(window.location.hash).toBe('#/item/5')
+  })
+})
+
+describe('the bar while the item is not on screen', () => {
+  /** The reader's bar (the first one on the page). */
+  const bar = () => document.querySelector('.r-readerbar') as HTMLElement
+
+  it('keeps Back, previous, next and the count while the item loads, and next moves on', async () => {
+    openedFrom('#/today')
+    setReadingList('Today', LIST, 'today')
+    api.getItem.mockReturnValue(new Promise(() => undefined))
+    render(<ReaderPage id={5} />)
+    expect(await screen.findByText(PREPARING, {}, { timeout: 2000 })).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: 'Back' })).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: 'Previous story' })).toBeInTheDocument()
+    expect(within(bar()).getByText('2 of 27 in Today')).toBeInTheDocument()
+    fireEvent.click(within(bar()).getByRole('button', { name: 'Next story' }))
+    expect(window.location.hash).toBe('#/item/6')
+  })
+
+  it('keeps the same bar when the item cannot be opened, so the walk through the list goes on', async () => {
+    openedFrom('#/today')
+    setReadingList('Today', LIST, 'today')
+    api.getItem.mockRejectedValue(new Error('The item could not be read.'))
+    render(<ReaderPage id={5} />)
+    expect(await screen.findByText('This item could not be opened')).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: 'Back' })).toBeInTheDocument()
+    expect(within(bar()).getByText('2 of 27 in Today')).toBeInTheDocument()
+    fireEvent.click(within(bar()).getByRole('button', { name: 'Previous story' }))
+    expect(window.location.hash).toBe('#/item/4')
+  })
+})
+
+describe('the open signal', () => {
+  const opens = () => api.sendSignal.mock.calls.filter(([, signal]) => (signal as { kind: string }).kind === 'open')
+
+  it('is sent once the item has loaded, and the item is marked opened then', async () => {
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    await screen.findByText('The article body.')
+    expect(opens()).toEqual([[5, { kind: 'open', value: null }]])
+    expect(effectiveState(5, detail('ok').state).opened).toBe(true)
+  })
+
+  it('is not sent for a story the reader steps past before it loads, and the story stays unopened', async () => {
+    api.getItem.mockReturnValue(new Promise(() => undefined))
+    const view = render(<ReaderPage id={5} />)
+    await screen.findByText(PREPARING, {}, { timeout: 2000 })
+    view.unmount()
+    expect(opens()).toEqual([])
+    expect(effectiveState(5, detail('ok').state).opened).toBe(false)
   })
 })

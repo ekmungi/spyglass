@@ -4,7 +4,11 @@ import type { ReactNode } from 'react'
 import { IconButton, IconNext, IconPrevious, Tooltip } from '../ui'
 import { moveToStory, useStoryPosition } from './storyPosition'
 
-/** One step through the list: an icon button whose tooltip also names its key; disabled at the end. */
+/**
+ * One step through the list: an icon button whose tooltip also names its key. At the end it is marked
+ * disabled (aria-disabled) and its click does nothing, so the focus stays on it rather than falling to
+ * the page, as on the Today pager.
+ */
 function StepButton({ label, keyName, icon, target }: { label: string; keyName: string; icon: ReactNode; target: number | null }) {
   return (
     <Tooltip label={`${label} (${keyName})`} side="bottom">
@@ -13,7 +17,7 @@ function StepButton({ label, keyName, icon, target }: { label: string; keyName: 
         icon={icon}
         tooltip={false}
         aria-keyshortcuts={keyName}
-        disabled={target === null}
+        aria-disabled={target === null || undefined}
         onClick={() => target !== null && moveToStory(target)}
       />
     </Tooltip>

@@ -18,7 +18,7 @@ import { PreparingCopy } from './PreparingCopy'
 import { ReaderBody } from './ReaderBody'
 import { ReaderHead } from './ReaderHead'
 import { useStoryKeys } from './storyPosition'
-import { ReaderTopBar } from './ReaderTopBar'
+import { ReaderBar } from './ReaderTopBar'
 import { SelectionToolbar } from './SelectionToolbar'
 import { SummaryBlock } from './SummaryBlock'
 import { useAfterDelay } from './useAfterDelay'
@@ -80,14 +80,19 @@ export function ReaderPage({ id }: { id: number }) {
   const [pollCount, setPollCount] = useState({ id, count: 0 })
   const polls = pollCount.id === id ? pollCount.count : 0
 
-  useReaderSignals(id)
+  // A story counts as opened once it is drawn: one stepped past with J or K while it still loads is not.
+  const loaded = detail !== undefined
+  useReaderSignals(id, loaded)
   // J and K open the next and previous story of the list, even while this one is still loading.
   useStoryKeys(id)
 
   useEffect(() => {
-    markOpened(id)
     layerRef.current?.focus({ preventScroll: true })
   }, [id])
+
+  useEffect(() => {
+    if (loaded) markOpened(id)
+  }, [id, loaded])
 
   useEffect(() => {
     setAssistTarget({ kind: 'item', id, title: plainText(detail?.headline) })
@@ -122,7 +127,6 @@ export function ReaderPage({ id }: { id: number }) {
   if (detail) {
     content = (
       <>
-        <ReaderTopBar detail={detail} showPdf={showPdf} onTogglePdf={() => setShowPdf((value) => !value)} />
         <article className={`r-reader r-reader--${detail.reader?.kind ?? 'article'}`}>
           <ReaderHead detail={detail} />
           <SummaryBlock detail={detail} />
@@ -161,6 +165,8 @@ export function ReaderPage({ id }: { id: number }) {
 
   return (
     <div ref={layerRef} className="r-layer r-layer--reader" tabIndex={-1} role="region" aria-label="Reader">
+      {/* One bar in every state: Back and the walk through the list do not wait for the item. */}
+      <ReaderBar id={id} detail={detail} showPdf={showPdf} onTogglePdf={() => setShowPdf((value) => !value)} />
       {content}
     </div>
   )

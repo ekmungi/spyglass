@@ -156,6 +156,15 @@ describe('thumbs', () => {
   })
 })
 
+describe("the reader's step buttons", () => {
+  it('keep the faint disabled look at either end, with no press, while they stay focusable', () => {
+    const end = ruleFor(readerCss, '.r-readerbar__nav .r-iconbtn[aria-disabled="true"]')
+    expect(valueOf(end, 'opacity')).toBe(valueOf(ruleFor(primitivesCss, '.r-iconbtn:disabled'), 'opacity'))
+    expect(valueOf(end, 'cursor')).toBe('not-allowed')
+    expect(valueOf(ruleFor(readerCss, '.r-readerbar__nav .r-iconbtn[aria-disabled="true"]:active'), 'translate')).toBe('none')
+  })
+})
+
 describe('the Filters button of the Feed', () => {
   it('turns to the accent colour while a filter is on, with room for the count beside the icon', () => {
     const active = ruleFor(feedCss, '.r-feed-filter.is-active')

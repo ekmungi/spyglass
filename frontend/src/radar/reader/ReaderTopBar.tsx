@@ -2,6 +2,7 @@
 // with the count; the thumbs; Save; File in vault; the chat icon; open the original page; copy the
 // link; the other sources; narrower and wider text (and a paper's PDF/Text switch); and More with
 // "Open in Claude Code…", "Follow topics from this article" and "Show related in the Feed".
+// Back and the walk through the list are there before the item has loaded and when it fails to open.
 // Every tooltip opens downwards, because the bar sits at the top of the window.
 import { useState } from 'react'
 import type { ItemDetail } from '../api/types'
@@ -79,8 +80,45 @@ function WidthButtons() {
   )
 }
 
-/** The sticky bar at the top of the reader. */
+/** The left end of the bar: Back, then previous and next story with the count. It needs only the item's id. */
+function BarStart({ id }: { id: number }) {
+  return (
+    <div className="r-readerbar__left">
+      <IconButton label="Back" icon={<IconBack size={18} />} onClick={() => goBack()} tooltipSide="bottom" />
+      <ReadingNav id={id} />
+    </div>
+  )
+}
+
+export interface ReaderBarProps extends Omit<ReaderTopBarProps, 'detail'> {
+  /** The id of the item the reader is for, known before the item has loaded. */
+  id: number
+  /** The item once it has loaded; undefined while it loads or when it could not be opened. */
+  detail: ItemDetail | undefined
+}
+
+/**
+ * The reader's bar for item `id`. Back, previous and next story and the count need only the id, so they
+ * are there while the item loads and when it fails to open, in the place they keep once it is shown; the
+ * item's own buttons join them when it has loaded. The page renders this one bar in every state, so a
+ * focused button stays focused when the item arrives.
+ */
+export function ReaderBar({ id, detail, showPdf, onTogglePdf }: ReaderBarProps) {
+  return (
+    <div className="r-readerbar">
+      <BarStart id={id} />
+      {detail && <BarActions detail={detail} showPdf={showPdf} onTogglePdf={onTogglePdf} />}
+    </div>
+  )
+}
+
+/** The sticky bar at the top of the reader, for an item that has loaded. */
 export function ReaderTopBar({ detail, showPdf, onTogglePdf }: ReaderTopBarProps) {
+  return <ReaderBar id={detail.id} detail={detail} showPdf={showPdf} onTogglePdf={onTogglePdf} />
+}
+
+/** The item's own buttons: the thumbs, Save, File, the chat icon, the original, the sources, width and More. */
+function BarActions({ detail, showPdf, onTogglePdf }: ReaderTopBarProps) {
   const state = useItemState(detail.id, detail.state)
   const assist = useAssistState()
   // The File in vault control exists only where the reader has set filing up.
@@ -98,11 +136,7 @@ export function ReaderTopBar({ detail, showPdf, onTogglePdf }: ReaderTopBarProps
   ]
 
   return (
-    <div className="r-readerbar">
-      <div className="r-readerbar__left">
-        <IconButton label="Back" icon={<IconBack size={18} />} onClick={() => goBack()} tooltipSide="bottom" />
-        <ReadingNav id={detail.id} />
-      </div>
+    <>
       <div className="r-readerbar__actions">
         <VoteButtons itemId={detail.id} vote={state.vote} always tipBelow />
         <Separator />
@@ -131,6 +165,6 @@ export function ReaderTopBar({ detail, showPdf, onTogglePdf }: ReaderTopBarProps
         <Menu label="More actions" items={moreItems} trigger={<IconButton label="More" icon={<IconMore size={18} />} tooltipSide="bottom" />} />
       </div>
       <FollowDialog key={detail.id} open={following} source={{ kind: 'item', id: detail.id }} onClose={() => setFollowing(false)} />
-    </div>
+    </>
   )
 }
