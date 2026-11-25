@@ -23,18 +23,26 @@ profile.
   group's name beside it, and one click there watches it again. The list replaces the old Muted
   list.
 - **Group order.** You choose the order of the groups with Move up and Move down in a group's
-  menu. A new group goes last. The groups were in alphabetical order before.
+  menu. Once you have moved a group, a new group goes last; until then every group, a new one
+  included, is in alphabetical order, as before.
+- **Pausing a group in place.** "Pause this group" turns the names in the group's row grey where
+  they are, as a click on each chip would, and nothing moves until your next visit. The message
+  ("Paused all 3 names in Labs.") offers Undo, which watches again exactly the names it paused. Once
+  every name in the row is paused, the menu offers "Watch this group again", which watches the
+  names in the row again, with its own Undo. Names that were already in Paused when you opened the
+  page are left as they are.
 - **Short, current suggestions.** "Suggested this month" holds at most five organisations for each
   profile section, with the number of items that named each one. Products, people and news sites
   are no longer suggested, a product counts for the organisation that makes it, and a name that is
   another spelling of one you already watch is not suggested; it is saved as an alias of that
   entry, so its items link to it. Spyglass recomputes the list after every collection, and a name
   that is no longer in the news leaves it. A long list of old suggestions shrinks to this rule the
-  first time it runs; your watched and paused names are never touched.
+  first time it runs; until that first collection the old suggestions are not shown at all, and your
+  watched and paused names are never touched.
 - **One click on a suggestion.** A click watches it, and it joins the group Spyglass proposed (or
   "Other") on your next visit. The cross on a chip says "Not of interest": the name is struck
   through and is never suggested again. "Hide the rest for good" does this for every suggestion you
-  have not decided on, and one Undo takes them all back.
+  have not decided on, and one Undo, which stays ten seconds, takes them all back.
 - **A Not of interest list.** A closed list under the suggestions shows the rejected names, and
   "Take back" allows one to be suggested again.
 - **Names from a topic search** keep their own row, "From your search", for 30 days.
@@ -58,11 +66,21 @@ profile.
   sections. The order is stored as a list of group names in one stored document; a group missing
   from it follows the listed ones alphabetically, so an install that never orders its groups sees
   the old order.
-- One model call per collection cycle, on the model already set for item assessment, checks at most
-  15 shortlisted names for each section: its type, the organisation behind a product, the entry it
-  duplicates and the group it fits. The answers are cached per name, and the cache is cleared when
-  the prompt changes. Without a model, a name with a cached answer can still be selected, and an
-  uncached name waits for the next cycle.
+- Once per collection cycle the writer model (`radar_writer_model`, called through
+  `chat_json_for(settings, "writer", ...)`) checks at most 15 shortlisted names for each section: its
+  type, the organisation behind a product or the full name behind a short form, the entry it
+  duplicates and the group it fits. The names go at most 30 to a call, so a failed or malformed
+  reply loses only its own names. The answers are cached per name with a fingerprint of the
+  register's names they were given: an answer that found no duplicate is asked again once the
+  register has changed, and an answer whose group no longer exists is asked again. The cache is
+  cleared when the prompt changes. Without a model, a name with a cached answer can still be
+  selected, and an uncached name waits for the next cycle. Every alias the refresh adds is logged
+  and listed in the watch stage's result (`aliases_added`).
+- `PATCH /watch/groups` takes an optional `ids` list with `pause` or `resume`: only those followed
+  names of the group change, in one commit, and the answer adds `changed`. The page uses it to
+  pause, or watch again, the names a group's row shows.
+- A mention-based suggestion that no cycle has placed in a section (the older ones) is left out of
+  `GET /watch`, and `POST /watch/suggestions/status` ignores it.
 
 ## [0.42.0] - 2026-11-24
 

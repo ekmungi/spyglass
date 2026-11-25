@@ -39,7 +39,7 @@ example titles it is sent, and which services are switched on.
 | News sites and other web pages | When an item is read or judged | The page address and a generic browser identification | No |
 | Feeds you follow | On every collection | The feed address and a generic browser identification | No |
 | Article images | When you open an article | Fetched by Spyglass, not by your browser (see the switches) | No |
-| AI provider (OpenRouter by default, or Claude Code, or another engine you configure) | Judging items, writing summaries, answering assistant questions | Your profile (statement, sections, topics, avoid list, example titles), item titles, snippets and article text, your assistant questions | Yes, its own key |
+| AI provider (OpenRouter by default, or Claude Code, or another engine you configure) | Judging items, writing summaries, answering assistant questions, choosing the watch suggestions at each collection | Your profile (statement, sections, topics, avoid list, example titles), item titles, snippets and article text, your assistant questions, and for the watch suggestions the names in your watch register, your group names and organisation names found in news items | Yes, its own key |
 | Google News | Daily searches | Search text built from your topics, your watch list and subjects you follow | No |
 | arXiv | Find papers | The topic you type | No |
 | Hacker News search, Hugging Face daily papers | Daily collection | A fixed search phrase, or a request for the day's list | No |
@@ -124,6 +124,10 @@ example `SPYGLASS_PRIVACY_SEND_EXAMPLES=false`).
   profile, the example titles (unless you switch them off), the text of the items it judges, and
   your assistant questions with the item you ask about. That is how the service works, so choose a
   provider you trust with it. Claude Code sends the same material to Anthropic.
+- **The AI provider sees your watch list.** At each collection, Spyglass sends the names in your
+  watch register (watched, paused and not of interest), your group names and the organisation names
+  found in news items to the configured AI provider, which chooses and groups the suggestions. This
+  happens without a click from you. The names are marked as material to analyse, not instructions.
 - **Search services see your search topics.** Google News sees the search text built from your
   topics, watch list and followed subjects, arXiv sees the topics you type into Find papers, and
   openFDA sees the names of the companies on your watch list and your own product codes and

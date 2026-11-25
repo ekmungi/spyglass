@@ -74,7 +74,7 @@ next collection onward. Edit it whenever your focus changes.
 parts, from the top: **Watching**, with its **Paused** list; **Suggested this month**; **Not of
 interest**; and **Topics you follow**.
 
-**Watching.** Each name is a chip, and the chips sit in groups such as "AI labs (industry)". A green
+**Watching.** Each name is a chip, and the chips sit in groups such as "AI labs". A green
 chip is watched. Click it once to pause it: it turns grey where it is, and a message offers
 **Undo**. Spyglass then stops searching for it, and nothing it already found is deleted. Click the
 grey chip to watch it again. The chip does not move while you click, so the page stays still under
@@ -89,14 +89,25 @@ deletes the name, which pausing never does.
 
 **Groups.** You choose the order of the groups. The menu beside a group's name has **Move up** and
 **Move down**, and also **Pause this group**, **Rename group**, **Move all to another group** and
-**Remove this group**. A new group goes last. Each group shows how many items it brought in this
+**Remove this group**. Once you have moved a group, a new group goes last; until then every group,
+a new one included, is in alphabetical order. Each group shows how many items it brought in this
 week ("6 items this week").
+
+**Pause this group** turns every name in the group's row grey where it is, as a click on each chip
+would, and nothing moves until your next visit. A message such as "Paused all 3 names in Labs."
+offers **Undo**, which watches again exactly the names the pause changed. When every name in the
+row is grey, the same menu offers **Watch this group again**, which watches the names in the row
+again, also with **Undo**. Names that were already in **Paused** when you opened the page stay
+paused.
 
 **Suggested this month.** Under the groups, Spyglass suggests organisations you do not watch yet:
 companies, labs, universities, hospital groups and regulators, never products, people or news
 sites. There are at most five for each section of your profile, chosen by how many of your top and
 notable items from the last 30 days name them, and each chip shows that number. Spyglass looks at
-the list again after every collection, so a name that is no longer in the news leaves it.
+the list again after every collection, so a name that is no longer in the news leaves it. Right
+after you update Spyglass, the older suggestions are not shown until the first collection has
+sorted them into the sections of your profile, which happens within about two hours of Spyglass
+starting.
 
 - **Click a name** to watch it at once. The chip turns green and stays where it is, and a message
   names the group it joins on your next visit. Click it again to undo.
@@ -104,12 +115,13 @@ the list again after every collection, so a name that is no longer in the news l
   until the next visit, and Spyglass never suggests that name again. Click the struck chip to take
   it back.
 - **Hide the rest for good** says the same for every suggestion you have not decided on, with one
-  **Undo** for all of them.
+  **Undo** for all of them. That message stays for ten seconds.
 
 Names that a topic search found (see below) wait in their own row, "From your search", for 30 days.
 
-**Not of interest.** This closed list shows the names you rejected on earlier visits. Press
-**Take back** on a name to allow it to be suggested again.
+**Not of interest.** This closed list shows every name you have marked not of interest. A name you
+strike on this visit joins it at once, while its chip stays struck in its row. Press **Take back**
+on a name to allow it to be suggested again.
 
 To find who matters for a subject, press **Add**, then **Find who matters for a topic**. Spyglass
 proposes organisations, which appear in the "From your search" row of **Suggested this month**. You
