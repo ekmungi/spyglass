@@ -20,7 +20,7 @@ import pytest
 import spyglass_service
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "0.42.0"
+EXPECTED_VERSION = "0.43.0"
 RELEASE = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 RELEASE_JOB, INSTALLER_JOB = RELEASE.split("\n  installer:", 1)
 

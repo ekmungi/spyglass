@@ -7,6 +7,63 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/); this pro
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-11-25
+
+The Watch page becomes short enough to read in one screen. Your watched names are chips in groups,
+and the suggestions shrink from hundreds of rows to at most five organisations per section of your
+profile.
+
+### Added
+- **Watched names as chips.** Each group shows its names as green chips. One click pauses a name:
+  the chip turns grey where it is, and a message offers Undo. One more click watches it again. The
+  chip does not move while you click. Spyglass stops searching for a paused name and deletes
+  nothing. Details, move to another group, see its items in the Feed and remove are in a menu on the
+  chip.
+- **A Paused list.** On the next visit a paused name is in a closed "Paused (N)" list, with its
+  group's name beside it, and one click there watches it again. The list replaces the old Muted
+  list.
+- **Group order.** You choose the order of the groups with Move up and Move down in a group's
+  menu. A new group goes last. The groups were in alphabetical order before.
+- **Short, current suggestions.** "Suggested this month" holds at most five organisations for each
+  profile section, with the number of items that named each one. Products, people and news sites
+  are no longer suggested, a product counts for the organisation that makes it, and a name that is
+  another spelling of one you already watch is not suggested; it is saved as an alias of that
+  entry, so its items link to it. Spyglass recomputes the list after every collection, and a name
+  that is no longer in the news leaves it. A long list of old suggestions shrinks to this rule the
+  first time it runs; your watched and paused names are never touched.
+- **One click on a suggestion.** A click watches it, and it joins the group Spyglass proposed (or
+  "Other") on your next visit. The cross on a chip says "Not of interest": the name is struck
+  through and is never suggested again. "Hide the rest for good" does this for every suggestion you
+  have not decided on, and one Undo takes them all back.
+- **A Not of interest list.** A closed list under the suggestions shows the rejected names, and
+  "Take back" allows one to be suggested again.
+- **Names from a topic search** keep their own row, "From your search", for 30 days.
+- **Topics you follow** moved to the bottom of the page. With no topic followed, it is one line
+  with a "Follow a topic" link.
+
+### Changed
+- The page order is Watching with Paused, Suggested this month, Not of interest, then Topics you
+  follow.
+- The old single-name actions on a row (accept, dismiss, resume) are gone, because a chip click does
+  them. The one-line reason and the latest items of a name moved into its Details.
+
+### Technical
+- The register has a fourth status, "rejected", for the lasting "not of interest". Suggestions
+  remain rows in the register, so watching one is the existing `PATCH /watch/{id}` with
+  `status: active`.
+- A new route, `POST /watch/suggestions/status`, hides several suggestions (`rejected`) or takes
+  them back (`suggested`) in one request. It never changes a watched or paused name, and its answer
+  is the fresh register plus the ids that changed.
+- `GET /watch` returns the groups in the stored order, with the rejected names and the profile
+  sections. The order is stored as a list of group names in one stored document; a group missing
+  from it follows the listed ones alphabetically, so an install that never orders its groups sees
+  the old order.
+- One model call per collection cycle, on the model already set for item assessment, checks at most
+  15 shortlisted names for each section: its type, the organisation behind a product, the entry it
+  duplicates and the group it fits. The answers are cached per name, and the cache is cleared when
+  the prompt changes. Without a model, a name with a cached answer can still be selected, and an
+  uncached name waits for the next cycle.
+
 ## [0.42.0] - 2026-11-24
 
 Windows setup becomes a Windows Installer package, so Spyglass appears in the Start menu and in

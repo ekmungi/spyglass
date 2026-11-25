@@ -60,8 +60,9 @@ it judges items.
   subjects it found as a short checklist, and follows the ones you tick.
 - **From a link.** Press **Add link** in the left rail, paste an address, and choose to follow
   subjects from it as well.
-- **Seeing and removing them.** Open **Watch**. The topics you follow are listed at the top, and
-  each one has a menu with **Edit**, **Pause** and **Stop following**.
+- **Seeing and removing them.** Open **Watch**. The topics you follow are listed at the bottom of
+  the page, under **Topics you follow**, and each one has a menu with **Edit**, **Pause** and
+  **Stop following**. When you follow none, the page shows one line with a **Follow a topic** link.
 
 The **Profile** page holds your interests in six sections (models, labs, agents, health, industry
 and direction) in your own words. Changing the profile changes how everything is judged from the
@@ -69,14 +70,51 @@ next collection onward. Edit it whenever your focus changes.
 
 ## 4. The watch list
 
-**Watch** lists the companies, labs and regulators Spyglass checks every day, grouped by category.
-It is built from your profile at the start.
+**Watch** lists the companies, labs and regulators Spyglass checks every day. The page has these
+parts, from the top: **Watching**, with its **Paused** list; **Suggested this month**; **Not of
+interest**; and **Topics you follow**.
 
-- New names that Spyglass finds are proposed as **suggested**. Accept the ones you want and dismiss
-  the rest.
-- To find who matters for a subject, type the subject in the box at the top of the page and press
-  the button beside it. Spyglass proposes organisations, which you then accept or dismiss.
-- You can add a name yourself, edit one, or remove one.
+**Watching.** Each name is a chip, and the chips sit in groups such as "AI labs (industry)". A green
+chip is watched. Click it once to pause it: it turns grey where it is, and a message offers
+**Undo**. Spyglass then stops searching for it, and nothing it already found is deleted. Click the
+grey chip to watch it again. The chip does not move while you click, so the page stays still under
+your pointer. The next time you open the page, each name is where its status puts it: a paused name
+is in **Paused**, with the name of its group beside it, and a watched name is in its group. The
+**Paused** list is closed at first; open it and click a name to watch it again.
+
+Move your pointer over a chip, or tab to it, and a small button with three dots appears. Its menu
+holds **Details**, **Move to another group**, **See its items in the Feed** and **Remove**. **Details**
+shows why the name is on the list, its other spellings and its three latest items. **Remove**
+deletes the name, which pausing never does.
+
+**Groups.** You choose the order of the groups. The menu beside a group's name has **Move up** and
+**Move down**, and also **Pause this group**, **Rename group**, **Move all to another group** and
+**Remove this group**. A new group goes last. Each group shows how many items it brought in this
+week ("6 items this week").
+
+**Suggested this month.** Under the groups, Spyglass suggests organisations you do not watch yet:
+companies, labs, universities, hospital groups and regulators, never products, people or news
+sites. There are at most five for each section of your profile, chosen by how many of your top and
+notable items from the last 30 days name them, and each chip shows that number. Spyglass looks at
+the list again after every collection, so a name that is no longer in the news leaves it.
+
+- **Click a name** to watch it at once. The chip turns green and stays where it is, and a message
+  names the group it joins on your next visit. Click it again to undo.
+- **Click the cross** on a chip to say it is not of interest. The chip is struck through and stays
+  until the next visit, and Spyglass never suggests that name again. Click the struck chip to take
+  it back.
+- **Hide the rest for good** says the same for every suggestion you have not decided on, with one
+  **Undo** for all of them.
+
+Names that a topic search found (see below) wait in their own row, "From your search", for 30 days.
+
+**Not of interest.** This closed list shows the names you rejected on earlier visits. Press
+**Take back** on a name to allow it to be suggested again.
+
+To find who matters for a subject, press **Add**, then **Find who matters for a topic**. Spyglass
+proposes organisations, which appear in the "From your search" row of **Suggested this month**. You
+click the ones you want to watch. **Add** also lets you follow a topic or
+add one organisation yourself, and **Review with AI** suggests changes to the whole list.
 
 What the watched organisations publish appears in the brief under "On your watch list".
 

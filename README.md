@@ -38,9 +38,12 @@ listed in [Privacy and safety](#privacy-and-safety).
 
 ### Around the core
 
-- **Watch.** A list of companies, labs and regulators, searched every day. Spyglass proposes new
-  names, which wait for your approval. Groups on the list have their own actions, and an AI review
-  of the list suggests changes. For watched companies, Spyglass also reads FDA device decisions
+- **Watch.** A list of companies, labs and regulators, searched every day. Each name is a chip in
+  its group: one click pauses it, and one more click watches it again. Paused names wait in a
+  collapsed Paused list. Below the groups, Spyglass suggests at most five organisations for each
+  section of your profile; a click watches a suggestion and a cross says it is not of interest,
+  which keeps it from being suggested again. You set the order of the groups, and an AI review of
+  the list suggests changes. For watched companies, Spyglass also reads FDA device decisions
   (510(k) clearances, De Novo grants, PMA approvals and recalls) from the public openFDA service.
 - **Find papers.** You type a topic, and Spyglass returns the few papers that matter, each with one
   line on how it relates to your field.
