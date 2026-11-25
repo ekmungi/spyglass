@@ -127,6 +127,23 @@ describe('Sample data for the page design', () => {
     expect(top?.stories[0].what).toBeTruthy()
   }, 10000)
 
+  it('pages the watch list and Skim, gives From you no unpicked stories, and says some items wait to be judged', async () => {
+    const { brief } = await call<TodayResponse>('/today')
+    const section = (key: string) => brief?.sections.find((entry) => entry.key === key)
+    const total = (key: string) => (section(key)?.stories.length ?? 0) + (section(key)?.more?.length ?? 0)
+    // Three stories fit on a page of these sections, so both need a second page.
+    expect(section('watch')?.more?.length ?? 0).toBeGreaterThan(0)
+    expect(total('watch')).toBeGreaterThan(3)
+    expect(section('skim')?.more?.length ?? 0).toBeGreaterThan(0)
+    expect(section('skim')?.pool ?? 0).toBeGreaterThan(total('skim'))
+    // As in a real brief, unpicked stories are never offered under From you.
+    expect(section('from_you')?.more).toEqual([])
+    expect(section('from_you')?.pool).toBe(section('from_you')?.stories.length)
+    expect(brief?.degraded).toBe(true)
+    expect(brief?.unjudged).toBe(3)
+    expect(brief?.notice).toBe("3 collected items are still waiting to be judged, so a story may be missing from today's selection.")
+  }, 10000)
+
   it('records a vote on an unpicked story and takes it back, through the sample vote route', async () => {
     const { brief } = await call<TodayResponse>('/today')
     const unpicked = brief?.sections.find((entry) => entry.key === 'top')?.more?.[0]

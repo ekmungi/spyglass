@@ -43,9 +43,11 @@
   font-size: var(--text-sm);
   color: var(--muted);
 }
-/* The opening spans the whole column, as the lead story does; a character cap made it wrap narrower
-   than the rows. */
+/* The opening keeps to a reading width inside the wider page, as the agreed design shows. It is capped
+   by the layout token for a reading column, never by a character count, which once made it wrap
+   narrower than intended whenever the column changed. */
 .r-masthead__opening {
+  max-width: var(--measure);
   margin: var(--space-6) 0 0;
   font-family: var(--font-serif);
   font-size: var(--text-lede);
@@ -74,9 +76,18 @@
   margin-right: calc(var(--space-1) * 1.5);
   font-variant-numeric: tabular-nums;
 }
-.r-brief__pager .r-iconbtn:disabled {
+/* An arrow at its end is marked disabled (aria-disabled) so it keeps the keyboard focus: faint, with
+   no hover tint and no press. */
+.r-brief__pager .r-iconbtn[aria-disabled="true"] {
   opacity: 0.3;
   cursor: default;
+}
+.r-brief__pager .r-iconbtn[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--muted);
+}
+.r-brief__pager .r-iconbtn[aria-disabled="true"]:active {
+  translate: none;
 }
 /* A turned page slides in from the side it came from (reduced motion zeroes the duration). */
 .r-brief__list[data-slide] {

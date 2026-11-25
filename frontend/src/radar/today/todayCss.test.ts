@@ -1,8 +1,8 @@
-// Guards for Today's layout that jsdom cannot render, checked in the style sheet text. The opening
-// sentences and the closing line about unjudged items span the page column: a character cap made the
-// top of Today wrap narrower than the rows whenever the column was wider than it. The page is 940
+// Guards for Today's layout that jsdom cannot render, checked in the style sheet text. The page is 940
 // pixels wide, and the top section sets its stories in two columns, with the lead story of its first
-// page across both.
+// page across both. The opening is capped by the layout token for a reading column and nothing else:
+// a character cap once made it wrap narrower than intended whenever the column changed. The closing
+// line about unjudged items spans the page column.
 /// <reference types="node" />
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -19,10 +19,15 @@ function ruleBody(css: string, selector: string): string {
 }
 
 describe("Today's column", () => {
-  it.each(['.r-masthead__opening', '.r-brief__endnote'])('lets %s span the page column', (selector) => {
-    const body = ruleBody(today, selector)
+  it('lets the closing line about unjudged items span the page column', () => {
+    const body = ruleBody(today, '.r-brief__endnote')
     expect(body).not.toBe('')
     expect(body).not.toMatch(/max-width/)
+  })
+
+  it('caps the opening at the reading column token and by no other width', () => {
+    const widths = Array.from(ruleBody(today, '.r-masthead__opening').matchAll(/max-width:\s*([^;]+);/g), (match) => match[1].trim())
+    expect(widths).toEqual(['var(--measure)'])
   })
 
   it('makes the page 940 pixels wide', () => {

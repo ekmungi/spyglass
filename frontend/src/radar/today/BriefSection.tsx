@@ -47,9 +47,14 @@ interface PagerProps {
   onMove: (step: 1 | -1) => void
 }
 
-/** The count ("4-6 of 15") and the two arrows beside a section heading. */
+/**
+ * The count ("4-6 of 15", or "6 of 6" for a page that holds one story) and the two arrows beside a
+ * section heading. An arrow at its end is marked disabled rather than disabled, so the keyboard focus
+ * stays on it; its click then does nothing (the section ignores a turn past either end).
+ */
 function Pager({ page, total, pool, atStart, atEnd, onMove }: PagerProps) {
-  const count = <span className="r-brief__count">{`${page.from + 1}-${page.to} of ${total}`}</span>
+  const position = page.to - page.from === 1 ? `${page.to}` : `${page.from + 1}-${page.to}`
+  const count = <span className="r-brief__count">{`${position} of ${total}`}</span>
   // The slider keeps at most a dozen unpicked stories, so when more were judged the count says so.
   const judged =
     pool !== undefined && pool > total
@@ -60,8 +65,20 @@ function Pager({ page, total, pool, atStart, atEnd, onMove }: PagerProps) {
       {judged ? <Tooltip label={judged}>{count}</Tooltip> : count}
       {/* The tooltip is drawn for the eye only, so screen readers get the same sentence here. */}
       {judged && <span className="r-sr-only">{judged}</span>}
-      <IconButton size="sm" label="Previous stories in this section" icon={<IconPrevious size={16} />} disabled={atStart} onClick={() => onMove(-1)} />
-      <IconButton size="sm" label="More stories in this section" icon={<IconNext size={16} />} disabled={atEnd} onClick={() => onMove(1)} />
+      <IconButton
+        size="sm"
+        label="Previous stories in this section"
+        icon={<IconPrevious size={16} />}
+        aria-disabled={atStart || undefined}
+        onClick={() => onMove(-1)}
+      />
+      <IconButton
+        size="sm"
+        label="More stories in this section"
+        icon={<IconNext size={16} />}
+        aria-disabled={atEnd || undefined}
+        onClick={() => onMove(1)}
+      />
     </span>
   )
 }
@@ -72,10 +89,12 @@ export interface BriefSectionProps {
   start?: number
   /** Position of the keyboard-selected story in that list; -1 when none is selected. */
   selected?: number
+  /** Select a story by its position in that list (the setter of the page's keyboard selection). */
+  onSelect?: (index: number) => void
 }
 
 /** One section of the brief with its slider; the top section's first page leads with one story. */
-export function BriefSection({ section, start = 0, selected = -1 }: BriefSectionProps) {
+export function BriefSection({ section, start = 0, selected = -1, onSelect }: BriefSectionProps) {
   const stories = useMemo(() => sectionStories(section), [section])
   const paged = Boolean(section.more)
   const pages = useMemo(() => pagesOf(section.key, stories.length, paged), [section.key, stories.length, paged])
@@ -106,9 +125,17 @@ export function BriefSection({ section, start = 0, selected = -1 }: BriefSection
     row?.querySelector<HTMLElement>('[data-row-open]')?.focus({ preventScroll: true })
   }, [focusRow])
 
+  /** Turn the slider one page on or back; a turn past either end does nothing. */
   const move = (step: 1 | -1) => {
-    setView({ page: page + step, step })
+    const target = page + step
+    if (target < 0 || target >= pages.length) return
+    setView({ page: target, step })
     setFocusRow(null)
+    // A selection inside this section moves to the first story of the new page, so s and Enter act
+    // on a story on screen and j and k go on from there. That page already holds the new selection,
+    // so following it above does not turn again. The focus stays on the arrow.
+    const local = selected - start
+    if (onSelect && local >= 0 && local < stories.length) onSelect(start + pages[target].from)
   }
 
   const current = pages[page]

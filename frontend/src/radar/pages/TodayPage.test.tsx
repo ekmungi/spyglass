@@ -1,6 +1,7 @@
 // Tests for Today: rendering the brief from the sample fixture (section order, empty sections
 // omitted, caught-up marker), opening the reader, the no-brief Compose now flow, the line about
-// unjudged items at the end, the reading list, and a brief composed before unpicked stories existed.
+// unjudged items at the end, the reading list, a brief composed before unpicked stories existed, the
+// keyboard selection across a slider's pages, and a fresh start on another day.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setFetchForTesting } from '../api/transport'
@@ -24,14 +25,20 @@ function withoutUnpicked({ key, title, note, stories }: BriefSection): BriefSect
 }
 
 const DAY = '2026-11-12'
+const EARLIER = '2026-11-11'
 
-/** Serve /today (and /briefs/generate) from the given values; `today` may be a function for changing answers. */
-function serve(today: TodayResponse | (() => TodayResponse), generated?: BriefDoc): string[] {
+/**
+ * Serve /today (and /briefs/generate) from the given values; `today` may be a function for changing
+ * answers. `byDay` answers /briefs/<day> for earlier days.
+ */
+function serve(today: TodayResponse | (() => TodayResponse), generated?: BriefDoc, byDay: Record<string, BriefDoc> = {}): string[] {
   const calls: string[] = []
   setFetchForTesting(async (url, init) => {
     calls.push(`${init?.method ?? 'GET'} ${url}`)
     if (url.endsWith('/today')) return new Response(JSON.stringify(typeof today === 'function' ? today() : today), { status: 200 })
     if (url.endsWith('/briefs/generate') && generated) return new Response(JSON.stringify(generated), { status: 200 })
+    const day = /\/briefs\/([\d-]+)$/.exec(url)?.[1]
+    if (day && byDay[day]) return new Response(JSON.stringify(byDay[day]), { status: 200 })
     if (url.endsWith('/profile')) return new Response(JSON.stringify({ sections: [] }), { status: 200 })
     return new Response(JSON.stringify({ detail: 'Not found' }), { status: 404 })
   })
@@ -92,9 +99,11 @@ describe('TodayPage', () => {
     serve({ brief: buildBrief(buildItems(), DAY), days: [DAY], status: {} })
     render(<TodayPage />)
     await screen.findByText('Top stories')
+    // The first page of the watch list: its two picked stories and the first unpicked one.
     expect(screen.getByText('Endovista · Imaging AI')).toBeInTheDocument()
     expect(screen.getByText('Lucent Scope · Imaging AI')).toBeInTheDocument()
-    expect(document.querySelectorAll('.r-story__watch')).toHaveLength(2)
+    expect(screen.getByText('Halcyon Surgical · Surgical robotics')).toBeInTheDocument()
+    expect(document.querySelectorAll('.r-story__watch')).toHaveLength(3)
     expect(document.querySelectorAll('.r-story--top .r-story__watch')).toHaveLength(0)
   })
 
@@ -156,7 +165,8 @@ describe('TodayPage', () => {
     serve({ brief: buildBrief(buildItems(), DAY), days: [DAY], status: {} })
     render(<TodayPage />)
     await screen.findByText('Top stories')
-    expect(screen.getByText(/6 min read · 33 stories from 212 collected/)).toBeInTheDocument()
+    // The meta line counts the picked stories only.
+    expect(screen.getByText(/6 min read · 27 stories from 212 collected/)).toBeInTheDocument()
     expect(screen.getByText(/Signal Ledger · Open Weights Weekly · \+3/)).toBeInTheDocument()
     expect(screen.getAllByText('Sent by you from Slack').length).toBe(1)
   })
@@ -185,9 +195,69 @@ describe('TodayPage', () => {
     await screen.findByText('Top stories')
     expect(screen.getByText('1-5 of 6')).toBeInTheDocument()
     for (let press = 0; press < 6; press += 1) fireEvent.keyDown(window, { key: 'j' })
-    expect(screen.getByText('6-6 of 6')).toBeInTheDocument()
+    expect(screen.getByText('6 of 6')).toBeInTheDocument()
     fireEvent.keyDown(document.body, { key: 'Enter' })
     expect(window.location.hash).toBe('#/item/143')
+  })
+
+  it('moves the selection onto the page an arrow turns to, so s saves a story on screen and j goes on from there', async () => {
+    const full = buildBrief(buildItems(), DAY)
+    const skim = full.sections.find((section) => section.key === 'skim') as BriefSection
+    const extra = skim.stories.slice(0, 3)
+    // Nine stories in the top section: five on its first page, four on its second.
+    const brief: BriefDoc = {
+      ...full,
+      sections: full.sections.map((section) =>
+        section.key === 'top' ? { ...section, more: [...(section.more ?? []), ...extra] } : section.key === 'skim' ? { ...section, stories: section.stories.slice(3) } : section,
+      ),
+    }
+    const calls = serve({ brief, days: [DAY], status: {} })
+    render(<TodayPage />)
+    await screen.findByText('Top stories')
+    const top = document.querySelector('.r-brief__section--top') as HTMLElement
+    fireEvent.keyDown(window, { key: 'j' })
+    fireEvent.click(within(top).getByRole('button', { name: 'More stories in this section' }))
+    expect(within(top).getByText('6-9 of 9')).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 's' })
+    await waitFor(() => expect(calls).toContain('POST /api/radar/items/143/save'))
+    expect(calls).not.toContain('POST /api/radar/items/101/save')
+
+    fireEvent.keyDown(window, { key: 'j' })
+    expect(within(top).getByText('6-9 of 9')).toBeInTheDocument()
+    expect(top.querySelector('.is-selected .r-story__headline')?.textContent).toBe(extra[0].headline)
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    expect(window.location.hash).toBe(`#/item/${extra[0].item_id}`)
+  })
+
+  it('starts another day with no story selected and every section on its first page', async () => {
+    const earlier = buildBrief(buildItems(), EARLIER)
+    serve({ brief: buildBrief(buildItems(), DAY), days: [DAY, EARLIER], status: {} }, undefined, { [EARLIER]: earlier })
+    // Open the earlier day first, so its brief is cached and the switch back to it draws at once,
+    // without a loading state in between.
+    const view = render(<TodayPage day={EARLIER} />)
+    await screen.findByRole('heading', { level: 1, name: /11 November/ })
+    view.rerender(<TodayPage />)
+    await screen.findByRole('heading', { level: 1, name: /12 November/ })
+    fireEvent.keyDown(window, { key: 'j' })
+    fireEvent.keyDown(window, { key: 'j' })
+    expect(document.querySelectorAll('.r-story.is-selected')).toHaveLength(1)
+    const papers = () => document.querySelector('.r-brief__section--papers') as HTMLElement
+    fireEvent.click(within(papers()).getByRole('button', { name: 'More stories in this section' }))
+    expect(within(papers()).getByText('4-6 of 6')).toBeInTheDocument()
+
+    view.rerender(<TodayPage day={EARLIER} />)
+    expect(screen.getByRole('heading', { level: 1, name: /11 November/ })).toBeInTheDocument()
+    expect(document.querySelectorAll('.r-story.is-selected')).toHaveLength(0)
+    expect(within(papers()).getByText('1-3 of 6')).toBeInTheDocument()
+  })
+
+  it('shows no closing line for a complete brief, even when a notice is sent', async () => {
+    serve({ brief: { ...buildBrief(buildItems(), DAY), degraded: false, notice: 'Should not show.' }, days: [DAY], status: {} })
+    render(<TodayPage />)
+    await screen.findByText('Top stories')
+    expect(screen.queryByText('Should not show.')).toBeNull()
+    expect(document.querySelector('.r-brief__endnote')).toBeNull()
   })
 
   it('puts the line about unjudged items at the end of the article, not in the masthead', async () => {
@@ -226,8 +296,8 @@ describe('TodayPage', () => {
     serve({ brief: older, days: [DAY], status: {} })
     render(<TodayPage />)
     await screen.findByText('Top stories')
-    const notable = document.querySelector('.r-brief__section--notable') as HTMLElement
-    expect(within(notable).getAllByRole('listitem')).toHaveLength(8)
+    const skim = document.querySelector('.r-brief__section--skim') as HTMLElement
+    expect(within(skim).getAllByRole('listitem')).toHaveLength(10)
     expect(screen.queryAllByRole('button', { name: 'More stories in this section' })).toHaveLength(0)
     expect(screen.queryByText('The brief could not be loaded')).toBeNull()
   })

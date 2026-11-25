@@ -24,7 +24,13 @@ const EXTRA_SOURCES: Record<number, string[]> = {
 const WATCH_FOR: Record<number, { name: string; category: string }[]> = {
   102: [{ name: 'Endovista', category: 'Imaging AI' }],
   117: [{ name: 'Lucent Scope', category: 'Imaging AI' }],
+  106: [{ name: 'Halcyon Surgical', category: 'Surgical robotics' }],
+  112: [{ name: 'Meridian Imaging', category: 'Medical imaging' }],
 }
+
+// Today's sample brief was made while a few collected items still waited to be judged, so sample
+// mode shows the closing line about them (the number matches the sample status's unassessed queue).
+const UNJUDGED = 3
 
 /** Turn an item into a brief Story, attaching any extra sources reporting the same event. */
 export function storyFor(item: RadarItem): Story {
@@ -55,15 +61,17 @@ export function storyFor(item: RadarItem): Story {
 }
 
 // Each section's picked stories (`ids`) and, for today's brief, its unpicked ones (`more`: judged
-// for the section and left out, best first) with the number judged (`pool`). The top section holds
-// six stories, so it needs a second page; papers and Worth knowing show the ring of an unpicked story.
+// for the section and left out, best first) with the number judged (`pool`), as a real brief has
+// them. The top section, the watch list, Worth knowing, Papers and Skim each need a second page, and
+// show the ring of an unpicked story. From you never gets unpicked stories (the service offers left
+// over stories to every section but that one), so its `more` is empty and it fits on one page.
 const LAYOUT: { key: BriefSectionKey; title: string; note: string | null; ids: number[]; more?: number[]; pool?: number }[] = [
   { key: 'top', title: 'Top stories', note: '3 picked from 96', ids: [101, 104, 103], more: [141, 142, 143], pool: 96 },
-  { key: 'watch', title: 'On your watch list', note: null, ids: [102, 117] },
-  { key: 'notable', title: 'Worth knowing', note: null, ids: [140, 106, 105, 107, 108, 109, 112, 120], more: [110, 111], pool: 18 },
+  { key: 'watch', title: 'On your watch list', note: null, ids: [102, 117], more: [106, 112], pool: 4 },
+  { key: 'notable', title: 'Worth knowing', note: null, ids: [140, 105, 107, 108, 109, 120], more: [110, 111], pool: 18 },
   { key: 'papers', title: 'Papers', note: '4 of 31 new papers', ids: [113, 114, 115, 116], more: [144, 145], pool: 31 },
-  { key: 'from_you', title: 'From you', note: null, ids: [131, 132] },
-  { key: 'skim', title: 'Skim', note: null, ids: [119, 118, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 133, 139] },
+  { key: 'from_you', title: 'From you', note: null, ids: [131, 132], more: [], pool: 2 },
+  { key: 'skim', title: 'Skim', note: null, ids: [119, 118, 121, 122, 123, 124, 125, 126, 127, 128], more: [129, 130, 133, 139], pool: 41 },
 ]
 
 /** The stories for `ids`, skipping any id with no sample item. */
@@ -75,9 +83,10 @@ function storiesFor(ids: number[], byId: Map<number, RadarItem>): Story[] {
 }
 
 /**
- * Build today's full brief from the current sample items (so read, saved and vote state carry over).
- * An earlier day's brief (`short`) has two stories per section and no unpicked stories, like a brief
- * composed before they were stored.
+ * Build today's full brief from the current sample items (so read, saved and vote state carry over);
+ * it carries the line about items not judged yet. An earlier day's brief (`short`) has two stories per
+ * section, no unpicked stories and no such line, like a complete brief composed before unpicked
+ * stories were stored.
  */
 export function buildBrief(items: RadarItem[], day: string, short = false): BriefDoc {
   const byId = new Map(items.map((item) => [item.id, item]))
@@ -102,5 +111,12 @@ export function buildBrief(items: RadarItem[], day: string, short = false): Brie
     collected: short ? 164 : 212,
     filtered_out: short ? 151 : 179,
     sections,
+    ...(short
+      ? {}
+      : {
+          degraded: true,
+          unjudged: UNJUDGED,
+          notice: `${UNJUDGED} collected items are still waiting to be judged, so a story may be missing from today's selection.`,
+        }),
   }
 }

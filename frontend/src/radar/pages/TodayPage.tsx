@@ -55,7 +55,7 @@ function BriefBody({ brief, days, latestDay, active, unopenedDays, filingLine, a
 
   const onOpen = useCallback((index: number) => flat[index] && openItem(flat[index].item_id), [flat])
   const onSave = useCallback((index: number) => flat[index] && void toggleSave(flat[index].item_id, flat[index].state), [flat])
-  const [selected] = useListKeys({ count: flat.length, enabled: active, onOpen, onSave, container })
+  const [selected, setSelected] = useListKeys({ count: flat.length, enabled: active, onOpen, onSave, container })
 
   useEffect(() => {
     if (active) setAssistTarget({ kind: 'brief', day: brief.day })
@@ -69,8 +69,7 @@ function BriefBody({ brief, days, latestDay, active, unopenedDays, filingLine, a
     <article className="r-brief" ref={setContainer}>
       <Masthead brief={brief} days={days} latestDay={latestDay} onAsk={() => askAboutBrief(brief.day)} askRef={askRef} unopenedDays={unopenedDays} filingLine={filingLine} />
       {sections.map((section, index) => (
-        // Keyed by day as well, so an earlier brief opens every section on its first page.
-        <BriefSection key={`${brief.day}:${section.key}`} section={section} start={starts[index]} selected={selected} />
+        <BriefSection key={section.key} section={section} start={starts[index]} selected={selected} onSelect={setSelected} />
       ))}
       <CaughtUp filteredOut={brief.filtered_out} />
       {brief.degraded && brief.notice && <p className="r-meta r-brief__endnote">{brief.notice}</p>}
@@ -106,7 +105,9 @@ export function TodayPage({ day, active = true }: { day?: string; active?: boole
   const filingLine = today.data?.filing?.line ?? null
 
   let body
-  if (brief) body = <BriefBody brief={brief} days={days} latestDay={latestDay} active={active} unopenedDays={unopenedDays} filingLine={filingLine} askRef={ask.watchButton} />
+  // Keyed by day, so another day's brief starts with no story selected and every section on its
+  // first page, even when it was cached and draws at once.
+  if (brief) body = <BriefBody key={brief.day} brief={brief} days={days} latestDay={latestDay} active={active} unopenedDays={unopenedDays} filingLine={filingLine} askRef={ask.watchButton} />
   else if (loading) body = <BriefSkeleton />
   else if (error && !(error instanceof ApiError && error.status === 404)) {
     body = (

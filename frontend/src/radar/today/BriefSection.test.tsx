@@ -1,8 +1,9 @@
 // Tests for one section of Today and its slider: five stories and then four per page in the top
 // section and three elsewhere, the count and its tooltip, the two arrows, the ring on an unpicked
-// story, a brief composed before unpicked stories were stored, and the page following the keyboard.
+// story, a brief composed before unpicked stories were stored, the page following the keyboard, and
+// an arrow turn moving the keyboard selection onto the new page.
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BriefSection as Section, BriefSectionKey } from '../api/types'
 import { resetItemState } from '../state/itemState'
 import { BriefSection } from './BriefSection'
@@ -69,20 +70,54 @@ describe('BriefSection', () => {
     expect(screen.getByText('Three picked from many')).toBeInTheDocument()
   })
 
-  it('moves on with "More stories" and back with "Previous stories", each disabled at its end', () => {
+  it('moves on with "More stories" and back with "Previous stories", each marked disabled at its end', () => {
     render(<BriefSection section={section('papers', 3, 4, 7)} />)
-    expect(previous()).toBeDisabled()
-    expect(next()).toBeEnabled()
+    expect(previous()).toHaveAttribute('aria-disabled', 'true')
+    expect(next()).not.toHaveAttribute('aria-disabled')
     fireEvent.click(next())
     expect(headlines()).toEqual(['Story 101', 'Story 102', 'Story 103'])
-    expect(previous()).toBeEnabled()
+    expect(previous()).not.toHaveAttribute('aria-disabled')
     fireEvent.click(next())
+    // A page that holds one story names its position alone.
     expect(headlines()).toEqual(['Story 104'])
-    expect(screen.getByText('7-7 of 7')).toBeInTheDocument()
-    expect(next()).toBeDisabled()
+    expect(screen.getByText('7 of 7')).toBeInTheDocument()
+    expect(next()).toHaveAttribute('aria-disabled', 'true')
     fireEvent.click(previous())
     expect(headlines()).toEqual(['Story 101', 'Story 102', 'Story 103'])
     expect(screen.getByText('4-6 of 7')).toBeInTheDocument()
+  })
+
+  it('keeps an arrow focusable at its end, where a click does nothing', () => {
+    render(<BriefSection section={section('papers', 3, 1, 4)} />)
+    next().focus()
+    fireEvent.click(next())
+    expect(headlines()).toEqual(['Story 101'])
+    expect(next()).not.toBeDisabled()
+    fireEvent.click(next())
+    expect(headlines()).toEqual(['Story 101'])
+    expect(document.activeElement).toBe(next())
+    fireEvent.click(previous())
+    fireEvent.click(previous())
+    expect(headlines()).toEqual(['Story 1', 'Story 2', 'Story 3'])
+  })
+
+  it('moves the keyboard selection to the first story of the new page when it was in this section', () => {
+    const onSelect = vi.fn()
+    const view = render(<BriefSection section={section('papers', 3, 4, 7)} start={10} selected={11} onSelect={onSelect} />)
+    fireEvent.click(next())
+    expect(onSelect).toHaveBeenCalledWith(13)
+    // The page holds the newly selected story already, so following it does not turn again.
+    view.rerender(<BriefSection section={section('papers', 3, 4, 7)} start={10} selected={13} onSelect={onSelect} />)
+    expect(headlines()).toEqual(['Story 101', 'Story 102', 'Story 103'])
+    expect(document.querySelector('[data-row-index="13"]')).toHaveClass('is-selected')
+  })
+
+  it('leaves a selection in another section alone when an arrow turns the page', () => {
+    const onSelect = vi.fn()
+    render(<BriefSection section={section('papers', 3, 4, 7)} start={10} selected={2} onSelect={onSelect} />)
+    fireEvent.click(next())
+    expect(headlines()).toEqual(['Story 101', 'Story 102', 'Story 103'])
+    expect(onSelect).not.toHaveBeenCalled()
   })
 
   it('says on the count how many stories were judged when the Feed holds more', () => {
