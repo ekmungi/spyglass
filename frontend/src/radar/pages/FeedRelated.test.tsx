@@ -1,4 +1,4 @@
-// The Feed's ways of showing a hand-picked list: the "Related" toggle (a search by meaning), the
+// The Feed's ways of showing a hand-picked list: related text in the address (a search by meaning), the
 // neighbours of one item, and the items an assistant answer cited. Each is carried in the address.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -37,35 +37,29 @@ function headlines(): string[] {
 
 const headlineOf = (id: number) => mockState().items.find((item) => item.id === id)?.headline ?? ''
 
-describe('Feed "Related" toggle', () => {
-  it('moves the typed text to the address as related=, shows the closest items and a chip with Clear', async () => {
+describe('Feed list from related text in the address', () => {
+  it('shows the closest items and a chip with Clear, with the text in the search box', async () => {
+    window.history.replaceState(null, '', '/#/feed?related=aster')
     render(<RoutedFeed />)
-    const box = await screen.findByPlaceholderText(/Search titles/)
-    fireEvent.change(box, { target: { value: 'aster' } })
-    await waitFor(() => expect(window.location.hash).toBe('#/feed?q=aster'), { timeout: 2000 })
-    fireEvent.click(screen.getByRole('button', { name: 'Related' }))
-    expect(window.location.hash).toBe('#/feed?related=aster')
-    expect(screen.getByRole('button', { name: 'Related' })).toHaveAttribute('aria-pressed', 'true')
     expect(await screen.findByText('Related to: aster')).toBeInTheDocument()
+    expect((screen.getByPlaceholderText(/Search titles/) as HTMLInputElement).value).toBe('aster')
     await waitFor(() => expect(headlines().length).toBeGreaterThan(0))
     expect(headlines().some((line) => /aster/i.test(line))).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(window.location.hash).toBe('#/feed')
     expect(screen.queryByText(/Related to:/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Related' })).toHaveAttribute('aria-pressed', 'false')
     expect((await screen.findByPlaceholderText(/Search titles/)) as HTMLInputElement).toHaveValue('')
   })
 
-  it('sends typed text as related= (debounced) while on, and hands it back to the plain search when turned off', async () => {
+  it('writes new typing as related= while the address holds related text, and drops it when the box is emptied', async () => {
+    window.history.replaceState(null, '', '/#/feed?related=aster')
     render(<RoutedFeed />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Related' }))
-    const box = screen.getByPlaceholderText(/Describe a topic/)
+    const box = await screen.findByPlaceholderText(/Search titles/)
     fireEvent.change(box, { target: { value: 'polyp detection' } })
     await waitFor(() => expect(window.location.hash).toBe('#/feed?related=polyp+detection'), { timeout: 2000 })
     expect(await screen.findByText('Related to: polyp detection')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Related' }))
-    expect(window.location.hash).toBe('#/feed?q=polyp+detection')
-    expect(screen.queryByText(/Related to:/)).not.toBeInTheDocument()
+    fireEvent.change(box, { target: { value: '' } })
+    await waitFor(() => expect(window.location.hash).toBe('#/feed'), { timeout: 2000 })
   })
 
   it('says so when nothing is close', async () => {
@@ -109,7 +103,7 @@ describe('Assistant on the Feed', () => {
   it('points the panel at the feed, and "Ask your feed" opens it', async () => {
     setAssistOpen('feed', false)
     render(<RoutedFeed />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Ask your feed' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask your feed (opens the assistant)' }))
     expect(getAssistState().target).toEqual({ kind: 'feed' })
     expect(getAssistState().open.feed).toBe(true)
     setAssistOpen('feed', false)

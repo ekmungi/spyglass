@@ -1,12 +1,12 @@
-// Feed (#/feed): every item, newest first, under quiet date headings. Search, section chips,
-// Saved / From you / Missed / To file, and a Filters menu (kind, show filtered-out). Infinite scroll;
-// j/k/Enter/s like Today. A quiet "Related" toggle searches by meaning, and the same list can show the
-// items an assistant answer cited, the items close to one item, or one Watch group's week. The
-// assistant panel is available here as on Today.
+// Feed (#/feed): every item, newest first, under quiet date headings. A toolbar with search, Ask and a
+// Filters menu (kind, show filtered-out), a views strip (Everything / Missed / Saved / From you / To file)
+// and a sections strip. Infinite scroll; j/k/Enter/s like Today. The same list can show the items an
+// assistant answer cited, the items close to one item, the items close in meaning to the text of a
+// `related` address parameter, or one Watch group's week. The assistant panel is available here as on Today.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { getProfile } from '../api/client'
 import { ITEM_KINDS } from '../api/types'
-import { focusComposer, setAssistTarget } from '../assistant/assistStore'
+import { setAssistTarget } from '../assistant/assistStore'
 import { openItem } from '../components/openItem'
 import { FiledRecently } from '../filing/FiledRecently'
 import { FilingPanel } from '../filing/FilingPanel'
@@ -15,6 +15,8 @@ import { DayHeading } from '../feed/DayHeading'
 import { feedEntries } from '../feed/dayGroups'
 import { feedQuery } from '../feed/feedQuery'
 import { FeedRow } from '../feed/FeedRow'
+import { FeedToolbar } from '../feed/FeedToolbar'
+import { currentView, paramsForView, type FeedView } from '../feed/feedViews'
 import { FocusChip } from '../feed/FocusChip'
 import { useElementHeight } from '../feed/useElementHeight'
 import { useFeed } from '../feed/useFeed'
@@ -28,7 +30,8 @@ import { navigate } from '../router'
 import { useFilingConfiguredState } from '../state/filingConfigured'
 import { effectiveFiling, loadFilingCount, useFilingCount, useFilingVersion } from '../state/filingState'
 import { toggleSave } from '../state/itemState'
-import { Button, Chip, EmptyState, IconAsk, IconFilter, IconSearch, Menu, Skeleton, type MenuItem } from '../ui'
+import { setReadingList } from '../state/readingList'
+import { Button, EmptyState, Skeleton, type MenuItem } from '../ui'
 import '../feed/feed.css'
 
 const KIND_LABELS: Record<string, string> = {
@@ -72,10 +75,9 @@ export function FeedPage({ params, active = true }: { params: Record<string, str
   const barHeight = useElementHeight(barRef)
   const profile = useResource('profile', getProfile)
   const sections = profile.data?.profile.sections.length ? profile.data.profile.sections : DEFAULT_SECTIONS
-  // With "Related" on, the typed text goes to the address as `related` (a search by meaning) instead of `q`.
-  const [relatedOn, setRelatedOn] = useState(params.related !== undefined)
-  if (params.related !== undefined && !relatedOn) setRelatedOn(true)
-  const textKey = relatedOn ? 'related' : 'q'
+  // An address with `related` (a link from the reader's "Show related in the Feed") searches by meaning:
+  // the box then holds that text, and typing replaces it in the address instead of using `q`.
+  const textKey = params.related !== undefined ? 'related' : 'q'
   const [search, setSearch] = useState(params[textKey] ?? '')
   const debounced = useDebounced(search, 300)
   // A search that changed from outside (a click on Feed in the rail, a link with ?q=) replaces the
@@ -124,22 +126,6 @@ export function FeedPage({ params, active = true }: { params: Record<string, str
     if ((params[textKey] ?? '') !== debounced.trim()) setTyped(debounced.trim() || null)
   }, [debounced, search, params, textKey, setTyped])
 
-  /** Turn "Related" on or off; the text in the box moves between the plain search and the related search. */
-  const toggleRelated = () => {
-    const next = { ...params }
-    delete next.cited
-    delete next.related_item
-    if (relatedOn) {
-      if (next.related) next.q = next.related
-      delete next.related
-    } else {
-      if (next.q) next.related = next.q
-      delete next.q
-    }
-    setRelatedOn(!relatedOn)
-    navigate({ name: 'feed', params: next }, { replace: true })
-  }
-
   /** Leave a list taken from an answer, an item or typed text, back to the whole feed. */
   const clearFocus = () => {
     const next = { ...params }
@@ -147,7 +133,6 @@ export function FeedPage({ params, active = true }: { params: Record<string, str
     delete next.related_item
     delete next.related
     setSearch('')
-    setRelatedOn(false)
     navigate({ name: 'feed', params: next }, { replace: true })
   }
 
@@ -180,9 +165,21 @@ export function FeedPage({ params, active = true }: { params: Record<string, str
   // filingVersion is not read inside; it makes the filter run again whenever the queue changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const items = useMemo(() => (toFile && !focused ? listed.filter((item) => effectiveFiling(item.id, item.filing) === 'waiting') : listed), [listed, toFile, focused, filingVersion])
-  const onOpen = useCallback((index: number) => items[index] && openItem(items[index].id), [items])
+  // The reader moves between the rows loaded here, so opening any of them records the list in order.
+  const rememberList = useCallback(() => setReadingList('the Feed', items.map((item) => item.id)), [items])
+  const onOpen = useCallback(
+    (index: number) => {
+      if (!items[index]) return
+      rememberList()
+      openItem(items[index].id)
+    },
+    [items, rememberList],
+  )
   const onSave = useCallback((index: number) => items[index] && void toggleSave(items[index].id, items[index].state), [items])
   const [selected] = useListKeys({ count: items.length, enabled: active, onOpen, onSave, container })
+
+  /** Choose one view; the others' parameters leave the address, other filters stay. */
+  const chooseView = (view: FeedView) => navigate({ name: 'feed', params: paramsForView(params, view) }, { replace: true })
 
   const filterItems: MenuItem[] = [
     { id: 'kind-all', label: 'All kinds', checked: !params.kind, onSelect: () => setParam('kind', null) },
@@ -224,7 +221,7 @@ export function FeedPage({ params, active = true }: { params: Record<string, str
       <EmptyState
         title={empty.title}
         body={empty.body}
-        action={anyFilter ? <Button onClick={() => { setSearch(''); setRelatedOn(false); navigate({ name: 'feed', params: {} }, { replace: true }) }}>Clear filters</Button> : undefined}
+        action={anyFilter ? <Button onClick={() => { setSearch(''); navigate({ name: 'feed', params: {} }, { replace: true }) }}>Clear filters</Button> : undefined}
       />
     )
   } else {
@@ -235,7 +232,7 @@ export function FeedPage({ params, active = true }: { params: Record<string, str
             entry.kind === 'day' ? (
               <DayHeading key={`day-${entry.key}`} entry={entry} />
             ) : (
-              <FeedRow key={entry.item.id} item={entry.item} index={entry.index} selected={selected === entry.index} />
+              <FeedRow key={entry.item.id} item={entry.item} index={entry.index} selected={selected === entry.index} onOpen={rememberList} />
             ),
           )}
         </ul>
@@ -261,73 +258,21 @@ export function FeedPage({ params, active = true }: { params: Record<string, str
     <div className="r-page r-page--feed" style={barStyle}>
       <h1 className="r-page-title">Feed</h1>
       <p className="r-page-meta">{loading ? ' ' : `${total} ${total === 1 ? 'item' : 'items'}${!focused && params.tier === 'all' ? ', including filtered-out' : ''}`}</p>
-      <div className="r-feed-filters" ref={barRef}>
-        <div className="r-feed-filters__top">
-          <label className="r-feed-search">
-            <IconSearch size={16} />
-            <span className="r-sr-only">{relatedOn ? 'Describe what to find in the feed' : 'Search the feed'}</span>
-            <input
-              type="search"
-              value={search}
-              placeholder={relatedOn ? 'Describe a topic, a paper or an idea' : 'Search titles, summaries and full text'}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-          <Chip selected={relatedOn} onClick={toggleRelated} title="Find items close in meaning to what you type, not only items with the same words">
-            Related
-          </Chip>
-          <Chip selected={params.saved === 'true'} onClick={() => setParam('saved', params.saved === 'true' ? null : 'true')}>
-            Saved
-          </Chip>
-          <Chip selected={params.from_user === 'true'} onClick={() => setParam('from_user', params.from_user === 'true' ? null : 'true')}>
-            From you
-          </Chip>
-          {filingOn && (
-            <Chip selected={toFile} count={filingCount ? filingCount : undefined} onClick={() => setParam('filing', toFile ? null : 'waiting')}>
-              To file
-            </Chip>
-          )}
-          <Chip
-            selected={missedOn}
-            count={missedCount ? missedCount : undefined}
-            onClick={() => setParam('missed', missedOn ? null : 'true')}
-            title="Top and notable items from the last 7 days that you have not opened, saved or filed"
-          >
-            Missed
-          </Chip>
-          <Menu
-            label="More filters"
-            items={filterItems}
-            trigger={
-              <Button variant="quiet" size="sm" icon={<IconFilter size={14} />}>
-                Filters{activeExtra ? ` (${activeExtra})` : ''}
-              </Button>
-            }
-          />
-          {/* The filter bar stays in view while the list scrolls, so this is always within reach. */}
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={<IconAsk size={14} />}
-            onClick={() => {
-              setAssistTarget({ kind: 'feed' })
-              focusComposer('feed')
-            }}
-          >
-            Ask your feed
-          </Button>
-        </div>
-        <div className="r-feed-filters__sections" role="group" aria-label="Sections">
-          <Chip selected={!params.section} onClick={() => setParam('section', null)}>
-            All sections
-          </Chip>
-          {sections.map((section) => (
-            <Chip key={section.key} selected={params.section === section.key} onClick={() => setParam('section', params.section === section.key ? null : section.key)} title={section.description || section.label}>
-              {section.label}
-            </Chip>
-          ))}
-        </div>
-      </div>
+      <FeedToolbar
+        ref={barRef}
+        search={search}
+        onSearch={setSearch}
+        filterItems={filterItems}
+        filterCount={activeExtra}
+        view={currentView(params, filingOn)}
+        onView={chooseView}
+        filingOn={filingOn}
+        missedCount={missedCount}
+        filingCount={filingCount}
+        sections={sections}
+        section={params.section}
+        onSection={(key) => setParam('section', key)}
+      />
       {focused && focus.chip && <FocusChip text={focus.chip} onClear={clearFocus} />}
       {!focused && params.watch_group && <FocusChip text={`Watch: ${params.watch_group}`} onClear={() => setParam('watch_group', null)} />}
       {toFile && !focused && <FilingPanel count={filingCount} overview={overview.data} error={overview.error} onChanged={overview.reload} />}

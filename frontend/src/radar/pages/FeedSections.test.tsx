@@ -1,5 +1,5 @@
-// The section chips on the Feed carry the profile's own section names: the built-in defaults before
-// the profile has loaded, the profile's labels (never shortened) after, with its description as the tooltip.
+// The sections strip on the Feed carries the profile's own section names: the built-in defaults before
+// the profile has loaded, the profile's labels (never shortened) after.
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { setFetchForTesting } from '../api/transport'
@@ -33,16 +33,16 @@ afterEach(() => {
   setFetchForTesting(null)
 })
 
-/** The names of the section chips (everything after "All sections"). */
+/** The names of the section tabs (everything after "All sections"). */
 function chipNames(): string[] {
-  const group = screen.getByRole('group', { name: 'Sections' })
-  return within(group)
-    .getAllByRole('button')
-    .map((button) => button.textContent ?? '')
+  const strip = screen.getByRole('tablist', { name: 'Sections' })
+  return within(strip)
+    .getAllByRole('tab')
+    .map((tab) => tab.textContent ?? '')
     .slice(1)
 }
 
-describe('Feed section chips', () => {
+describe('Feed sections strip', () => {
   it('show the default profile labels in full before the profile has loaded', () => {
     setFetchForTesting(() => new Promise<Response>(() => undefined))
     render(<FeedPage params={{}} />)
@@ -57,19 +57,17 @@ describe('Feed section chips', () => {
     ])
   })
 
-  it('show exactly the profile labels, in full, with the description as the tooltip, once it has loaded', async () => {
+  it('show exactly the profile labels, in full, once it has loaded', async () => {
     setFetchForTesting(withProfile)
     render(<FeedPage params={{}} />)
     await waitFor(() => expect(chipNames()).toEqual(PROFILE_SECTIONS.map((section) => section.label)))
-    const chip = within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: 'Healthcare AI & medtech' })
-    expect(chip).toHaveAttribute('title', 'Clinical AI and devices.')
   })
 
   it('equal the sample profile labels after the sample service answers', async () => {
     setFetchForTesting(mockFetch)
     render(<FeedPage params={{}} />)
     await screen.findByPlaceholderText(/Search titles/)
-    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: 'Where AI is heading' })).toHaveAttribute('title', expect.stringContaining('Sample description')))
+    await waitFor(() => expect(within(screen.getByRole('tablist', { name: 'Sections' })).getByRole('tab', { name: 'Where AI is heading' })).toBeInTheDocument())
     expect(chipNames()).toEqual(DEFAULT_SECTIONS.map((section) => section.label))
   })
 })

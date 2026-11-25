@@ -92,25 +92,25 @@ describe('the Feed', () => {
   it('has no To file chip when filing is not set up', async () => {
     setFilingConfigured(false)
     render(<FeedPage params={{}} />)
-    await screen.findByRole('button', { name: 'Saved' })
-    expect(screen.queryByRole('button', { name: /To file/ })).not.toBeInTheDocument()
+    await screen.findByRole('tab', { name: 'Saved' })
+    expect(screen.queryByRole('tab', { name: /To file/ })).not.toBeInTheDocument()
   })
 
   it('has no To file chip when the service leaves the flag out', async () => {
     setFetchForTesting(withoutFlag)
     render(<FeedPage params={{}} />)
-    await screen.findByRole('button', { name: 'Saved' })
+    await screen.findByRole('tab', { name: 'Saved' })
     // Give the one request to GET /filing time to land, then check that nothing appeared.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 400))
     })
-    expect(screen.queryByRole('button', { name: /To file/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /To file/ })).not.toBeInTheDocument()
   })
 
   it('has the To file chip when filing is set up', async () => {
     setFilingConfigured(true)
     render(<FeedPage params={{}} />)
-    expect(await screen.findByRole('button', { name: /To file/ })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /To file/ })).toBeInTheDocument()
   })
 
   it('opens the normal Feed for #/feed?filing=waiting and drops the parameter', async () => {

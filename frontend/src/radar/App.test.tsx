@@ -104,7 +104,7 @@ describe('RadarApp', () => {
     act(() => navigate({ name: 'feed', params: {} }))
     await screen.findByRole('heading', { level: 1, name: 'Feed' })
     await screen.findByText(/^40 items$/, {}, { timeout: 4000 })
-    fireEvent.click(screen.getByRole('button', { name: 'Saved' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Saved' }))
     await waitFor(() => expect(window.location.hash).toBe('#/feed?saved=true'))
     // The day heading above the rows also reads "2 items" when all saved items fall on one day, so the page total is matched by its own class.
     await screen.findByText('2 items', { selector: '.r-page-meta' }, { timeout: 4000 })

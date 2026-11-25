@@ -1,4 +1,4 @@
-// Tests for the feed row: no empty line for items without a "why", a quiet mark for items not
+// Tests for the feed row: the "what" or the "why" in one line (none when both are empty), the thumbs, a quiet mark for items not
 // judged yet, and titles that are always text, never markup.
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -45,6 +45,31 @@ describe('FeedRow', () => {
   it('shows the why line when there is one', () => {
     const { container } = row()
     expect(container.querySelector('.r-feedrow__why')?.textContent).toBe('Matters for your work.')
+  })
+
+  it('shows what the page reports in the same place when the item has it, and the why otherwise', () => {
+    const { container, unmount } = row({ what: 'A new model ships.' })
+    const lines = container.querySelectorAll('.r-feedrow__why')
+    expect(lines).toHaveLength(1)
+    expect(lines[0].textContent).toBe('A new model ships.')
+    unmount()
+    for (const what of [undefined, '', '   ']) {
+      const again = row({ what })
+      expect(again.container.querySelector('.r-feedrow__why')?.textContent).toBe('Matters for your work.')
+      again.unmount()
+    }
+  })
+
+  it('leaves no line at all when there is neither a what nor a why', () => {
+    const { container } = row({ what: '', why: null })
+    expect(container.querySelector('.r-feedrow__why')).toBeNull()
+  })
+
+  it('has the thumbs beside save, with the current vote pressed', () => {
+    const { container } = row({ state: { saved: false, opened: false, vote: 'less', from_user: false, captured_via: null, vault_path: null } })
+    expect(container.querySelector('.r-votes')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'More like this' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Less like this' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('leaves no empty line for an item that was only triaged', () => {

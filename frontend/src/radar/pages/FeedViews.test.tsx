@@ -48,24 +48,24 @@ function expectedMissed() {
 }
 
 describe('Missed', () => {
-  it('sits beside To file (shown only where filing is set up) and carries the number of missed items', async () => {
+  it('is the second view, after Everything, and carries the number of missed items', async () => {
     setFilingConfigured(true)
     render(<RoutedFeed />)
-    await screen.findByRole('button', { name: /^To file/ })
-    const chip = await screen.findByRole('button', { name: /^Missed/ })
-    await waitFor(() => expect(chip).toHaveTextContent(`Missed${expectedMissed().length}`))
-    const names = screen.getAllByRole('button').map((button) => button.textContent ?? '')
-    expect(names[names.findIndex((name) => name.startsWith('To file')) + 1]).toMatch(/^Missed/)
+    await screen.findByRole('tab', { name: /^To file/ })
+    const chip = await screen.findByRole('tab', { name: /^Missed/ })
+    await waitFor(() => expect(chip).toHaveTextContent(`Missed ${expectedMissed().length}`))
+    const names = within(screen.getByRole('tablist', { name: 'Views' })).getAllByRole('tab').map((tab) => tab.textContent ?? '')
+    expect(names[names.findIndex((name) => name.startsWith('Missed')) - 1]).toBe('Everything')
   })
 
   it('puts missed=true in the address and lists the unseen top and notable items by score', async () => {
     render(<RoutedFeed />)
-    fireEvent.click(await screen.findByRole('button', { name: /^Missed/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: /^Missed/ }))
     expect(window.location.hash).toBe('#/feed?missed=true')
-    expect(screen.getByRole('button', { name: /^Missed/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('tab', { name: /^Missed/ })).toHaveAttribute('aria-selected', 'true')
     await waitFor(() => expect(headlines().length).toBeGreaterThan(0))
     expect(idsOf(headlines())).toEqual(expectedMissed().map((item) => item.id))
-    fireEvent.click(screen.getByRole('button', { name: /^Missed/ }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Everything' }))
     expect(window.location.hash).toBe('#/feed')
   })
 
@@ -73,7 +73,7 @@ describe('Missed', () => {
     patchItemState(101, { opened: true })
     patchItemState(102, { saved: true })
     render(<RoutedFeed />)
-    fireEvent.click(await screen.findByRole('button', { name: /^Missed/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: /^Missed/ }))
     await waitFor(() => expect(headlines().length).toBeGreaterThan(0))
     const ids = idsOf(headlines())
     expect(ids).not.toContain(101)
@@ -87,7 +87,7 @@ describe('Missed', () => {
     const first = expectedMissed()[0]
     const before = [...document.querySelectorAll('.r-feedrow')]
     const count = expectedMissed().length
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Missed/ })).toHaveTextContent(`Missed${count}`))
+    await waitFor(() => expect(screen.getByRole('tab', { name: /^Missed/ })).toHaveTextContent(`Missed ${count}`))
 
     // Opening: the row is marked read and the reader covers the Feed (the page is inactive under it).
     fireEvent.click(within(before[0] as HTMLElement).getByRole('link', { name: first.headline }))
@@ -102,7 +102,7 @@ describe('Missed', () => {
     expect(after).toHaveLength(before.length)
     expect(after.every((node, index) => node === before[index])).toBe(true)
     expect(after[0]).toHaveClass('is-read')
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Missed/ })).toHaveTextContent(`Missed${count - 1}`))
+    await waitFor(() => expect(screen.getByRole('tab', { name: /^Missed/ })).toHaveTextContent(`Missed ${count - 1}`))
 
     // A fresh visit loads the list again, and the opened item is gone.
     view.unmount()
@@ -117,7 +117,7 @@ describe('Missed', () => {
     for (const item of mockState().items) patchItemState(item.id, { opened: true })
     render(<FeedPage params={{ missed: 'true' }} />)
     expect(await screen.findByText('Nothing missed')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Missed' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('tab', { name: 'Missed' })).toHaveAttribute('aria-selected', 'true')
   })
 })
 

@@ -61,9 +61,9 @@ describe('the To file filter', () => {
   it('sits beside Saved and From you, shows the count when above zero, and puts filing=waiting in the address', async () => {
     await queue(101, 102)
     render(<FeedPage params={{}} />)
-    const chip = await screen.findByRole('button', { name: /To file/ })
+    const chip = await screen.findByRole('tab', { name: /To file/ })
     await waitFor(() => expect(chip).toHaveTextContent('2'))
-    const names = screen.getAllByRole('button').map((button) => button.textContent ?? '')
+    const names = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '')
     const index = names.findIndex((name) => name.startsWith('To file'))
     expect(names[index - 1]).toBe('From you')
     fireEvent.click(chip)
@@ -72,7 +72,7 @@ describe('the To file filter', () => {
 
   it('shows no number while nothing waits', async () => {
     render(<FeedPage params={{}} />)
-    const chip = await screen.findByRole('button', { name: /To file/ })
+    const chip = await screen.findByRole('tab', { name: /To file/ })
     await waitFor(() => expect(calls).toContain('GET /filing'))
     expect(chip.textContent).toBe('To file')
   })

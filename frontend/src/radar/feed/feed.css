@@ -14,22 +14,26 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
-.r-feed-filters__sections {
-  display: flex;
-  gap: 6px;
-  margin-top: var(--space-3);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-/* Section names are never shortened: a long row scrolls sideways instead. */
-.r-feed-filters__sections .r-chip {
+/* The thin vertical line between the search field and the two icon buttons. */
+.r-feed-filters__gap {
   flex: none;
-  white-space: nowrap;
+  width: 1px;
+  height: 22px;
+  margin: 0 var(--space-1);
+  background: var(--rule-strong);
+}
+/* The views strip sits under the search row; the sections strip hangs under it without a line. */
+.r-feed-filters .r-tabs {
+  margin-top: var(--space-1);
+}
+.r-feed-filters .r-tabs--quiet {
+  margin-top: 0;
 }
 .r-feed-search {
   flex: 1 1 200px;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -180,6 +184,10 @@
   margin: 6px 0 0;
   font-size: var(--text-xs);
   color: var(--muted);
+}
+/* The thumbs and save sit side by side at the row's right edge, clear of the headline. */
+.r-feedrow .r-votes {
+  flex: none;
 }
 /* Controls sit above the stretched link. A pointed-at or focused tooltip rises further, above the
    filter bar and the day heading, through the rule beside .r-tip in primitives.css. */
