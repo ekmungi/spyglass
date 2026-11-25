@@ -13,6 +13,7 @@ import pytest
 from sqlmodel import Session
 
 from spyglass_service.radar.llm_errors import LlmUnavailable
+from spyglass_service.radar.models import RadarDoc, loads
 from spyglass_service.radar.privacy import FENCE_TAG
 from spyglass_service.radar.watch import groups, registry, suggest
 
@@ -118,6 +119,40 @@ def test_names_cached_with_a_renamed_group_are_asked_again_and_keep_a_category(e
 
     assert sent_names(llm) == ["Org A"]  # Org B had no group, so its answer still holds
     assert suggested(engine)["Org A"].category == "Medical imaging"
+
+
+
+def stored_answer(engine, name: str) -> dict:
+    """The answer the cache holds for one name, as stored."""
+    with Session(engine) as s:
+        return loads(s.get(RadarDoc, suggest.CACHE_KEY).body, {})["classes"][registry.norm_name(name)]
+
+
+def test_an_answer_with_a_group_the_reader_does_not_have_is_asked_once(engine) -> None:
+    """A model that answers "Other" (or a paraphrase of a group) is stored with no group, not asked every cycle."""
+    add(engine, "Watched Imaging Co", category="Imaging")
+    named(engine, ["Org A"], 5)
+    llm = FakeLlm([row("Org A", group="Other")])
+
+    refresh(engine, llm)
+    refresh(engine, llm)  # same register, same groups
+
+    assert len(llm.calls) == 1
+    assert stored_answer(engine, "Org A")["group"] == ""
+    assert suggested(engine)["Org A"].category == ""
+
+
+def test_an_invented_same_as_is_stored_empty_and_asked_again_when_the_register_changes(engine) -> None:
+    named(engine, ["Rogue Co"], 4)
+    llm = FakeLlm([row("Rogue Co", same_as="Somebody Else")])
+    refresh(engine, llm)
+    assert stored_answer(engine, "Rogue Co")["same_as"] == ""
+    assert "Rogue Co" in suggested(engine)
+
+    add(engine, "New Watched Co")  # the register's names change
+    refresh(engine, llm)
+
+    assert len(llm.calls) == 2 and sent_names(llm, 1) == ["Rogue Co"]
 
 
 def test_every_alias_a_refresh_adds_is_logged_and_reported(engine, caplog) -> None:

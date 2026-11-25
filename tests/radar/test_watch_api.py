@@ -45,6 +45,15 @@ def test_add_patch_delete_flow(client) -> None:
     assert client.get("/watch").json()["categories"] == []
 
 
+def test_a_patch_can_carry_more_aliases_than_a_reader_types(client) -> None:
+    """A suggestion refresh can give an entry more than ten aliases, so saving it in Details must work."""
+    eid = client.post("/watch", json={"name": "Acme"}).json()["id"]
+    aliases = [f"Acme {i}" for i in range(12)]
+    patched = client.patch(f"/watch/{eid}", json={"aliases": aliases})
+    assert patched.status_code == 200 and patched.json()["aliases"] == aliases
+    assert client.patch(f"/watch/{eid}", json={"aliases": [f"A{i}" for i in range(51)]}).status_code == 422
+
+
 def test_validation_and_error_statuses(client) -> None:
     client.post("/watch", json={"name": "Acme"})
     assert client.post("/watch", json={"name": "acme"}).status_code == 409

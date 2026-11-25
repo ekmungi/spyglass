@@ -46,7 +46,9 @@ class EntityChanges(BaseModel):
     kind: Kind | None = None
     category: str | None = Field(default=None, max_length=60)
     status: Status | None = None
-    aliases: list[str] | None = Field(default=None, max_length=10)
+    # As many as Undo of a removed group takes back: each suggestion refresh can add a spelling, and
+    # Details saves them all with the entry.
+    aliases: list[str] | None = Field(default=None, max_length=50)
     query: str | None = Field(default=None, max_length=200)
     website: str | None = Field(default=None, max_length=300)
     why: str | None = Field(default=None, max_length=300)

@@ -219,11 +219,12 @@ def classify(session: Session, names: list[str], *, groups: list[str], register:
 
     A cached answer is returned unless `_stale` says the register or the groups have changed in a
     way that matters; the other names are sent to the model, CHUNK per call, and only the answers
-    for those names are stored, each with the fingerprint of the register it was given. A chunk
-    whose call fails is left out and stored for nobody, so its names are asked again next time; a
-    stale answer whose new call fails is returned as it was. With no model (`llm` None) only cached
-    answers come back. `groups` are the reader's group names and `register` the register entries a
-    name may be another spelling of (the refresh passes the watched, paused and rejected names).
+    for those names are stored, checked against the register and the groups (`_fit`) and with the
+    fingerprint of the register they were given. A chunk whose call fails is left out and stored
+    for nobody, so its names are asked again next time; a stale answer whose new call fails is
+    returned as it was. With no model (`llm` None) only cached answers come back. `groups` are the
+    reader's group names and `register` the register entries a name may be another spelling of (the
+    refresh passes the watched, paused and rejected names).
     """
     cached = _stored(session)
     seen = _fingerprint(register)
@@ -233,7 +234,11 @@ def classify(session: Session, names: list[str], *, groups: list[str], register:
     if asked and llm is not None:
         fresh = _ask_in_chunks(llm, asked, groups, register)
         if fresh:
-            cached = {**cached, **{key: {**answer, "register": seen} for key, answer in fresh.items()}}
+            # Stored as checked: a group or register entry the model invented is kept as "", so it
+            # neither makes the answer stale at every cycle nor hides it from a register change.
+            checked = {key: {**_fit(answer, groups, register), "register": seen}
+                       for key, answer in fresh.items()}
+            cached = {**cached, **checked}
             _save(session, cached)
     return {key: _fit(cached[key], groups, register) for key in wanted if key in cached}
 
