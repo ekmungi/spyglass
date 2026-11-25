@@ -99,12 +99,6 @@
   display: grid;
   gap: 4px;
 }
-.rpr-projects-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding-top: var(--space-3);
-}
 .rpr-savebar {
   position: sticky;
   bottom: 0;

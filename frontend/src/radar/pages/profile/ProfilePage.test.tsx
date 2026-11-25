@@ -219,7 +219,7 @@ describe('ProfilePage tabs', () => {
     expect(api.saveProfile).not.toHaveBeenCalled()
   })
 
-  it('keeps the unsaved projects lines when the reader moves between tabs', async () => {
+  it('keeps the unsaved projects lines when the reader moves between tabs, and counts only the saved ones', async () => {
     api.loadProjects.mockResolvedValue(FIVE_PROJECTS)
     render(<ProfilePage />)
     await screen.findByText(/Spyglass judges/)
@@ -229,7 +229,9 @@ describe('ProfilePage tabs', () => {
     fireEvent.click(tab(/^Topics/))
     fireEvent.click(tab(/^Your projects/))
     expect(screen.getByLabelText('One line about Garden')).toHaveValue('My vegetable beds.')
-    expect(tab(/^Your projects/)).toHaveTextContent('3 shared')
+    // The assistant still sees two projects until the line is saved.
+    expect(tab(/^Your projects/)).toHaveTextContent('2 shared')
+    expect(screen.getByText('2 of 5 shared with the AI')).toBeVisible()
   })
 
   it('lists only the projects that have a line, and offers the others on request', async () => {
@@ -255,6 +257,111 @@ describe('ProfilePage tabs', () => {
     expect(await screen.findByText('No project has a line yet, so the AI sees none of them.')).toBeVisible()
     expect(screen.getByText('0 of 5 shared with the AI')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Show the other 5 projects' })).toBeVisible()
+  })
+})
+
+describe('ProfilePage projects and the one Save bar', () => {
+  /** Open Your projects, list every project and write a line about Garden. */
+  async function writeGardenLine() {
+    fireEvent.click(tab(/^Your projects/))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the other 3 projects' }))
+    fireEvent.change(screen.getByLabelText('One line about Garden'), { target: { value: 'My vegetable beds.' } })
+  }
+
+  beforeEach(() => {
+    api.loadProjects.mockResolvedValue(FIVE_PROJECTS)
+    api.saveProjects.mockImplementation(async (rows: unknown) => rows)
+  })
+
+  it('has one Save bar on the Your projects tab, with no separate Save for the projects', async () => {
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    fireEvent.click(tab(/^Your projects/))
+    await screen.findByText('2 of 5 shared with the AI')
+    expect(screen.queryByRole('button', { name: 'Save projects' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Discard changes' })).toHaveLength(1)
+  })
+
+  it('saves a projects line typed on its tab when Save profile is pressed on another tab', async () => {
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    await writeGardenLine()
+    fireEvent.click(tab(/^Topics/))
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeEnabled()
+    expect(screen.getByText(/You have unsaved changes/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await waitFor(() => expect(api.saveProjects).toHaveBeenCalledTimes(1))
+    expect(api.saveProjects.mock.calls[0][0]).toContainEqual({ name: 'Garden', description: 'My vegetable beds.', in_vault: true })
+    // The profile itself did not change, so it is not sent again.
+    expect(api.saveProfile).not.toHaveBeenCalled()
+    expect(await screen.findByText(/^Saved\./)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
+  })
+
+  it('changes the counts only after the save, not while the reader types', async () => {
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    await writeGardenLine()
+    expect(tab(/^Your projects/)).toHaveTextContent('2 shared')
+    expect(screen.getByText('2 of 5 shared with the AI')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await waitFor(() => expect(tab(/^Your projects/)).toHaveTextContent('3 shared'))
+    expect(screen.getByText('3 of 5 shared with the AI')).toBeVisible()
+  })
+
+  it('discards the projects lines together with the profile edits', async () => {
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    fireEvent.change(statementBox(), { target: { value: 'Changed.' } })
+    await writeGardenLine()
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+    expect(screen.getByLabelText('One line about Garden')).toHaveValue('')
+    fireEvent.click(tab('About you'))
+    expect(statementBox()).toHaveValue('Someone who follows AI closely and builds with AI agents, and wants a short daily picture of AI and the fields they care about.')
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
+  })
+
+  it('says the projects were not saved when only their save fails, and keeps them changed', async () => {
+    api.saveProfile.mockResolvedValue({ ...reply(4), profile: { ...reply(4).profile, statement: 'New statement.' } })
+    api.saveProjects.mockRejectedValue(new ApiError('Could not read the vault.', { status: 422, kind: 'http', path: '/projects' }))
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    fireEvent.change(statementBox(), { target: { value: 'New statement.' } })
+    await writeGardenLine()
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(await screen.findByText(/Your projects were not saved\. Could not read the vault\./)).toBeInTheDocument()
+    expect(screen.getByText(/Your profile was saved\./)).toBeInTheDocument()
+    expect(api.saveProfile).toHaveBeenCalledTimes(1)
+    expect(screen.getByLabelText('One line about Garden')).toHaveValue('My vegetable beds.')
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeEnabled()
+  })
+
+  it('says the profile was not saved when only its save fails, and keeps it changed', async () => {
+    api.saveProfile.mockRejectedValue(new ApiError('The profile could not be stored.', { status: 500, kind: 'http', path: '/profile' }))
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    fireEvent.change(statementBox(), { target: { value: 'Kept.' } })
+    await writeGardenLine()
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(await screen.findByText(/Your profile was not saved\. The profile could not be stored\./)).toBeInTheDocument()
+    expect(screen.getByText(/Your projects were saved\./)).toBeInTheDocument()
+    await waitFor(() => expect(tab(/^Your projects/)).toHaveTextContent('3 shared'))
+    fireEvent.click(tab('About you'))
+    expect(statementBox()).toHaveValue('Kept.')
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeEnabled()
+  })
+
+  it('warns before the tab is closed while only a projects line is unsaved', async () => {
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    await screen.findByText('2 of 5 shared with the AI')
+    const clean = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(clean)
+    expect(clean.defaultPrevented).toBe(false)
+    await writeGardenLine()
+    const dirty = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(dirty)
+    expect(dirty.defaultPrevented).toBe(true)
   })
 })
 

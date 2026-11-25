@@ -121,11 +121,12 @@ describe('steps on the rebuilt pages', () => {
     for (const tab of ['{{Privacy and usage}} tab', '{{General}} tab', '{{Appearance}} tab']) expect(settings).toContain(tab)
   })
 
-  it('open the tab of Profile that holds each part, and save the projects on their own', () => {
+  it('open the tab of Profile that holds each part, and save the projects with the one Save profile', () => {
     const profile = steps('edit-your-profile')
     expect(profile).toContain('{{Save profile}}')
     expect(profile).toContain('{{Your projects}} tab')
-    expect(profile).toContain('{{Save projects}}')
+    expect(profile).not.toContain('{{Save projects}}')
+    expect(profile).toContain('saves the project lines too')
   })
 
   it('open the tab of Sources that holds each group, and name the folded working feeds', () => {

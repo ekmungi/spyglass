@@ -87,8 +87,9 @@ export const TUNING_GROUP: HelpGroup = {
       purpose: 'Say who you are and what you need to know, so everything is judged against it.',
       steps: [
         'Open {{Profile}}.',
-        'Open the tabs {{About you}}, {{Sections}}, {{Topics}} and {{Leave out}} and edit what you want, then press {{Save profile}}.',
-        'Open the {{Your projects}} tab and write one line about each project the assistant may mention. Press {{Save projects}}; the projects have their own Save, apart from {{Save profile}}.',
+        'Open the tabs {{About you}}, {{Sections}}, {{Topics}} and {{Leave out}} and edit what you want.',
+        'Open the {{Your projects}} tab and write one line about each project the assistant may mention.',
+        'Press {{Save profile}}, on any tab. It saves the project lines too, together with the rest of the profile.',
       ],
       next: 'Changes to the profile take effect from the next collection onward.',
       target: { name: 'profile' },

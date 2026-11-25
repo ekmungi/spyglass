@@ -1,7 +1,7 @@
 // Profile page: the description of the reader that Spyglass judges every item against. Editable
-// statement, sections, topics and avoid list; a read-only block of what Spyglass has learned. The parts
-// are tabs; every part stays mounted (the unselected ones are hidden) so an edit made on one tab is
-// still there on the next and one Save bar covers them all.
+// statement, sections, topics, projects and avoid list; a read-only block of what Spyglass has learned.
+// The parts are tabs; every part stays mounted (the unselected ones are hidden) so an edit made on one
+// tab is still there on the next and one Save bar covers them all, the project lines included.
 import './profile/profile.css'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { errorMessage } from '../api/errors'
@@ -15,8 +15,17 @@ import { firstTabWithProblem, PROFILE_TABS, type ProfileTabKey } from './profile
 import { ProjectsSection } from './profile/ProjectsSection'
 import { SectionsEditor } from './profile/SectionsEditor'
 import { TopicsEditor } from './profile/TopicsEditor'
+import { useProjectsDraft } from './profile/useProjectsDraft'
 import { cleanProfile, countErrors, LIMITS, sameProfile, validateProfile } from './profile/validate'
 import { useLoad } from './sources/useLoad'
+
+/** What the Save bar says after a save: a confirmation, or which part was not saved and why. */
+type SaveOutcome = { ok: boolean; message: string }
+
+/** The bar's sentences after a save in which a part failed: each part that was sent, saved or not (with why). */
+function describeFailure(parts: { label: string; error: string | null }[]): string {
+  return parts.map((part) => (part.error === null ? `${part.label} saved.` : `${part.label} not saved. ${part.error}`)).join(' ')
+}
 
 /** One tab's content. It stays in the page when it is not selected, only hidden, so its state is kept. */
 function Panel({ shown, children }: { shown: boolean; children: ReactNode }) {
@@ -36,22 +45,22 @@ export default function ProfilePage() {
   const recalled = saved ? recallDraft(saved.version) : null
   const current = edits ?? recalled ?? saved
   const dirty = current !== null && saved !== null && !sameProfile(current, saved)
+  // The project lines are loaded and saved through their own call, but the same Save bar covers them.
+  const projects = useProjectsDraft()
+  const changed = dirty || projects.dirty
   const [showErrors, setShowErrors] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [justSaved, setJustSaved] = useState(false)
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null)
   const statementId = useId()
   const [tab, setTab] = useState<ProfileTabKey>('about')
-  // How many projects have a line; null until the projects are loaded (or when this copy has none to offer).
-  const [sharedProjects, setSharedProjects] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!dirty) return
+    if (!changed) return
     // The browser's own "leave this page?" prompt, for closing the tab or reloading with unsaved edits.
     const guard = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener('beforeunload', guard)
     return () => window.removeEventListener('beforeunload', guard)
-  }, [dirty])
+  }, [changed])
 
   if (load.error && !load.data) {
     return (
@@ -81,9 +90,10 @@ export default function ProfilePage() {
   const problems = countErrors(errors)
   const shown = showErrors ? errors : { sections: {}, topics: {}, avoid: {}, lists: [] }
 
+  // The projects count is read from the saved rows: it says what the assistant sees now.
   const counts: Partial<Record<ProfileTabKey, string>> = {
     topics: `${current.topics.length}`,
-    ...(sharedProjects !== null && { projects: `${sharedProjects} shared` }),
+    ...(projects.sharedCount !== null && { projects: `${projects.sharedCount} shared` }),
   }
   const tabs: TabItem[] = PROFILE_TABS.map(({ key, label }) => ({ key, label, count: counts[key] }))
 
@@ -91,40 +101,72 @@ export default function ProfilePage() {
   const change = (update: (profile: Profile) => Profile) => {
     const next = update(current)
     setEdits(next)
-    setJustSaved(false)
-    setSaveError(null)
+    setOutcome(null)
     if (sameProfile(next, saved)) forgetDraft()
     else rememberDraft(saved.version, next)
+  }
+
+  const editProjects: typeof projects.edit = (update) => {
+    projects.edit(update)
+    setOutcome(null)
   }
 
   const discard = () => {
     forgetDraft()
     setEdits(saved)
+    projects.discard()
     setShowErrors(false)
-    setSaveError(null)
+    setOutcome(null)
   }
 
-  const save = async () => {
-    setShowErrors(true)
-    if (problems > 0) {
-      // The problem may sit on a tab that is hidden; open the first one that has one.
-      const where = firstTabWithProblem(errors, current)
-      if (where) setTab(where)
-      return
-    }
-    setSaving(true)
-    setSaveError(null)
+  /** Save the profile, when it changed. Returns the error message, or null when it was saved. */
+  const saveProfilePart = async (): Promise<string | null> => {
     try {
       const reply = await saveProfile(cleanProfile(current))
       forgetDraft()
       load.replace(reply)
       setEdits(null)
       setShowErrors(false)
-      setJustSaved(true)
+      return null
     } catch (cause) {
-      setSaveError(errorMessage(cause))
-    } finally {
-      setSaving(false)
+      return errorMessage(cause)
+    }
+  }
+
+  /** Save the project lines, when they changed. Returns the error message, or null when they were saved. */
+  const saveProjectsPart = async (): Promise<string | null> => {
+    try {
+      await projects.save()
+      return null
+    } catch (cause) {
+      return errorMessage(cause)
+    }
+  }
+
+  // Each part that changed is saved through its own call; a part that fails stays changed and is named.
+  const save = async () => {
+    if (dirty) {
+      setShowErrors(true)
+      if (problems > 0) {
+        // The problem may sit on a tab that is hidden; open the first one that has one.
+        const where = firstTabWithProblem(errors, current)
+        if (where) setTab(where)
+        return
+      }
+    }
+    setSaving(true)
+    setOutcome(null)
+    const parts = [
+      ...(dirty ? [{ label: 'Your profile was', error: await saveProfilePart() }] : []),
+      ...(projects.dirty ? [{ label: 'Your projects were', error: await saveProjectsPart() }] : []),
+    ]
+    setSaving(false)
+    if (parts.some((part) => part.error !== null)) {
+      setOutcome({ ok: false, message: describeFailure(parts) })
+    } else if (dirty) {
+      setOutcome({ ok: true, message: 'Saved. Changes apply to items collected from now on.' })
+    } else {
+      setOutcome({ ok: true, message: 'Saved. The assistant may now mention the projects you described.' })
     }
   }
 
@@ -204,7 +246,7 @@ export default function ProfilePage() {
       </Panel>
 
       <Panel shown={tab === 'projects'}>
-        <ProjectsSection onSharedChange={setSharedProjects} />
+        <ProjectsSection projects={{ ...projects, edit: editProjects }} />
       </Panel>
 
       <Panel shown={tab === 'avoid'}>
@@ -233,20 +275,20 @@ export default function ProfilePage() {
               {problems === 1 ? 'One thing needs fixing before you can save.' : `${problems} things need fixing before you can save.`}
               {shown.lists.length > 0 && ` ${shown.lists.join(' ')}`}
             </span>
-          ) : saveError ? (
-            <span className="r-error-text">{saveError}</span>
-          ) : justSaved ? (
-            <span className="rpr-saved">Saved. Changes apply to items collected from now on.</span>
+          ) : outcome ? (
+            <span className={outcome.ok ? 'rpr-saved' : 'r-error-text'}>{outcome.message}</span>
           ) : dirty ? (
             <span className="r-meta">You have unsaved changes. They apply to items collected after you save.</span>
+          ) : projects.dirty ? (
+            <span className="r-meta">You have unsaved changes to your projects.</span>
           ) : (
             <span className="r-meta">Changes apply to newly collected items; items already collected keep their earlier judgement.</span>
           )}
         </div>
-        <Button variant="quiet" disabled={!dirty || saving} onClick={discard}>
+        <Button variant="quiet" disabled={!changed || saving} onClick={discard}>
           Discard changes
         </Button>
-        <Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
+        <Button variant="primary" disabled={!changed || saving} onClick={() => void save()}>
           {saving ? 'Saving…' : 'Save profile'}
         </Button>
       </div>
