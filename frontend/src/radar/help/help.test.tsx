@@ -94,6 +94,49 @@ describe('steps in the reader', () => {
   })
 })
 
+describe('steps on the rebuilt pages', () => {
+  const steps = (id: string) => findTask(id)?.steps.join(' ') ?? ''
+
+  it('name the Feed as two rows of tabs, one Filters menu and a chat icon, with no search by meaning', () => {
+    const feed = steps('use-the-feed-filters')
+    expect(feed).toContain('{{Everything}}, {{Missed}}, {{Saved}}, {{From you}} or {{To file}} (shown only when filing is set up)')
+    expect(feed).toContain('{{All sections}}')
+    expect(feed).toContain('{{Filters}}')
+    expect(feed).toContain('{{Show filtered-out items}}')
+    expect(feed).not.toMatch(/chip|Related|by meaning/)
+    expect(steps('save-for-later')).toContain('{{Saved}} tab')
+    expect(steps('save-for-later')).not.toContain('chip')
+    expect(steps('file-now-and-approve-the-plan')).toContain('{{To file}} tab')
+    expect(steps('file-now-and-approve-the-plan')).not.toContain('chip')
+    expect(steps('ask-your-feed')).toContain('{{Ask your feed (opens the assistant)}}')
+  })
+
+  it('open the tab of Settings that holds each part before naming the part', () => {
+    expect(steps('install-the-browser-extension')).toContain('{{Bringing things in}} tab')
+    expect(steps('reading-width-and-font')).toContain('{{Appearance}} tab')
+    expect(steps('reading-width-and-font')).toContain('{{Reading font}}')
+    expect(steps('choose-engine-and-model')).toContain('{{AI engines}} tab')
+    expect(steps('choose-engine-and-model')).toContain('{{Privacy and usage}} tab')
+    const settings = steps('privacy-brief-time-and-appearance')
+    for (const tab of ['{{Privacy and usage}} tab', '{{General}} tab', '{{Appearance}} tab']) expect(settings).toContain(tab)
+  })
+
+  it('open the tab of Profile that holds each part, and save the projects on their own', () => {
+    const profile = steps('edit-your-profile')
+    expect(profile).toContain('{{Save profile}}')
+    expect(profile).toContain('{{Your projects}} tab')
+    expect(profile).toContain('{{Save projects}}')
+  })
+
+  it('open the tab of Sources that holds each group, and name the folded working feeds', () => {
+    for (const id of ['add-a-feed', 'pause-or-remove-a-feed', 'check-a-feed-delivers']) expect(steps(id), id).toContain('{{Feeds}} tab')
+    expect(steps('pause-or-remove-a-feed')).toContain('{{Show the working feeds}}')
+    expect(steps('check-a-feed-delivers')).toContain('{{Show the working feeds}}')
+    expect(steps('follow-fda-decisions')).toContain('{{FDA decisions}} tab')
+    expect(steps('set-up-raindrop-slack-mail')).toContain('{{From you}} tab')
+  })
+})
+
 describe('tasks that need filing', () => {
   const FILING_TASKS = ['file-in-vault', 'file-now-and-approve-the-plan']
 

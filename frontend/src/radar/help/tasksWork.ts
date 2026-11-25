@@ -10,7 +10,7 @@ export const SENDING_GROUP: HelpGroup = {
       title: 'Install the browser extension and send a page or a selection',
       purpose: 'Send any page, even one behind a paywall or a bot check, from the browser you are reading it in.',
       steps: [
-        'Open {{Settings}} and find {{Browser extension (recommended)}}.',
+        'Open {{Settings}}, then the {{Bringing things in}} tab, and find {{Browser extension (recommended)}}.',
         'Open your browser\'s extensions page and press {{Load unpacked}}; choose the folder named browser-extension.',
         'Pin its button, open its settings, paste the {{Key}} shown in Settings (press {{Copy}}) and press {{Test connection}}.',
         'On a page, click the extension\'s button to send the page, or select text first to send only the selection.',
@@ -58,7 +58,7 @@ export const KEEPING_GROUP: HelpGroup = {
       purpose: 'Keep an item inside Spyglass so you can find it again.',
       steps: [
         'On an item row or at the top of the reader, press the bookmark button {{Save for later}}.',
-        'To see saved items, open {{Feed}} and press the chip {{Saved}}.',
+        'To see saved items, open {{Feed}} and press the {{Saved}} tab.',
       ],
       next: 'Spyglass marks the item as saved on your computer; nothing leaves it.',
       target: { name: 'feed', params: { saved: 'true' } },
@@ -83,7 +83,7 @@ export const KEEPING_GROUP: HelpGroup = {
       title: 'File now',
       purpose: 'Turn the queued items into notes.',
       steps: [
-        'Open {{Feed}} and press the chip {{To file}}.',
+        'Open {{Feed}} and press the {{To file}} tab.',
         'Under {{Waiting}} press {{File now}}; {{See the request}} shows exactly what is sent to Claude Code.',
         'Claude Code opens in your notes vault and shows one table of where each item goes.',
         'Say yes in Claude Code. The items then show as filed.',
@@ -131,7 +131,7 @@ export const ASKING_GROUP: HelpGroup = {
       title: 'Ask your whole Feed',
       purpose: 'Ask across everything collected and get an answer that cites items.',
       steps: [
-        'Open {{Feed}} and press {{Ask your feed}}.',
+        'Open {{Feed}} and press the chat icon {{Ask your feed (opens the assistant)}} beside the search box.',
         'Type a question, or press {{What matters most this week?}} or {{Which themes run through my feed?}}.',
         'Under an answer, press {{Show these in the Feed}} to list the items it cited.',
       ],
@@ -145,9 +145,9 @@ export const ASKING_GROUP: HelpGroup = {
       purpose: 'Pick which AI answers, and see what an answer cost in tokens.',
       steps: [
         'In the assistant panel, open the list at the top (named {{Engine}}) and choose an engine and model.',
-        'To set the starting engine or add a key, open {{Settings}}.',
+        'To set the starting engine or add a key, open {{Settings}} and the {{AI engines}} tab. Engines that are not set up are folded away; the button below the list that starts "Show the" and ends "not set up" lists them.',
         'Hover over an answer: a quiet line shows the model, how much it read, how much came from cache, and how much it wrote.',
-        'For totals, open {{Settings}} and find {{Usage}}.',
+        'For totals, open {{Settings}}, then the {{Privacy and usage}} tab, and find {{Usage}}.',
       ],
       next: 'Each question goes to the engine chosen at that moment, and every call is recorded as tokens on your computer.',
       target: { name: 'settings' },

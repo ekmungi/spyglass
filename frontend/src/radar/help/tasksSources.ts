@@ -11,8 +11,8 @@ export const SOURCES_GROUP: HelpGroup = {
       title: 'Add a feed',
       purpose: 'Make Spyglass read a blog, newsletter or journal for new items.',
       steps: [
-        'Open {{Sources}} in the left rail.',
-        'Under {{Feeds}}, find the box labelled {{Add a feed}} and paste the address of the feed, or of a page that has one.',
+        'Open {{Sources}} in the left rail, then the {{Feeds}} tab.',
+        'Below the list of feeds, find the box labelled {{Add a feed}} and paste the address of the feed, or of a page that has one.',
         'Press {{Add feed}}. The address must start with http:// or https://.',
         'If the address was a web page, Spyglass lists the feeds it found. Press {{Follow}} beside the one you want.',
       ],
@@ -25,7 +25,7 @@ export const SOURCES_GROUP: HelpGroup = {
       title: 'Pause or remove a feed',
       purpose: 'Stop a feed that is noisy, either for a while or for good.',
       steps: [
-        'Open {{Sources}}, then find the feed under {{Feeds}}.',
+        'Open {{Sources}}, then the {{Feeds}} tab. A feed that is failing, switched off or not fetched yet is listed at once; for a feed that works, press {{Show the working feeds}}.',
         'To pause it, switch off the toggle named "[feed name] on or off". Switch it on again later to resume.',
         'To remove it, open the menu named "Actions for [feed name]", choose {{Remove…}} and press {{Remove feed}}.',
       ],
@@ -38,8 +38,9 @@ export const SOURCES_GROUP: HelpGroup = {
       title: 'Check that a feed delivers',
       purpose: 'See whether a feed is working and when it last brought something.',
       steps: [
-        'Open {{Sources}} and look at the feed under {{Feeds}}.',
-        'Read the status beside its name: it says whether the feed is working, and shows {{Failing}} with the reason when it is not.',
+        'Open {{Sources}}. A red mark on the {{Feeds}} tab means a feed is failing; open that tab.',
+        'A failing feed is listed at once. Feeds that work are folded into one line of counts; press {{Show the working feeds}} to list them.',
+        'Read the status beside a feed name: it says Working, or shows {{Failing}} with the reason when the feed is not.',
         'Read the line below it: when it was last fetched and how many items it has brought.',
       ],
       next: 'Spyglass records the result of every fetch for each feed, and the row shows the newest result.',
@@ -51,7 +52,7 @@ export const SOURCES_GROUP: HelpGroup = {
       title: 'Follow FDA decisions by product code or keyword',
       purpose: 'Get FDA device decisions for whoever makes a kind of device, not only for companies you watch.',
       steps: [
-        'Open {{Sources}} and find {{FDA device decisions}} ({{Clearances, approvals and recalls}}).',
+        'Open {{Sources}}, then the {{FDA decisions}} tab, and find {{FDA device decisions}} ({{Clearances, approvals and recalls}}).',
         'Switch the section on with its toggle named "FDA device decisions on or off".',
         'In {{Product codes}}, type three-character FDA product codes separated by commas. In {{Device keywords}}, type words from a device name, also separated by commas. Both are optional.',
         'Press {{Save lists}}.',
@@ -65,7 +66,7 @@ export const SOURCES_GROUP: HelpGroup = {
       title: 'Set up Raindrop, Slack and the mail label',
       purpose: 'Send links into Spyglass from your bookmarks, a Slack channel or a Gmail label.',
       steps: [
-        'Open {{Sources}} and find the section {{From you}}.',
+        'Open {{Sources}}, then the {{From you}} tab.',
         'Read the row for Raindrop, Slack or {{Gmail label}}: it says what that channel needs and shows a {{setup guide}} link.',
         'Follow the setup guide. The keys and addresses go in the .env file; the Slack steps are in the user guide, section "Connecting Slack".',
         'Restart Spyglass, then reopen {{Sources}}. The row should say Configured.',
