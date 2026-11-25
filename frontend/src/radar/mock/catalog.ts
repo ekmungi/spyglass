@@ -228,20 +228,27 @@ export function seedWatch(): WatchEntity[] {
     query: `"${name}"`,
     website: `https://example.org/${name.toLowerCase().replace(/[^a-z]+/g, '-')}`,
     status: 'active',
+    section: '',
+    count: 0,
     why,
     added_via: 'seed',
     last_hit_at: hoursAgo(6 + index * 5),
   }))
   const suggested: WatchEntity[] = [
-    { id: 20, name: 'Arclight Endoscopy', kind: 'company', category: 'Imaging AI', topic: 'AI in medical imaging', aliases: [], query: '"Arclight Endoscopy"', website: null, status: 'suggested', why: 'Named in two items this week about capsule endoscopy.', added_via: 'discovered', last_hit_at: hoursAgo(30) },
-    { id: 21, name: 'Quill Robotics', kind: 'company', category: 'Surgical robotics', topic: 'Medical robotics', aliases: [], query: '"Quill Robotics"', website: null, status: 'suggested', why: 'Announced a soft-tissue robot trial.', added_via: 'discovered', last_hit_at: hoursAgo(50) },
+    { id: 20, name: 'Arclight Endoscopy', kind: 'company', category: 'Imaging AI', topic: null, aliases: [], query: '"Arclight Endoscopy"', website: null, status: 'suggested', section: 'health', count: 4, why: 'Named in two items this week about capsule endoscopy.', added_via: 'discovered', last_hit_at: hoursAgo(30) },
+    { id: 21, name: 'Quill Robotics', kind: 'company', category: 'Surgical robotics', topic: null, aliases: [], query: '"Quill Robotics"', website: null, status: 'suggested', section: 'health', count: 2, why: 'Announced a soft-tissue robot trial.', added_via: 'discovered', last_hit_at: hoursAgo(50) },
+    { id: 22, name: 'Northwind Models', kind: 'lab', category: 'AI labs', topic: null, aliases: [], query: '"Northwind Models"', website: null, status: 'suggested', section: 'models', count: 3, why: 'Released an open-weight model this month.', added_via: 'discovered', last_hit_at: hoursAgo(20) },
+    { id: 23, name: 'Tern Agents', kind: 'company', category: 'Agent tooling', topic: 'Coding agents', aliases: [], query: '"Tern Agents"', website: null, status: 'suggested', section: '', count: 0, why: 'Builds coding-agent tooling.', added_via: 'discovered', last_hit_at: null },
   ]
-  return [...followed, ...suggested]
+  const rejected: WatchEntity[] = [
+    { id: 30, name: 'Dormant Analytics', kind: 'company', category: '', topic: null, aliases: [], query: '"Dormant Analytics"', website: null, status: 'rejected', section: 'industry', count: 1, why: 'Appeared once in a vendor press release.', added_via: 'discovered', last_hit_at: null },
+  ]
+  return [...followed, ...suggested, ...rejected]
 }
 
 /**
  * Shape a flat list as GET /watch does: followed and muted names grouped by category (each with up
- * to three recent items from the sample feed), suggestions apart.
+ * to three recent items from the sample feed), suggestions and rejected names apart, and the profile's sections.
  */
 export function groupWatch(entities: WatchEntity[], items: RadarItem[]): WatchResponse {
   const byId = new Map(items.map((item) => [item.id, item]))
@@ -255,7 +262,7 @@ export function groupWatch(entities: WatchEntity[], items: RadarItem[]): WatchRe
     const recent = recentFor(entity)
     return { ...entity, recent, week_count: recent.length }
   }
-  const followed = entities.filter((entity) => entity.status !== 'suggested').map(withRecent)
+  const followed = entities.filter((entity) => entity.status === 'active' || entity.status === 'muted').map(withRecent)
   const categories = Array.from(new Set(followed.map((entity) => entity.category || 'Other'))).map((name) => {
     const members = followed.filter((entity) => (entity.category || 'Other') === name)
     return {
@@ -265,7 +272,12 @@ export function groupWatch(entities: WatchEntity[], items: RadarItem[]): WatchRe
       paused: members.every((entity) => entity.status === 'muted'),
     }
   })
-  return { categories, suggested: entities.filter((entity) => entity.status === 'suggested').map(withRecent) }
+  return {
+    categories,
+    suggested: entities.filter((entity) => entity.status === 'suggested').map(withRecent),
+    rejected: entities.filter((entity) => entity.status === 'rejected').map(withRecent),
+    sections: Object.entries(SECTION_LABELS).map(([key, label]) => ({ key, label })),
+  }
 }
 
 /** Five plausible papers for a topic typed into Find papers. */

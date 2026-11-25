@@ -13,6 +13,8 @@ _OLD_TABLES = (
     "from_user BOOLEAN NOT NULL DEFAULT 0)",
     "CREATE TABLE radarbrief (id INTEGER PRIMARY KEY, day VARCHAR NOT NULL UNIQUE, "
     "doc VARCHAR NOT NULL, created_at DATETIME)",
+    "CREATE TABLE watchentity (id INTEGER PRIMARY KEY, name VARCHAR NOT NULL UNIQUE, "
+    "status VARCHAR NOT NULL DEFAULT 'suggested')",
 )
 
 
@@ -23,7 +25,8 @@ def _columns(engine, table: str) -> set[str]:
 
 
 def test_old_radar_tables_gain_the_new_columns_and_keep_their_rows(tmp_path) -> None:
-    """init_db adds the attempt counters, the error text, captured_at and regenerated_at."""
+    """init_db adds the attempt counters, the error text, `what`, captured_at, regenerated_at, and
+    the watch register's section and suggestion count."""
     engine = create_db_engine(tmp_path / "old.db")
     try:
         with Session(engine) as session:
@@ -33,9 +36,10 @@ def test_old_radar_tables_gain_the_new_columns_and_keep_their_rows(tmp_path) -> 
             session.commit()
         init_db(engine)
         init_db(engine)  # a second start changes nothing and does not fail
-        assert {"digest_attempts", "triage_attempts", "error"} <= _columns(engine, "assessment")
+        assert {"digest_attempts", "triage_attempts", "error", "what"} <= _columns(engine, "assessment")
         assert "captured_at" in _columns(engine, "itemstate")
         assert "regenerated_at" in _columns(engine, "radarbrief")
+        assert {"section", "suggest_count"} <= _columns(engine, "watchentity")
         with Session(engine) as session:
             row = session.exec(text(
                 "SELECT score, digest_attempts, triage_attempts, error FROM assessment")).one()
@@ -58,5 +62,24 @@ def test_old_assessment_tables_gain_what(tmp_path) -> None:
         with Session(engine) as session:
             row = session.exec(text("SELECT what, score FROM assessment WHERE item_id = 1")).one()
         assert tuple(row) == ("", 70)
+    finally:
+        engine.dispose()
+
+
+def test_old_watch_tables_gain_section_and_count(tmp_path) -> None:
+    """init_db adds the section and the suggestion count, and an old row reads as no section, count 0."""
+    engine = create_db_engine(tmp_path / "old.db")
+    try:
+        with Session(engine) as session:
+            for ddl in _OLD_TABLES:
+                session.exec(text(ddl))
+            session.exec(text("INSERT INTO watchentity (name, status) VALUES ('Alpha Scopes', 'active')"))
+            session.commit()
+        init_db(engine)
+        init_db(engine)
+        assert {"section", "suggest_count"} <= _columns(engine, "watchentity")
+        with Session(engine) as session:
+            row = session.exec(text("SELECT status, section, suggest_count FROM watchentity")).one()
+        assert tuple(row) == ("active", "", 0)
     finally:
         engine.dispose()

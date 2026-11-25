@@ -9,10 +9,14 @@ from sqlmodel import Session, select
 
 from spyglass_service.models import Item
 from spyglass_service.radar.models import Assessment, ItemEntity, WatchEntity, dumps, loads, utcnow
+from spyglass_service.radar.profile_defaults import load_profile
 from spyglass_service.radar.serialize import radar_items
+from spyglass_service.radar.watch.group_order import group_order, ordered
 
 KINDS = ("company", "lab", "regulator", "person", "publication")
-STATUSES = ("active", "suggested", "muted")
+STATUSES = ("active", "suggested", "muted", "rejected")
+# The statuses that count as followed: checked daily or paused. A suggested or rejected name is not.
+FOLLOWED = ("active", "muted")
 # The kinds whose stories fill the brief's "On your watch list" section: what competitors and
 # regulators are doing. AI labs, research centres and hospitals are kind "lab", and journals
 # and societies "publication"; they are watched too, but their stories go to the ordinary
@@ -92,10 +96,22 @@ def entity_dict(entity: WatchEntity) -> dict:
         "query": entity.query,
         "website": entity.website,
         "status": entity.status,
+        "section": entity.section,
+        "count": entity.suggest_count,
         "why": entity.why,
         "added_via": entity.added_via,
         "last_hit_at": entity.last_hit_at.isoformat() if entity.last_hit_at else None,
     }
+
+
+def shown_suggestion(entity: WatchEntity) -> bool:
+    """True for a suggestion the watch page may show: one a topic search found or one a cycle placed.
+
+    A mention-based suggestion from before the suggestions were chosen per profile section has no
+    topic and no section. It waits, unseen, until the next collection cycle places it in a section
+    or deletes it; until then it is never shown and never hidden in a batch.
+    """
+    return entity.status == "suggested" and bool(entity.topic or entity.section)
 
 
 def known_names(session: Session) -> set[str]:
@@ -234,14 +250,19 @@ def _week_item_ids(session: Session, entity_ids: list[int], now: datetime | None
 
 
 def grouped(session: Session, *, now: datetime | None = None) -> dict:
-    """The `GET /watch` payload: categories (by name) with entities and recent items, plus suggestions.
+    """The `GET /watch` payload: the whole picture the watch page draws.
 
-    Every entity carries `week_count` (items it brought into the Feed in the last 7 days), and
-    every category carries the same for the whole group (an item found by two names counts once)
-    and `paused`, true when every name in it is muted. `now` (naive UTC) is only for tests.
+    `categories` holds the followed names only (active or paused), group by group, in the stored
+    group order and then alphabetically. Every name carries `week_count` (items it brought into
+    the Feed in the last 7 days) and its recent items, and every category carries the same count
+    for the whole group (an item found by two names counts once) and `paused`, true when every
+    name in it is muted. `suggested` and `rejected` list those names, each as `entity_dict`
+    (suggestions carry their `section` and `count`); `suggested` holds only the suggestions
+    `shown_suggestion` allows. `sections` is the profile's sections as `{"key", "label"}`. `now`
+    (naive UTC) is only for tests.
     """
     entities = session.exec(select(WatchEntity)).all()
-    followed = [e for e in entities if e.status != "suggested"]
+    followed = [e for e in entities if e.status in FOLLOWED]
     recent_ids = _recent_item_ids(session, followed)
     week = _week_item_ids(session, [e.id for e in followed], now)
     items = {i["id"]: i for i in radar_items(session, [i for ids in recent_ids.values() for i in ids])}
@@ -256,7 +277,7 @@ def grouped(session: Session, *, now: datetime | None = None) -> dict:
         }
         categories.setdefault(name, []).append(entry)
         group_items.setdefault(name, set()).update(week.get(e.id, ()))
-    suggested = [entity_dict(e) for e in sorted(entities, key=lambda x: x.name.lower()) if e.status == "suggested"]
+    by_name = sorted(entities, key=lambda x: x.name.lower())
     return {
         "categories": [
             {
@@ -265,7 +286,12 @@ def grouped(session: Session, *, now: datetime | None = None) -> dict:
                 "week_count": len(group_items[n]),
                 "paused": all(e["status"] == "muted" for e in categories[n]),
             }
-            for n in sorted(categories, key=str.lower)
+            for n in ordered(categories, group_order(session))
         ],
-        "suggested": suggested,
+        "suggested": [entity_dict(e) for e in by_name if shown_suggestion(e)],
+        "rejected": [entity_dict(e) for e in by_name if e.status == "rejected"],
+        "sections": [
+            {"key": str(s.get("key")), "label": str(s.get("label") or s.get("key"))}
+            for s in load_profile(session).get("sections", [])
+        ],
     }

@@ -1,9 +1,9 @@
-// TopicsSection: "Topics you follow", the group above the organisations register on the Watch page.
-// Each topic can be edited, paused and resumed, or stopped (with an undo).
+// TopicsSection: "Topics you follow", the last section of the Watch page. Each topic can be edited,
+// paused and resumed, or stopped (with an undo). With no topic followed it is one line with a link.
 import { useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../../api/errors'
 import type { Track } from '../../api/types'
-import { Button, EmptyState, SectionHeading, Skeleton, toast, type MenuItem } from '../../ui'
+import { Button, SectionHeading, Skeleton, toast, type MenuItem } from '../../ui'
 import { useLoad } from '../sources/useLoad'
 import { createTrack, deleteTrack, getTracks, patchTrack } from './api'
 import { TrackEditDialog, type TrackFields } from './TrackEditDialog'
@@ -12,10 +12,12 @@ import { TrackRow } from './TrackRow'
 export interface TopicsSectionProps {
   /** Changes whenever the page has followed a topic from outside this section, so the list reloads. */
   refreshToken?: number
+  /** "Follow a topic" on the line shown when no topic is followed: the page opens that step of Add. */
+  onFollow?: () => void
 }
 
-/** The followed-topics group; it loads its own list and refreshes after each change. */
-export function TopicsSection({ refreshToken = 0 }: TopicsSectionProps = {}) {
+/** The followed-topics section; it loads its own list and refreshes after each change. */
+export function TopicsSection({ refreshToken = 0, onFollow }: TopicsSectionProps = {}) {
   const { data, error, loading, reload } = useLoad<Track[]>((signal) => getTracks(signal), 'tracks')
   const seenToken = useRef(refreshToken)
   useEffect(() => {
@@ -78,6 +80,20 @@ export function TopicsSection({ refreshToken = 0 }: TopicsSectionProps = {}) {
   ]
 
   const tracks = data ?? []
+  if (data && tracks.length === 0 && !error) {
+    return (
+      <section aria-label="Topics you follow" className="rw-section rw-section--line">
+        <p className="rw-topics-line">
+          <span>Topics you follow: none yet.</span>
+          {onFollow && (
+            <button type="button" className="rw-topics-line__link" onClick={onFollow}>
+              Follow a topic
+            </button>
+          )}
+        </p>
+      </section>
+    )
+  }
   return (
     <section aria-labelledby="watch-topics" className="rw-section">
       <SectionHeading id="watch-topics" note={tracks.length > 0 ? `${tracks.length}` : undefined}>
@@ -94,9 +110,6 @@ export function TopicsSection({ refreshToken = 0 }: TopicsSectionProps = {}) {
           <p className="r-error-text">{data ? `Could not refresh the topics. ${error}` : error}</p>
           <Button onClick={reload}>Try again</Button>
         </div>
-      )}
-      {data && tracks.length === 0 && (
-        <EmptyState title="You are not following any topics yet" body="Use Add, at the top of the page, to follow a topic, or open any article and choose Follow." />
       )}
       {tracks.length > 0 && (
         <ul className="r-rows">

@@ -2,13 +2,29 @@
 // POST /watch/review, POST /watch/review/apply). The register itself is in pageTypes.ts.
 import type { WatchEntity, WatchKind, WatchResponse } from './pageTypes'
 
-export type WatchGroupAction = 'pause' | 'resume' | 'rename' | 'move' | 'remove'
+export type WatchGroupAction = 'pause' | 'resume' | 'rename' | 'move' | 'remove' | 'up' | 'down'
+
+/** A suggestion can be sent to "not of interest" or taken back to "suggested". */
+export type SuggestionStatus = 'rejected' | 'suggested'
+
+/** POST /watch/suggestions/status. */
+export interface WatchSuggestionStatusBody {
+  ids: number[]
+  status: SuggestionStatus
+}
+
+/** The fresh register plus the ids whose status really changed. */
+export interface WatchSuggestionStatusResponse extends WatchResponse {
+  changed: number[]
+}
 
 export interface WatchGroupBody {
   category: string
   action: WatchGroupAction
   /** The new name, for rename and move. */
   to?: string
+  /** Pause or resume only these names of the group (the names its row shows). */
+  ids?: number[]
 }
 
 /** An entry as removed with its group: everything needed to put it back. */
@@ -19,6 +35,8 @@ export interface RemovedWatchEntity extends WatchEntity {
 /** The fresh register plus the entries a "remove" took out (empty for the other actions). */
 export interface WatchGroupResponse extends WatchResponse {
   removed: RemovedWatchEntity[]
+  /** With `ids` in the request: the ids whose status really changed. */
+  changed?: number[]
 }
 
 export interface WatchRestoreResponse extends WatchResponse {

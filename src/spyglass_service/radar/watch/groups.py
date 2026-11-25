@@ -1,4 +1,4 @@
-"""Whole-group changes to the watch register: pause, resume, rename, move and remove, and undo.
+"""Whole-group changes to the watch register: pause, resume, rename, move, remove, reorder, and undo.
 
 A group is every register entry that shares a category. Each action changes all of a group's
 entries in one transaction, so a failure leaves the group as it was. Removing returns the removed
@@ -13,9 +13,10 @@ from sqlmodel import Session, select
 
 from spyglass_service.models import Item
 from spyglass_service.radar.models import ItemEntity, WatchEntity, dumps
-from spyglass_service.radar.watch.registry import OTHER, STATUSES, entity_dict, norm_name
+from spyglass_service.radar.watch.group_order import group_order, ordered, save_group_order
+from spyglass_service.radar.watch.registry import FOLLOWED, OTHER, STATUSES, entity_dict, norm_name
 
-ACTIONS = ("pause", "resume", "rename", "move", "remove")
+ACTIONS = ("pause", "resume", "rename", "move", "remove", "up", "down")
 # Longest group name accepted; the register shows names as headings.
 MAX_CATEGORY = 60
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
@@ -48,7 +49,7 @@ def members(session: Session, category: str, *, followed_only: bool) -> list[Wat
     """The entries of a group; "Other" is the entries with no category."""
     stored = "" if category.casefold() == OTHER.casefold() else category
     rows = session.exec(select(WatchEntity).where(WatchEntity.category == stored)).all()
-    return [e for e in rows if e.status != "suggested"] if followed_only else list(rows)
+    return [e for e in rows if e.status in FOLLOWED] if followed_only else list(rows)
 
 
 def _links(session: Session, entity_id: int) -> list[dict]:
@@ -75,7 +76,8 @@ def apply_group_action(session: Session, category: str, action: str, *, to: str 
     pause: active entries become muted (suggestions are left for the reader to decide).
     resume: muted entries become active. rename and move: every entry, suggestions included,
     takes the new category (naming an existing group merges into it). remove: followed entries
-    are deleted with their links.
+    are deleted with their links. up and down: the group swaps places with its neighbour on the
+    page and nothing else changes. A rename or move keeps the group's place in the stored order.
 
     Returns the removed entries for "remove" (each as `entity_dict` plus `links`), else [].
     Raises GroupError for an unknown action or a bad or missing `to`, GroupNotFound when the
@@ -86,9 +88,13 @@ def apply_group_action(session: Session, category: str, action: str, *, to: str 
     target = clean_category(to) if action in ("rename", "move") and to is not None else None
     if action in ("rename", "move") and to is None:
         raise GroupError("Say which group to move them to.")
-    group = members(session, category, followed_only=action in ("pause", "resume", "remove"))
+    group = members(session, category, followed_only=action in ("pause", "resume", "remove", "up", "down"))
     if not group:
         raise GroupNotFound(f"There is no group called {category}.")
+    if action in ("up", "down"):
+        _shift_group(session, category, -1 if action == "up" else 1)
+        return []
+    shown = _shown_name(category)
     removed: list[dict] = []
     for entity in group:
         if action == "pause" and entity.status == "active":
@@ -101,8 +107,72 @@ def apply_group_action(session: Session, category: str, action: str, *, to: str 
             removed.append(delete_with_links(session, entity))
             continue
         session.add(entity)
+    if target is not None:
+        _rename_in_order(session, shown, target or OTHER)
     session.commit()
     return removed
+
+
+def switch_names(session: Session, category: str, action: str, ids: list[int]) -> list[int]:
+    """Pause or resume only the given entries of a group, in one commit; returns the ids that changed.
+
+    The watch page pauses (or watches again) exactly the names a group's row shows, and its Undo
+    takes back exactly the names that changed. Only the group's followed entries are touched: an id
+    in another group, a suggestion, a rejected name or an unknown id is ignored, and so is an entry
+    already in the wanted status. The changed ids keep the order of `ids`.
+
+    Raises GroupError for an action other than "pause" or "resume", GroupNotFound when the group has
+    no followed entries.
+    """
+    if action not in ("pause", "resume"):
+        raise GroupError("Only pause and resume can name the entries they change.")
+    group = {e.id: e for e in members(session, category, followed_only=True)}
+    if not group:
+        raise GroupNotFound(f"There is no group called {category}.")
+    before, after = ("active", "muted") if action == "pause" else ("muted", "active")
+    changed = [i for i in dict.fromkeys(ids) if i in group and group[i].status == before]
+    for entity_id in changed:
+        group[entity_id].status = after
+        session.add(group[entity_id])
+    session.commit()
+    return changed
+
+
+def _shown_name(category: str) -> str:
+    """The name the page shows for a group; entries with no category show as "Other"."""
+    return OTHER if category.casefold() == OTHER.casefold() else category
+
+
+def _shift_group(session: Session, category: str, step: int) -> None:
+    """Write the order as the page shows it, then swap the group with its neighbour.
+
+    `step` is -1 for up and 1 for down. Nothing swaps at either end of the list; the order is
+    still written, so a first move on a never-ordered install stores the alphabetical order.
+    """
+    names = {e.category or OTHER for e in session.exec(select(WatchEntity)).all() if e.status in FOLLOWED}
+    order = ordered(names, group_order(session))
+    here = order.index(_shown_name(category))
+    there = here + step
+    if 0 <= there < len(order):
+        order[here], order[there] = order[there], order[here]
+    save_group_order(session, order, commit=False)
+    session.commit()
+
+
+def _rename_in_order(session: Session, old: str, new: str) -> None:
+    """Carry a group's place in the stored order over to its new name, without committing.
+
+    A group that is not in the stored order keeps following the alphabet. When the new name is
+    already a group in the order (a merge), the merged group keeps that group's place.
+    """
+    order = group_order(session)
+    if old == new or old not in order:
+        return
+    if new in order:
+        order.remove(old)
+    else:
+        order[order.index(old)] = new
+    save_group_order(session, order, commit=False)
 
 
 def restore_entries(session: Session, entries: list[dict]) -> int:
@@ -124,6 +194,7 @@ def restore_entries(session: Session, entries: list[dict]) -> int:
             website=raw.get("website"), status=status, why=raw.get("why"),
             added_via=raw.get("added_via") or "user",
             last_hit_at=_when(raw.get("last_hit_at")),
+            section=raw.get("section") or "", suggest_count=int(raw.get("count") or 0),
         )
         session.add(entity)
         session.flush()

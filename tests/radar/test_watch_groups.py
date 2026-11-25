@@ -176,3 +176,66 @@ def test_restore_drops_links_to_items_that_no_longer_exist(tmp_path) -> None:
         groups.restore_entries(s, removed)
         assert all(link_.item_id != 9999 for link_ in s.exec(select(ItemEntity)).all())
     engine.dispose()
+
+
+def test_restore_keeps_a_rejected_status(tmp_path) -> None:
+    """An entry sent back to the register keeps "rejected", and its section and suggestion count."""
+    engine = make_engine(tmp_path)
+    entries = [{"name": "Gamma Optics", "status": "rejected", "section": "Competitors", "count": 4, "links": []}]
+    with Session(engine) as s:
+        assert groups.restore_entries(s, entries) == 1
+        gamma = s.exec(select(WatchEntity).where(WatchEntity.name == "Gamma Optics")).one()
+        assert (gamma.status, gamma.section, gamma.suggest_count) == ("rejected", "Competitors", 4)
+    engine.dispose()
+
+
+def _shown(session) -> list[str]:
+    """The group names in the order the page shows them."""
+    return [c["name"] for c in registry.grouped(session)["categories"]]
+
+
+def test_move_up_and_down_swap_neighbours_and_stop_at_the_ends(tmp_path) -> None:
+    engine = make_engine(tmp_path)
+    with Session(engine) as s:
+        for name, category in (("A1", "Alpha"), ("B1", "Beta"), ("C1", "Gamma")):
+            registry.create_entity(s, name, category=category)
+        assert groups.group_order(s) == []
+        groups.apply_group_action(s, "Gamma", "up")
+        assert _shown(s) == ["Alpha", "Gamma", "Beta"]
+        groups.apply_group_action(s, "Alpha", "down")
+        assert _shown(s) == ["Gamma", "Alpha", "Beta"]
+        groups.apply_group_action(s, "Gamma", "up")  # already first: nothing moves
+        groups.apply_group_action(s, "Beta", "down")  # already last: nothing moves
+        assert _shown(s) == ["Gamma", "Alpha", "Beta"]
+        assert groups.group_order(s) == ["Gamma", "Alpha", "Beta"]
+        with pytest.raises(groups.GroupNotFound):
+            groups.apply_group_action(s, "Nowhere", "up")
+    engine.dispose()
+
+
+def test_a_move_first_writes_the_order_as_shown(tmp_path) -> None:
+    """An install that never ordered its groups gets the alphabetical order stored on the first move."""
+    engine = make_engine(tmp_path)
+    with Session(engine) as s:
+        for name, category in (("A1", "Alpha"), ("B1", "Beta"), ("E1", "")):
+            registry.create_entity(s, name, category=category)
+        groups.apply_group_action(s, "Alpha", "up")  # at the top: only the order is written
+        assert groups.group_order(s) == ["Alpha", "Beta", "Other"]
+        groups.apply_group_action(s, "Other", "up")
+        assert groups.group_order(s) == ["Alpha", "Other", "Beta"]
+    engine.dispose()
+
+
+def test_rename_keeps_the_groups_place(tmp_path) -> None:
+    engine = make_engine(tmp_path)
+    with Session(engine) as s:
+        for name, category in (("A1", "Alpha"), ("B1", "Beta"), ("C1", "Gamma")):
+            registry.create_entity(s, name, category=category)
+        groups.save_group_order(s, ["Gamma", "Alpha", "Beta"])
+        groups.apply_group_action(s, "Alpha", "rename", to="Zulu")
+        assert groups.group_order(s) == ["Gamma", "Zulu", "Beta"]
+        assert _shown(s) == ["Gamma", "Zulu", "Beta"]
+        groups.apply_group_action(s, "Zulu", "move", to="Beta")  # merging takes the existing group's place
+        assert groups.group_order(s) == ["Gamma", "Beta"]
+        assert _shown(s) == ["Gamma", "Beta"]
+    engine.dispose()

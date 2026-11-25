@@ -1,6 +1,7 @@
 """Watch endpoints for whole groups and for the AI review of the register.
 
-PATCH /watch/groups, POST /watch/groups/restore, POST /watch/review and POST /watch/review/apply.
+PATCH /watch/groups, POST /watch/groups/restore, POST /watch/suggestions/status, POST /watch/review
+and POST /watch/review/apply.
 They are included by `api/watch.py` ahead of its `/watch/{id}` routes so "groups" is never read
 as an id. Each change answers with the fresh register (the `GET /watch` payload).
 """
@@ -11,23 +12,28 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from sqlmodel import Session
+from sqlmodel import Session, select
 
+from spyglass_service.radar.models import WatchEntity
 from spyglass_service.radar.watch import groups, registry, review, review_apply
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 Kind = Literal["company", "lab", "regulator", "person", "publication"]
-Status = Literal["active", "suggested", "muted"]
+Status = Literal["active", "suggested", "muted", "rejected"]
 
 
 class GroupBody(BaseModel):
-    """Body of PATCH /watch/groups: one action on every entry of a group."""
+    """Body of PATCH /watch/groups: one action on every entry of a group ("up" and "down" move the group in the page order).
+
+    `ids`, only with "pause" or "resume", limits the action to those entries of the group.
+    """
 
     category: str = Field(min_length=1, max_length=groups.MAX_CATEGORY)
-    action: Literal["pause", "resume", "rename", "move", "remove"]
+    action: Literal["pause", "resume", "rename", "move", "remove", "up", "down"]
     to: str | None = Field(default=None, max_length=200)
+    ids: list[int] | None = Field(default=None, max_length=500)
 
 
 class LinkBody(BaseModel):
@@ -44,10 +50,13 @@ class RestoreEntry(BaseModel):
     kind: Kind = "company"
     category: str = Field(default="", max_length=groups.MAX_CATEGORY)
     topic: str | None = Field(default=None, max_length=200)
-    aliases: list[str] = Field(default_factory=list, max_length=10)
+    # Higher than the ten a reader may type: each suggestion refresh can add another spelling.
+    aliases: list[str] = Field(default_factory=list, max_length=50)
     query: str | None = Field(default=None, max_length=200)
     website: str | None = Field(default=None, max_length=300)
     status: Status = "active"
+    section: str = Field(default="", max_length=120)
+    count: int = Field(default=0, ge=0)
     why: str | None = Field(default=None, max_length=300)
     added_via: str = Field(default="user", max_length=30)
     last_hit_at: str | None = Field(default=None, max_length=40)
@@ -58,6 +67,13 @@ class RestoreBody(BaseModel):
     """Body of POST /watch/groups/restore."""
 
     entries: list[RestoreEntry] = Field(max_length=200)
+
+
+class SuggestionsBody(BaseModel):
+    """Body of POST /watch/suggestions/status: undecided suggestions to hide ("rejected") or take back ("suggested")."""
+
+    ids: list[int] = Field(max_length=500)
+    status: Literal["rejected", "suggested"]
 
 
 class AddProposal(BaseModel):
@@ -102,19 +118,25 @@ def _register(request: Request) -> dict:
 
 @router.patch("/watch/groups")
 def change_group(body: GroupBody, request: Request) -> dict:
-    """Pause, resume, rename, move or remove every entry of a group; answers the fresh register.
+    """Pause, resume, rename, move or remove every entry of a group, or move the group up or down the page; answers the fresh register.
 
     The answer also carries `removed`, the removed entries (empty unless the action is "remove"),
-    which `POST /watch/groups/restore` takes back for Undo.
+    which `POST /watch/groups/restore` takes back for Undo. With `ids` (pause or resume only) just
+    those entries of the group change, and the answer also carries `changed`, the ids that did.
     """
+    changed: list[int] | None = None
     with Session(request.app.state.engine) as session:
         try:
-            removed = groups.apply_group_action(session, body.category, body.action, to=body.to)
+            if body.ids is None:
+                removed = groups.apply_group_action(session, body.category, body.action, to=body.to)
+            else:
+                removed, changed = [], groups.switch_names(session, body.category, body.action, body.ids)
         except groups.GroupNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except groups.GroupError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {**_register(request), "removed": removed}
+    extra = {} if changed is None else {"changed": changed}
+    return {**_register(request), "removed": removed, **extra}
 
 
 @router.post("/watch/groups/restore")
@@ -124,6 +146,30 @@ def restore_group(body: RestoreBody, request: Request) -> dict:
     with Session(request.app.state.engine) as session:
         restored = groups.restore_entries(session, entries)
     return {**_register(request), "restored": restored}
+
+
+@router.post("/watch/suggestions/status")
+def set_suggestions_status(body: SuggestionsBody, request: Request) -> dict:
+    """Hide many suggestions at once ("rejected"), or take them back ("suggested"); answers the fresh register.
+
+    Only names that are currently a suggestion or rejected are touched, so a watched or paused
+    name can never be changed through this route; such ids, and unknown ids, are ignored. A
+    suggestion the page does not show (`registry.shown_suggestion`: one no cycle has placed yet)
+    is ignored too, so it cannot be hidden unseen. The answer also carries `changed`, the ids
+    whose status actually changed, in the order sent.
+    """
+    wanted = list(dict.fromkeys(body.ids))
+    with Session(request.app.state.engine) as session:
+        rows = session.exec(
+            select(WatchEntity).where(WatchEntity.id.in_(wanted), WatchEntity.status.in_(("suggested", "rejected")))
+        ).all()
+        by_id = {row.id: row for row in rows if row.status == "rejected" or registry.shown_suggestion(row)}
+        changed = [i for i in wanted if i in by_id and by_id[i].status != body.status]
+        for i in changed:
+            by_id[i].status = body.status
+            session.add(by_id[i])
+        session.commit()
+    return {**_register(request), "changed": changed}
 
 
 @router.post("/watch/review")

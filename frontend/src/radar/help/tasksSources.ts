@@ -135,8 +135,8 @@ export const WATCH_GROUP: HelpGroup = {
       steps: [
         'Open {{Watch}} and open the menu named "Actions for the group [name]" on the group heading.',
         'Choose {{Pause this group}}, {{Rename group…}}, {{Move all to another group…}} or {{Remove this group…}}.',
-        'A paused group shows {{Paused}}; press {{Resume}} to bring it back.',
-        'For a single name, use the menu named "Actions for [name]" on its row: it has {{Edit}}, {{Mute}} or {{Watch again}}, and {{Remove…}}.',
+        'A paused group stays where it is with its names grey, and the message offers {{Undo}}; {{Watch this group again}} in the same menu brings them back.',
+        'For a single name, click its chip to pause it or watch it again. The menu named "More actions for [name]" beside the chip has {{Details}}, where you edit it, {{Move to another group…}}, {{See its items in the Feed}} and {{Remove…}}.',
       ],
       next: 'A paused group is skipped at collection but keeps its names. Removing a name stops the checks and forgets which items mention it; the items stay in your Feed.',
       target: { name: 'watch' },

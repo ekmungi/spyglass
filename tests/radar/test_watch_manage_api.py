@@ -1,16 +1,17 @@
 """Tests for the group and review endpoints, on an app that mounts only the watch router."""
 
+import json
 from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from spyglass_service.radar.api import watch as watch_api
 from spyglass_service.radar.api import watch_manage
 from spyglass_service.models import Item
-from spyglass_service.radar.models import ItemEntity, utcnow
+from spyglass_service.radar.models import ItemEntity, WatchEntity, utcnow
 from spyglass_service.radar.watch import registry
 
 from .test_brief_seed import add_item, make_engine
@@ -74,6 +75,34 @@ def test_pause_resume_rename_and_move_answer_the_fresh_register(client) -> None:
     assert [c["name"] for c in moved["categories"]] == ["Devices"]
 
 
+def test_a_group_pause_or_resume_with_ids_changes_only_those_entries(client) -> None:
+    """The page pauses (or watches again) the names a group's row shows, and Undo takes back exactly those."""
+    alpha, beta, gamma = add(client, "Alpha Scopes"), add(client, "Beta Vision"), add(client, "Gamma Optics")
+    other = add(client, "Delta Labs", "AI labs")
+    client.patch(f"/watch/{gamma['id']}", json={"status": "muted"})
+
+    def statuses(body: dict) -> dict[str, str]:
+        return {e["name"]: e["status"] for c in body["categories"] for e in c["entities"]}
+
+    sent = [alpha["id"], gamma["id"], other["id"], 9999]
+    paused = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "pause", "ids": sent})
+    assert paused.status_code == 200
+    # Gamma was paused already, Delta is in another group and 9999 does not exist.
+    assert paused.json()["changed"] == [alpha["id"]] and paused.json()["removed"] == []
+    assert statuses(paused.json()) == {"Alpha Scopes": "muted", "Beta Vision": "active", "Gamma Optics": "muted",
+                                       "Delta Labs": "active"}
+
+    resumed = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "resume", "ids": [alpha["id"]]})
+    assert resumed.json()["changed"] == [alpha["id"]]
+    assert statuses(resumed.json())["Gamma Optics"] == "muted"  # paused before, so it stays paused
+    assert beta["id"] not in resumed.json()["changed"]
+
+    renamed = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "rename", "to": "X", "ids": [1]})
+    assert renamed.status_code == 422
+    nowhere = client.patch("/watch/groups", json={"category": "Nowhere", "action": "pause", "ids": [alpha["id"]]})
+    assert nowhere.status_code == 404
+
+
 def test_remove_returns_the_entries_and_restore_brings_them_back(client) -> None:
     entity = add(client, "Alpha Scopes")
     add(client, "Beta Vision")
@@ -85,6 +114,38 @@ def test_remove_returns_the_entries_and_restore_brings_them_back(client) -> None
     entities = group(back, "Endoscopy AI")["entities"]
     assert {e["name"] for e in entities} == {"Alpha Scopes", "Beta Vision"}
     assert next(e for e in entities if e["name"] == "Alpha Scopes")["week_count"] == 1
+
+
+def test_restore_through_the_api_keeps_the_section_and_the_suggestion_count(client) -> None:
+    """Undo after removing a group sends section and count back, and the register keeps them."""
+    entity = add(client, "Alpha Scopes")
+    with Session(client.engine) as s:
+        row = s.get(WatchEntity, entity["id"])
+        row.section, row.suggest_count = "Competitors", 3
+        s.add(row)
+        s.commit()
+    removed = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "remove"}).json()
+    assert (removed["removed"][0]["section"], removed["removed"][0]["count"]) == ("Competitors", 3)
+    assert client.post("/watch/groups/restore", json={"entries": removed["removed"]}).json()["restored"] == 1
+    with Session(client.engine) as s:
+        back = s.exec(select(WatchEntity).where(WatchEntity.name == "Alpha Scopes")).one()
+        assert (back.section, back.suggest_count) == ("Competitors", 3)
+
+
+def test_restore_takes_back_an_entry_with_many_aliases(client) -> None:
+    """A suggestion refresh can give an entry more than ten aliases; Undo after removing its group still works."""
+    entity = add(client, "Alpha Scopes")
+    aliases = [f"Alpha Scopes {i}" for i in range(12)]
+    with Session(client.engine) as s:  # as the refresh adds them, one spelling at a time
+        row = s.get(WatchEntity, entity["id"])
+        row.aliases = json.dumps(aliases)
+        s.add(row)
+        s.commit()
+    removed = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "remove"}).json()["removed"]
+    assert len(removed[0]["aliases"]) == 12
+    back = client.post("/watch/groups/restore", json={"entries": removed})
+    assert back.status_code == 200 and back.json()["restored"] == 1
+    assert group(back.json(), "Endoscopy AI")["entities"][0]["aliases"] == aliases
 
 
 def test_group_errors_are_readable_statuses(client) -> None:
@@ -147,3 +208,78 @@ def test_apply_refuses_a_bad_group_name_and_changes_nothing(client) -> None:
     assert client.post("/watch/review/apply", json={"add": [{"name": ""}]}).status_code == 422
     with Session(client.engine) as s:
         assert registry.grouped(s)["categories"][0]["entities"][0]["status"] == "active"
+
+
+def test_up_and_down_reorder_the_groups_and_answer_the_fresh_register(client) -> None:
+    add(client, "Alpha Scopes", "Alpha")
+    add(client, "Beta Vision", "Beta")
+    moved = client.patch("/watch/groups", json={"category": "Beta", "action": "up"})
+    assert moved.status_code == 200 and [c["name"] for c in moved.json()["categories"]] == ["Beta", "Alpha"]
+    assert moved.json()["removed"] == []
+    again = client.patch("/watch/groups", json={"category": "Beta", "action": "down"}).json()
+    assert [c["name"] for c in again["categories"]] == ["Alpha", "Beta"]
+    assert client.patch("/watch/groups", json={"category": "Nowhere", "action": "up"}).status_code == 404
+
+
+def suggest(client, name: str, status: str = "suggested", section: str = "health") -> int:
+    """Store a name as a suggestion (or another status) through the API; returns its id.
+
+    The suggestion sits in `section`, as a collection cycle places it; "" leaves it unplaced, like an
+    older mention-based suggestion that no cycle has looked at yet.
+    """
+    entity = add(client, name)
+    assert client.patch(f"/watch/{entity['id']}", json={"status": status}).status_code == 200
+    with Session(client.engine) as s:
+        row = s.get(WatchEntity, entity["id"])
+        row.section = section
+        s.add(row)
+        s.commit()
+    return entity["id"]
+
+
+def test_hide_the_rest_rejects_only_undecided_suggestions(client) -> None:
+    first, second = suggest(client, "Alpha Scopes"), suggest(client, "Beta Vision")
+    already = suggest(client, "Gamma Optics", "rejected")
+    response = client.post("/watch/suggestions/status", json={"ids": [first, second, already], "status": "rejected"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["changed"] == [first, second]
+    assert body["suggested"] == []
+    assert sorted(e["name"] for e in body["rejected"]) == ["Alpha Scopes", "Beta Vision", "Gamma Optics"]
+
+
+def test_the_same_route_takes_them_back(client) -> None:
+    ids = [suggest(client, "Alpha Scopes"), suggest(client, "Beta Vision")]
+    client.post("/watch/suggestions/status", json={"ids": ids, "status": "rejected"})
+    back = client.post("/watch/suggestions/status", json={"ids": ids, "status": "suggested"}).json()
+    assert back["changed"] == ids
+    assert back["rejected"] == []
+    assert sorted(e["name"] for e in back["suggested"]) == ["Alpha Scopes", "Beta Vision"]
+
+
+def test_followed_ids_are_ignored(client) -> None:
+    watched = add(client, "Alpha Scopes")["id"]
+    paused = suggest(client, "Beta Vision", "muted")
+    suggestion = suggest(client, "Gamma Optics")
+    body = client.post(
+        "/watch/suggestions/status", json={"ids": [watched, paused, suggestion, 9999], "status": "rejected"}
+    ).json()
+    assert body["changed"] == [suggestion]
+    statuses = {e["name"]: e["status"] for c in body["categories"] for e in c["entities"]}
+    assert statuses == {"Alpha Scopes": "active", "Beta Vision": "muted"}
+
+
+def test_a_suggestion_no_cycle_has_placed_cannot_be_hidden(client) -> None:
+    """The page never shows an unplaced suggestion, and the route will not hide one either."""
+    unplaced = suggest(client, "Legacy Co", section="")
+    placed = suggest(client, "Placed Co")
+    body = client.post("/watch/suggestions/status", json={"ids": [unplaced, placed], "status": "rejected"}).json()
+    assert body["changed"] == [placed]
+    assert body["suggested"] == [] and [e["name"] for e in body["rejected"]] == ["Placed Co"]
+    with Session(client.engine) as s:
+        assert s.get(WatchEntity, unplaced).status == "suggested"
+
+
+def test_suggestion_status_rejects_a_followed_status_and_too_many_ids(client) -> None:
+    assert client.post("/watch/suggestions/status", json={"ids": [1], "status": "active"}).status_code == 422
+    assert client.post("/watch/suggestions/status", json={"ids": list(range(501)), "status": "rejected"}).status_code == 422

@@ -1,10 +1,10 @@
 // The secondary pages against the sample-mode fixtures (the same shapes the real service sends):
-// they must load, and accepting or dismissing a watch suggestion must change the list. The sample
+// they must load, and watching or rejecting a watch suggestion must reach the sample service. The sample
 // data must also hold every piece the page design shows: "what it says" texts, unpicked stories and votes.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { setFetchForTesting } from '../api/transport'
-import { parseProfileReply } from '../api/client'
+import { getWatch, parseProfileReply, patchWatchGroup, setSuggestionStatus } from '../api/client'
 import type { ItemState, RadarItem, TodayResponse } from '../api/types'
 import { clearResourceCache } from '../hooks/useResource'
 import { mockFetch, resetMockState } from '../mock'
@@ -30,25 +30,74 @@ afterEach(() => {
 })
 
 describe('Watch page in sample mode', () => {
-  it('moves an accepted suggestion into its category', async () => {
+  it('watches a suggestion in place, and shows it in its group on the next visit', async () => {
+    const first = render(<WatchPage />)
+    const suggested = await screen.findByRole('region', { name: 'Suggested this month' }, { timeout: 4000 })
+    const chip = within(suggested).getByRole('button', { name: 'Arclight Endoscopy, named in 4 items' })
+    fireEvent.click(chip)
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+    // The chip stays in its row on this visit; the next visit is opened once the service has agreed.
+    await waitFor(() => expect(chip.closest('.rw-chip')).not.toHaveAttribute('aria-busy'), { timeout: 4000 })
+    expect(within(suggested).getByRole('button', { name: 'Arclight Endoscopy, named in 4 items' })).toBe(chip)
+    first.unmount()
+    // The sample service recorded the change itself, not only the answer the page remembered.
+    const followed = (await getWatch()).categories.flatMap((category) => category.entities)
+    expect(followed.find((entity) => entity.name === 'Arclight Endoscopy')).toMatchObject({ status: 'active', category: 'Imaging AI' })
+
     render(<WatchPage />)
-    const suggested = await screen.findByRole('region', { name: 'Suggested' }, { timeout: 4000 })
-    expect(within(suggested).getByText('Arclight Endoscopy')).toBeInTheDocument()
-
-    fireEvent.click(within(suggested).getByRole('button', { name: 'Accept Arclight Endoscopy' }))
-
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Suggested' })).not.toHaveTextContent('Arclight Endoscopy'), { timeout: 4000 })
-    const category = screen.getByRole('region', { name: 'Imaging AI' })
-    expect(within(category).getByText('Arclight Endoscopy')).toBeInTheDocument()
+    const category = await screen.findByRole('group', { name: 'Imaging AI' }, { timeout: 4000 })
+    expect(within(category).getByRole('button', { name: 'Arclight Endoscopy', pressed: true })).toBeInTheDocument()
   })
 
-  it('removes a dismissed suggestion from the list', async () => {
+  it('strikes a rejected suggestion through in place and lists it under Not of interest at once', async () => {
+    const first = render(<WatchPage />)
+    const suggested = await screen.findByRole('region', { name: 'Suggested this month' }, { timeout: 4000 })
+    fireEvent.click(within(suggested).getByRole('button', { name: 'Not of interest: Quill Robotics' }))
+    const takeBack = within(suggested).getByRole('button', { name: 'Take back Quill Robotics' })
+    await waitFor(() => expect(takeBack.closest('.rw-chip')).not.toHaveAttribute('aria-busy'), { timeout: 4000 })
+    expect(screen.getByText('Not of interest (2)')).toBeInTheDocument()
+    first.unmount()
+    // The sample service recorded the change itself, not only the answer the page remembered.
+    const reg = await getWatch()
+    expect(reg.rejected.find((entity) => entity.name === 'Quill Robotics')).toMatchObject({ status: 'rejected' })
+    expect(reg.suggested.map((entity) => entity.name)).not.toContain('Quill Robotics')
+
     render(<WatchPage />)
-    const suggested = await screen.findByRole('region', { name: 'Suggested' }, { timeout: 4000 })
-    fireEvent.click(within(suggested).getByRole('button', { name: 'Dismiss Quill Robotics' }))
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Suggested' })).not.toHaveTextContent('Quill Robotics'), { timeout: 4000 })
-    // Dismissed names are kept out of the way, not deleted.
-    expect(screen.getByText(/^Muted \(1\)$/)).toBeInTheDocument()
+    expect(await screen.findByText('Not of interest (2)', undefined, { timeout: 4000 })).toBeInTheDocument()
+    expect(within(await screen.findByRole('region', { name: 'Suggested this month' })).queryByText('Quill Robotics')).not.toBeInTheDocument()
+  })
+})
+
+describe('Watch register in sample mode', () => {
+  it('sends profile sections, suggestion counts and a rejected name like the service', async () => {
+    const reg = await getWatch()
+    expect(reg.sections.map((section) => section.key)).toContain('health')
+    expect(reg.rejected.map((entity) => entity.name)).toEqual(['Dormant Analytics'])
+    const arclight = reg.suggested.find((entity) => entity.name === 'Arclight Endoscopy')
+    expect(arclight).toMatchObject({ section: 'health', count: 4, topic: null })
+    expect(reg.suggested.some((entity) => entity.topic)).toBe(true)
+    // Followed groups hold followed names only.
+    const followed = reg.categories.flatMap((category) => category.entities)
+    expect(followed.every((entity) => entity.status === 'active' || entity.status === 'muted')).toBe(true)
+  })
+
+  it('rejects a suggestion and takes it back through the status route', async () => {
+    const rejected = await setSuggestionStatus([21], 'rejected')
+    expect(rejected.changed).toEqual([21])
+    expect(rejected.suggested.map((entity) => entity.name)).not.toContain('Quill Robotics')
+    expect(rejected.rejected.map((entity) => entity.name)).toContain('Quill Robotics')
+
+    const back = await setSuggestionStatus([21, 1], 'suggested') // id 1 is followed, so it is left alone
+    expect(back.changed).toEqual([21])
+    expect(back.suggested.map((entity) => entity.name)).toContain('Quill Robotics')
+  })
+
+  it('moves a group up and down', async () => {
+    const before = (await getWatch()).categories.map((category) => category.name)
+    const down = await patchWatchGroup({ category: before[0], action: 'down' })
+    expect(down.categories.map((category) => category.name).slice(0, 2)).toEqual([before[1], before[0]])
+    const up = await patchWatchGroup({ category: before[0], action: 'up' })
+    expect(up.categories.map((category) => category.name)).toEqual(before)
   })
 })
 

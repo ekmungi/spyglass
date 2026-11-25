@@ -81,10 +81,10 @@ def missed_conditions(sort_key: ColumnElement, now: datetime | None = None) -> t
 def watch_group_item_ids(session: Session, group: str, now: datetime | None = None) -> set[int]:
     """Ids of the items the Watch page counts for `group` this week; empty for an unknown group.
 
-    A group is the entities' category (those without one are in "Other"); suggested names are not
+    A group is the entities' category (those without one are in "Other"); suggested and rejected names are not
     followed, so they are not in it. The week query is the register's own.
     """
-    entities = session.exec(select(WatchEntity).where(WatchEntity.status != "suggested")).all()
+    entities = session.exec(select(WatchEntity).where(WatchEntity.status.in_(registry.FOLLOWED))).all()
     wanted = [e.id for e in entities if e.id is not None and (e.category or registry.OTHER) == group]
     # The register's own query: one definition of "this week" for the heading and for these rows.
     found = registry._week_item_ids(session, wanted, now)  # noqa: SLF001

@@ -224,7 +224,11 @@ class AssistMessage(SQLModel, table=True):
 class WatchEntity(SQLModel, table=True):
     """A company, lab, regulator or person the reader follows.
 
-    status: active (checked daily) / suggested (waiting for the reader's yes) / muted.
+    status: active (checked daily) / suggested (waiting for the reader's yes) / muted (paused, still
+    followed) / rejected (the reader said "not of interest"; never followed, and not suggested again).
+    section: the Watch page section the name sits in; empty until one is set.
+    suggest_count: for a suggestion, how many recent top and notable items named the organisation
+        (its products and labs included), counted in its section at the last refresh.
     """
 
     id: int | None = Field(default=None, primary_key=True)
@@ -242,6 +246,8 @@ class WatchEntity(SQLModel, table=True):
     website: str | None = None
     feed_url: str | None = None
     status: str = Field(default="suggested", index=True)
+    section: str = ""
+    suggest_count: int = 0
     why: str | None = None
     # seed / discovered / user
     added_via: str = "seed"

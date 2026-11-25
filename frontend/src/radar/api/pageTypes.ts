@@ -84,7 +84,8 @@ export interface CollectResult {
 /* ---------- Watch ---------- */
 
 export type WatchKind = 'company' | 'lab' | 'regulator' | 'person' | 'publication'
-export type WatchStatus = 'active' | 'suggested' | 'muted'
+/** active = watched, muted = paused but still followed, suggested = proposed by Spyglass, rejected = "not of interest". */
+export type WatchStatus = 'active' | 'suggested' | 'muted' | 'rejected'
 
 export interface WatchEntity {
   id: number
@@ -97,6 +98,10 @@ export interface WatchEntity {
   query?: string | null
   website: string | null
   status: WatchStatus
+  /** The profile section key a suggestion belongs to, or "" when it belongs to none. */
+  section: string
+  /** How many items named it (for a suggestion). */
+  count: number
   why: string | null
   added_via: 'seed' | 'discovered' | 'user' | (string & {})
   last_hit_at: string | null
@@ -114,9 +119,20 @@ export interface WatchCategory {
   paused?: boolean
 }
 
+/** One section of the reader's profile, as the register lists it. */
+export interface WatchSection {
+  key: string
+  label: string
+}
+
 export interface WatchResponse {
+  /** Followed names only (active and muted), in the reader's stored group order. */
   categories: WatchCategory[]
   suggested: WatchEntity[]
+  /** Names the reader marked "not of interest". */
+  rejected: WatchEntity[]
+  /** The profile's sections, in profile order. */
+  sections: WatchSection[]
 }
 
 export interface WatchCreateBody {

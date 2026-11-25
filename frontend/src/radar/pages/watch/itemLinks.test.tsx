@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { RadarItem } from '../../api/types'
 import type { Track } from '../../api/trackTypes'
 import { readerOrigin } from '../../router'
+import { EntityDialog } from './EntityDialog'
 import { TrackRow } from './TrackRow'
-import { WatchRow } from './WatchRow'
 import { entry, recentItem } from './testFixtures'
 
 beforeEach(() => {
@@ -24,11 +24,16 @@ function track(): Track {
 }
 
 describe('Watch item links', () => {
-  it('a name\'s latest item opens the reader with Watch as its origin', () => {
+  it('a name\'s latest item in Details opens the reader with Watch as its origin', () => {
     render(
-      <ul>
-        <WatchRow entry={entry({ id: 1, name: 'Acme', recent: [recentItem(40, 'Acme story') as unknown as RadarItem] })} busy={false} />
-      </ul>,
+      <EntityDialog
+        open
+        entry={entry({ id: 1, name: 'Acme', recent: [recentItem(40, 'Acme story') as unknown as RadarItem] })}
+        group="Imaging AI"
+        categories={[]}
+        onClose={() => {}}
+        onSave={() => Promise.resolve()}
+      />,
     )
     fireEvent.click(screen.getByRole('link', { name: 'Acme story' }))
     expect(window.location.hash).toBe('#/item/40')
