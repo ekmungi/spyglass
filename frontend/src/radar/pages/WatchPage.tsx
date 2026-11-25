@@ -68,8 +68,9 @@ export default function WatchPage() {
   const [topicsToken, setTopicsToken] = useState(0)
 
   // Laid out once per load; a chip click changes only that chip's look, and the chip keeps its place
-  // until an action that changes the structure. Every reload and replace below is such an action.
-  const { layout, switching, toggle, change, changeMany, changeGroup: switchGroup, restructure } = useWatchLayout(data, loaded.remember)
+  // until an action that changes the structure. Every reload and replace below is such an action; the
+  // quiet reload after a click on a name that no longer exists is not, so the other chips stay put.
+  const { layout, switching, toggle, change, changeMany, changeGroup: switchGroup, restructure } = useWatchLayout(data, loaded.remember, loaded.reload)
   const reload = () => {
     restructure()
     loaded.reload()

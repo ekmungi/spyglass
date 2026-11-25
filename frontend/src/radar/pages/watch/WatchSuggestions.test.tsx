@@ -1,7 +1,7 @@
 // Tests for the suggestions on the Watch page: one row of chips per profile section with counts, watch
 // and undo in place, the cross that marks a name not of interest, "Hide the rest for good", and the
 // collapsed Not of interest list that takes a name back.
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/errors'
 import { ToastViewport } from '../../ui'
@@ -277,6 +277,37 @@ describe('Suggested', () => {
     expect(await screen.findByText('Spyglass is not reachable.')).toBeInTheDocument()
     expect(within(health).getByRole('button', { name: 'NHS England, named in 15 items' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.queryByText(/^Watching NHS England/)).not.toBeInTheDocument()
+  })
+
+  it('loads the list again quietly when a suggestion was deleted while the page was open, so its chip goes', async () => {
+    api.changeEntry.mockRejectedValue(new ApiError('No such entity', { status: 404, kind: 'http', path: '/watch/21' }))
+    const after = suggestionRegister()
+    after.suggested = after.suggested.filter((entity) => entity.id !== 21)
+    api.getWatch.mockResolvedValueOnce(suggestionRegister()).mockResolvedValue(after)
+    renderPage()
+    const health = row(await suggestedSection(), 'Healthcare AI & medtech')
+    fireEvent.click(within(health).getByRole('button', { name: 'Oura, named in 9 items' }))
+    expect(await screen.findByText('No such entity')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Oura, named in 9 items' })).not.toBeInTheDocument())
+    expect(api.getWatch).toHaveBeenCalledTimes(2)
+    expect(screen.getAllByText('No such entity')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'NHS England, named in 15 items' })).toBeInTheDocument()
+  })
+
+  it('keeps the message of "Hide the rest for good" for ten seconds, longer than the others', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      renderPage()
+      const section = await suggestedSection()
+      fireEvent.click(within(section).getByRole('button', { name: 'Hide the rest for good' }))
+      await screen.findByText('5 names will not be suggested again.')
+      act(() => vi.advanceTimersByTime(9000))
+      expect(screen.getByText('5 names will not be suggested again.')).toBeInTheDocument()
+      act(() => vi.advanceTimersByTime(1500))
+      expect(screen.queryByText('5 names will not be suggested again.')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('puts every chip back and says why when hiding the rest fails', async () => {

@@ -50,7 +50,8 @@ class RestoreEntry(BaseModel):
     kind: Kind = "company"
     category: str = Field(default="", max_length=groups.MAX_CATEGORY)
     topic: str | None = Field(default=None, max_length=200)
-    aliases: list[str] = Field(default_factory=list, max_length=10)
+    # Higher than the ten a reader may type: each suggestion refresh can add another spelling.
+    aliases: list[str] = Field(default_factory=list, max_length=50)
     query: str | None = Field(default=None, max_length=200)
     website: str | None = Field(default=None, max_length=300)
     status: Status = "active"

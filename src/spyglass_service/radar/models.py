@@ -224,7 +224,8 @@ class WatchEntity(SQLModel, table=True):
     status: active (checked daily) / suggested (waiting for the reader's yes) / muted (paused, still
     followed) / rejected (the reader said "not of interest"; never followed, and not suggested again).
     section: the Watch page section the name sits in; empty until one is set.
-    suggest_count: how many times Spyglass has suggested the name.
+    suggest_count: for a suggestion, how many recent top and notable items named the organisation
+        (its products and labs included), counted in its section at the last refresh.
     """
 
     id: int | None = Field(default=None, primary_key=True)

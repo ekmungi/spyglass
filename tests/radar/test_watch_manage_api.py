@@ -1,5 +1,6 @@
 """Tests for the group and review endpoints, on an app that mounts only the watch router."""
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -129,6 +130,22 @@ def test_restore_through_the_api_keeps_the_section_and_the_suggestion_count(clie
     with Session(client.engine) as s:
         back = s.exec(select(WatchEntity).where(WatchEntity.name == "Alpha Scopes")).one()
         assert (back.section, back.suggest_count) == ("Competitors", 3)
+
+
+def test_restore_takes_back_an_entry_with_many_aliases(client) -> None:
+    """A suggestion refresh can give an entry more than ten aliases; Undo after removing its group still works."""
+    entity = add(client, "Alpha Scopes")
+    aliases = [f"Alpha Scopes {i}" for i in range(12)]
+    with Session(client.engine) as s:  # as the refresh adds them, one spelling at a time
+        row = s.get(WatchEntity, entity["id"])
+        row.aliases = json.dumps(aliases)
+        s.add(row)
+        s.commit()
+    removed = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "remove"}).json()["removed"]
+    assert len(removed[0]["aliases"]) == 12
+    back = client.post("/watch/groups/restore", json={"entries": removed})
+    assert back.status_code == 200 and back.json()["restored"] == 1
+    assert group(back.json(), "Endoscopy AI")["entities"][0]["aliases"] == aliases
 
 
 def test_group_errors_are_readable_statuses(client) -> None:

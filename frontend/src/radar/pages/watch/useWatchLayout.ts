@@ -4,7 +4,7 @@
 // same for every name its row shows. A name changed on this visit keeps its place, and its look, when
 // new data arrives, until the page calls `restructure` for an action that changes the structure.
 import { useEffect, useRef, useState } from 'react'
-import { errorMessage } from '../../api/errors'
+import { errorMessage, isMissing } from '../../api/errors'
 import type { SuggestionStatus, WatchStatus } from '../../api/types'
 import { toast } from '../../ui'
 import { changeEntry, patchWatchGroup, setSuggestionStatus, type WatchEntry, type WatchRegister } from './api'
@@ -12,6 +12,10 @@ import { layoutRegister, registerWithStatuses, withStatuses, type LayoutGroup, t
 
 /** The two looks a followed name can have. */
 type FollowedLook = 'active' | 'muted'
+
+// "Hide the rest for good" can hide every suggestion at once, so its Undo stays on screen longer than
+// the usual message (4.2 seconds).
+const HIDE_REST_TOAST_MS = 10_000
 
 export interface WatchLayoutState {
   /** The layout of the last load with the looks changed since; null before the first load. */
@@ -27,7 +31,7 @@ export interface WatchLayoutState {
   change: (entity: WatchEntry, to: WatchStatus, done: string) => void
   /**
    * Move many suggestions between "suggested" and "rejected" in one request; `done` makes the toast
-   * from the number that really changed, and its Undo moves those back.
+   * from the number that really changed, shown for ten seconds, and its Undo moves those back.
    */
   changeMany: (entities: readonly WatchEntry[], to: SuggestionStatus, done: (count: number) => string) => void
   /**
@@ -112,8 +116,13 @@ function groupText(group: string, count: number, to: FollowedLook): string {
 /**
  * The layout for `data` and the chip changes. A new answer is laid out afresh, keeping the changed
  * names in place. `remember` keeps the answer shown on the next visit in step with each confirmed change.
+ * `refresh` loads the register again quietly, keeping the data on screen until the answer arrives.
  */
-export function useWatchLayout(data: WatchRegister | null, remember: (update: (current: WatchRegister) => WatchRegister) => void): WatchLayoutState {
+export function useWatchLayout(
+  data: WatchRegister | null,
+  remember: (update: (current: WatchRegister) => WatchRegister) => void,
+  refresh: () => void,
+): WatchLayoutState {
   const [view, setView] = useState<View>({ load: null, layout: null, switches: new Map() })
   // A new answer is laid out during this render, before anything is drawn from the old layout.
   if (view.load !== data) setView({ ...view, load: data, layout: layoutFor(data, view.switches) })
@@ -149,7 +158,8 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
   /**
    * Give one name a new status: the chip changes at once, then the server is asked. A failure puts the
    * earlier look back and says why; a success shows `done` with Undo, when given. The Undo does nothing
-   * when the name no longer shows `to`.
+   * when the name no longer shows `to`. When the name no longer exists (a collection cycle deleted the
+   * suggestion while the page was open), the register is loaded again quietly, so its stale chip goes.
    */
   const switchName = async (entity: WatchEntry, to: WatchStatus, done?: string) => {
     const from = entity.status
@@ -165,6 +175,7 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
     } catch (cause) {
       setLooks([entity], () => from, false)
       toast(errorMessage(cause), { tone: 'error' })
+      if (isMissing(cause)) refresh()
     }
   }
 
@@ -190,7 +201,7 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
           const still = back.filter((entity) => stillShows(entity.id, to))
           if (still.length > 0) void switchMany(still, undoTo)
         }
-        toast(done(back.length), { action: { label: 'Undo', onClick: undo } })
+        toast(done(back.length), { action: { label: 'Undo', onClick: undo }, durationMs: HIDE_REST_TOAST_MS })
       }
     } catch (cause) {
       setLooks(entities, (entity) => entity.status, false)
