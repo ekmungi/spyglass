@@ -77,7 +77,8 @@ def action_names() -> list[str]:
 
 
 def render_brief(doc: dict) -> str:
-    """The brief document as plain text: opening, then each section's headlines and whys."""
+    """The brief document as plain text: the opening, then each section's picked stories, each
+    with its headline, its sources, what it says and why it matters."""
     lines = [f"Daily brief for {doc.get('day', '')}", str(doc.get("opening") or "")]
     for section in doc.get("sections") or []:
         lines.append(f"\n{section.get('title', '')}")

@@ -231,6 +231,12 @@
 .r-save.is-saved {
   color: var(--accent);
 }
+/* The selected row shows its thumbs too, as it shows Save: an arrow turn moves the selection without
+   the pointer or the focus, which would otherwise reveal them. */
+.r-story.is-selected .r-votes {
+  opacity: 1;
+  pointer-events: auto;
+}
 @media (hover: none) {
   .r-story .r-save {
     opacity: 1;
@@ -276,7 +282,7 @@
   letter-spacing: -0.008em;
 }
 .r-brief__list--lead > .r-story:first-child .r-story__why {
-  font-size: calc(17px * var(--type-scale, 1));
+  font-size: var(--text-heading);
 }
 
 /* Watch list: a thin accent rule on the left, no alarm colours. */

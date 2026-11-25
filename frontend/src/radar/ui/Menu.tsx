@@ -63,8 +63,12 @@ export function Menu({ label, trigger, items, align = 'end' }: MenuProps) {
     }
     // Escape closes the menu wherever the focus is. With the focus inside, the root's own key
     // handler runs first, returns the focus to the trigger and stops the event before it gets here.
+    // The key is marked handled, so a page or dialog listening for Escape (the reader goes back on
+    // it) does not act on the same press.
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close()
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      close()
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)

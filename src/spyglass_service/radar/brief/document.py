@@ -157,11 +157,16 @@ def story_item_ids(doc: dict) -> set[int]:
     return ids
 
 
+# The lists of a section that hold stories: the picked ones and the unpicked ones.
+_STORY_LISTS = ("stories", "more")
+
+
 def story_members(session: Session, item_id: int) -> list[int]:
     """The other items of the story `item_id` belongs to, as listed in the latest brief with it.
 
-    Read from the stored document's `sources`, so the reader's source switcher offers exactly
-    what the brief showed. Returns [] when no brief contains the item.
+    Read from the stored document's `sources`, picked and unpicked stories alike, so the
+    reader's source switcher offers exactly what Today lists. Returns [] when no brief contains
+    the item.
     """
     # Cheap pre-filter on the stored JSON text (written compactly by `dumps`), then parse.
     patterns = [f'%"item_id":{int(item_id)},%', f'%"item_id":{int(item_id)}}}%']
@@ -171,16 +176,12 @@ def story_members(session: Session, item_id: int) -> list[int]:
     ).all()
     for row in rows:
         for section in (loads(row.doc, {}) or {}).get("sections", []):
-            for st in section.get("stories", []):
+            for st in (story for key in _STORY_LISTS for story in section.get(key, [])):
                 listed = [src["item_id"] for src in st.get("sources", [])]
                 if item_id == st.get("item_id") or item_id in listed or item_id in st.get(
                         "member_ids", []):
                     return [i for i in listed if i != item_id]
     return []
-
-
-# The lists of a section that hold stories: the picked ones and the unpicked ones.
-_STORY_LISTS = ("stories", "more")
 
 
 def refresh_states(session: Session, doc: dict) -> dict:
@@ -210,8 +211,9 @@ def refresh_states(session: Session, doc: dict) -> dict:
     return {**doc, "sections": sections}
 
 
-# A brief is called incomplete only when a meaningful share of the day went unjudged: at least
-# this many items, or this fraction of what was collected. One stray failure is not an outage.
+# A brief carries the line about items still waiting to be judged only when a meaningful share of
+# the day went unjudged: at least this many items, or this fraction of what was collected. One stray
+# failure is not an outage.
 DEGRADED_MIN_ITEMS = 10
 DEGRADED_MIN_SHARE = 0.05
 
@@ -226,7 +228,7 @@ def is_degraded(unjudged: int, collected: int) -> bool:
 
 
 def degraded_notice(unjudged: int) -> str | None:
-    """The sentence shown above a brief that is incomplete, or None when nothing is missing."""
+    """The sentence shown at the end of the brief when items still wait to be judged, or None."""
     if unjudged <= 0:
         return None
     noun = "item is" if unjudged == 1 else "items are"

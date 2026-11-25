@@ -154,6 +154,32 @@ describe('thumbs', () => {
     expect(valueOf(reveal?.body ?? '', 'opacity')).toBe('1')
     expect(valueOf(reveal?.body ?? '', 'pointer-events')).toBe('auto')
   })
+
+  it('show on every row of a device without hover, as Save does on the Feed and on Today', () => {
+    // The media block is read as a whole: the rule for the thumbs must sit inside "(hover: none)".
+    const block = /@media \(hover: none\) \{([\s\S]*?\})\s*\}/.exec(primitivesCss.replace(/\/\*[\s\S]*?\*\//g, ''))
+    const inside = rules(block?.[1] ?? '').find((entry) => entry.selectors.includes('.r-votes'))
+    expect(valueOf(inside?.body ?? '', 'opacity')).toBe('1')
+    expect(valueOf(inside?.body ?? '', 'pointer-events')).toBe('auto')
+  })
+
+  it("show on Today's selected row, as Save does, so an arrow turn that moves the selection reveals them", () => {
+    const selected = ruleFor(todayCss, '.r-story.is-selected .r-votes')
+    expect(valueOf(selected, 'opacity')).toBe('1')
+    expect(valueOf(selected, 'pointer-events')).toBe('auto')
+  })
+})
+
+describe('hidden panels', () => {
+  it('stay hidden whatever display a page rule gives them', () => {
+    expect(valueOf(ruleFor(baseCss, '[hidden]'), 'display')).toBe('none !important')
+  })
+})
+
+describe("Today's lead story", () => {
+  it('sets its why at the heading size through the shared token', () => {
+    expect(valueOf(ruleFor(todayCss, '.r-brief__list--lead > .r-story:first-child .r-story__why'), 'font-size')).toBe('var(--text-heading)')
+  })
 })
 
 describe("the reader's step buttons", () => {

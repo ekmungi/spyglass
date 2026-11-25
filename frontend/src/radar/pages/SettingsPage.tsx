@@ -70,21 +70,19 @@ export default function SettingsPage() {
   /** Props for the parts of one tab. */
   const at = (key: SettingsTabKey) => ({ on: tab === key, opened: openedTabs.has(key) })
 
-  // The brief, vault and filing parts need the stored settings; their tabs show how loading is going.
-  const settingsStatus = (
-    <>
-      {settings.loading && !values && (
-        <div aria-busy="true" aria-label="Loading your settings" className="rst-skeleton">
-          <Skeleton lines={4} />
-        </div>
-      )}
-      {settings.error && (
-        <div className="rst-error" role="alert">
-          <p className="r-error-text">{settings.error}</p>
-          <Button onClick={settings.reload}>Try again</Button>
-        </div>
-      )}
-    </>
+  // The brief, vault and filing parts are made of the stored settings, so their tabs show how loading is
+  // going. The AI engines tab needs them too (the default engine, the choice of which AI judges), but it
+  // has its own loading view for the engines, so it shows only the error.
+  const settingsLoading = settings.loading && !values && (
+    <div aria-busy="true" aria-label="Loading your settings" className="rst-skeleton">
+      <Skeleton lines={4} />
+    </div>
+  )
+  const settingsError = settings.error && (
+    <div className="rst-error" role="alert">
+      <p className="r-error-text">{settings.error}</p>
+      <Button onClick={settings.reload}>Try again</Button>
+    </div>
   )
 
   return (
@@ -95,7 +93,8 @@ export default function SettingsPage() {
       <Tabs tabs={SETTINGS_TABS} value={tab} onChange={(key) => choose(key as SettingsTabKey)} label="Settings" />
 
       <div role="tabpanel" className="rst-tabpanel" aria-label={SETTINGS_TABS.find((entry) => entry.key === tab)?.label}>
-        {(tab === 'general' || tab === 'vault') && settingsStatus}
+        {(tab === 'general' || tab === 'vault') && settingsLoading}
+        {(tab === 'general' || tab === 'vault' || tab === 'engines') && settingsError}
 
         <Part {...at('general')} holdsInput>
           {values && <BriefSection settings={values} onSaved={merge} />}

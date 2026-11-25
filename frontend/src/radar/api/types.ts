@@ -236,7 +236,7 @@ export interface BriefDoc {
   degraded?: boolean
   /** How many collected items were not judged yet. */
   unjudged?: number
-  /** One plain sentence about a degraded brief, shown quietly under the opening. */
+  /** One plain sentence about a degraded brief, shown quietly at the end of the brief. */
   notice?: string | null
 }
 

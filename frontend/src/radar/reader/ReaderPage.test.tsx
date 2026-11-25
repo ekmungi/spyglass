@@ -388,3 +388,20 @@ describe('the open signal', () => {
     expect(effectiveState(5, detail('ok').state).opened).toBe(false)
   })
 })
+
+describe('Escape while a menu of the bar is open', () => {
+  it('closes the menu and leaves the reader where it is when the focus is outside the menu', async () => {
+    window.history.replaceState(null, '', '/#/item/5')
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    await screen.findByText('The article body.')
+    const more = screen.getByRole('button', { name: 'More' })
+    fireEvent.click(more)
+    expect(more).toHaveAttribute('aria-expanded', 'true')
+    // The focus goes back to the page, outside the menu, which stays open.
+    ;(document.activeElement as HTMLElement).blur()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    expect(window.location.hash).toBe('#/item/5')
+  })
+})

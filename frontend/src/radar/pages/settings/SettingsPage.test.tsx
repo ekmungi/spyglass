@@ -425,10 +425,14 @@ describe('Settings tabs', () => {
     expect(api.patchSettings).not.toHaveBeenCalled()
   })
 
-  it('shows the loading error of the settings only on the tabs that need them', async () => {
+  it('shows the loading error of the settings on every tab that needs them, and only there', async () => {
     api.loadSettings.mockRejectedValueOnce(new ApiError('Spyglass is not reachable. Check that the service is running, then try again.', { status: 0, kind: 'network', path: '/api/settings' }))
     render(<SettingsPage />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Spyglass is not reachable')
+    // AI engines needs them for the default engine and the choice of which AI judges.
+    openTab('AI engines')
+    await screen.findByText('OpenRouter', { selector: '.rst-name' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Spyglass is not reachable')
     openTab('Appearance')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })

@@ -15,9 +15,10 @@
    incremental vacuum, a bounded amount of it is returned).
 
 An item counts as touched, and is never cleaned, when the reader opened it, read it, saved it,
-voted on it, hid it, wrote a note on it, sent it in, wrote it to the vault, asked the assistant
-about it, or was shown it in any stored brief. A step that fails is reported and does not stop
-the others.
+voted on it, hid it, wrote a note on it, sent it in, wrote it to the vault, or asked the assistant
+about it, or when any stored brief lists it, as a picked story, a source or an unpicked story
+under a slider (so an older brief's slider can still open it). A step that fails is reported and
+does not stop the others.
 """
 
 import logging
@@ -61,7 +62,12 @@ def _naive(moment: datetime) -> datetime:
 
 
 def _brief_item_ids(session: Session) -> set[int]:
-    """Every item id mentioned in any stored brief (stories and their sources)."""
+    """Every item id listed anywhere in any stored brief.
+
+    That is the picked stories, their sources and members, and also the unpicked stories under a
+    section's slider, which the reader may never have seen. They all keep their text, so an older
+    brief's slider can still open its unpicked stories.
+    """
     found: set[int] = set()
 
     def walk(value: object) -> None:

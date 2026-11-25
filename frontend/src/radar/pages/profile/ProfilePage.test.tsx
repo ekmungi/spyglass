@@ -383,7 +383,8 @@ describe('profile helpers', () => {
       topics: [{ name: 'A', section: 'nope' }, { name: 'a', section: '' }],
       avoid: ['x', 'X', ''],
     })
-    expect(bad.topics[0].section).toBeDefined()
+    // The sections are on their own tab, so the message names it.
+    expect(bad.topics[0].section).toBe('Pick one of the sections on the Sections tab, or none.')
     expect(bad.topics[1].name).toBe('This topic is already in the list.')
     expect(bad.avoid[1]).toBeDefined()
     expect(bad.avoid[2]).toBeDefined()

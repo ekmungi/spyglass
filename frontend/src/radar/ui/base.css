@@ -25,6 +25,12 @@ body {
   color: var(--ink);
 }
 
+/* A hidden tab panel or folded row stays hidden even when a page rule sets its display; without this a
+   rule such as `display: grid` on the element would show it. */
+[hidden] {
+  display: none !important;
+}
+
 a {
   color: var(--accent);
   text-decoration-thickness: 1px;

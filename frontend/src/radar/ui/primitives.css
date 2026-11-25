@@ -537,3 +537,11 @@ li:focus-within .r-votes,
   opacity: 1;
   pointer-events: auto;
 }
+/* A device without hover (a touch screen) could never reveal them, so they show on every row, as Save
+   does on the Feed and on Today. */
+@media (hover: none) {
+  .r-votes {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

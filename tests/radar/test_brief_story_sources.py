@@ -7,6 +7,7 @@ from sqlmodel import Session
 
 from spyglass_service.radar.brief.compose import compose_brief
 from spyglass_service.radar.brief.document import story_item_ids, story_members
+from spyglass_service.radar.models import RadarBrief, dumps
 
 from .test_brief_seed import NOW, add_item, make_engine
 
@@ -58,5 +59,24 @@ def test_story_members_returns_what_the_reader_was_shown(tmp_path) -> None:
             assert story_members(session, second) == [lead]
             assert story_members(session, alone) == []
             assert story_members(session, 99999) == []
+    finally:
+        engine.dispose()
+
+
+def test_story_members_also_reads_the_unpicked_stories(tmp_path) -> None:
+    """The other sources of an unpicked story come from the brief that lists it, as for a picked one."""
+    engine = make_engine(tmp_path)
+    try:
+        doc = {"day": "2026-11-12", "sections": [{
+            "key": "health",
+            "stories": [{"item_id": 1, "sources": [{"item_id": 1, "name": "A"}]}],
+            "more": [{"item_id": 7, "sources": [{"item_id": 7, "name": "B"}, {"item_id": 8, "name": "C"}]}],
+        }]}
+        with Session(engine) as session:
+            session.add(RadarBrief(day="2026-11-12", doc=dumps(doc)))
+            session.commit()
+            assert story_members(session, 7) == [8]
+            assert story_members(session, 8) == [7]
+            assert story_members(session, 1) == []
     finally:
         engine.dispose()

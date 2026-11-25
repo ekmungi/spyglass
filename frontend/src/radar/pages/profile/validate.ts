@@ -50,7 +50,7 @@ export function validateProfile(draft: Profile): ProfileErrors {
     else if (name.length > LIMITS.topicName) entry.name = `Keep the topic under ${LIMITS.topicName} characters.`
     else if (seenTopics.has(name.toLowerCase())) entry.name = 'This topic is already in the list.'
     seenTopics.add(name.toLowerCase())
-    if (topic.section && !keys.has(topic.section)) entry.section = 'Pick one of the sections above, or none.'
+    if (topic.section && !keys.has(topic.section)) entry.section = 'Pick one of the sections on the Sections tab, or none.'
     if (Object.keys(entry).length) errors.topics[index] = entry
   })
   if (draft.topics.length > LIMITS.topics) errors.lists.push(`You can follow at most ${LIMITS.topics} topics.`)
