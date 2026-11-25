@@ -276,7 +276,7 @@ export default function WatchPage() {
       )}
 
       {layout && <SuggestedSection rows={layout.rows} busyIds={switching} change={change} changeMany={changeMany} />}
-      {layout && <RejectedList rejected={layout.rejected} change={change} />}
+      {layout && <RejectedList rejected={layout.rejected} rows={layout.rows} change={change} />}
       <TopicsSection refreshToken={topicsToken} onFollow={() => setAdding('follow')} />
 
       {adding && (

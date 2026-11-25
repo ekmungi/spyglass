@@ -1,5 +1,5 @@
 // The secondary pages against the sample-mode fixtures (the same shapes the real service sends):
-// they must load, and watching or rejecting a watch suggestion must change the list by the next visit.
+// they must load, and watching or rejecting a watch suggestion must reach the sample service.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { setFetchForTesting } from '../api/transport'
@@ -38,24 +38,31 @@ describe('Watch page in sample mode', () => {
     await waitFor(() => expect(chip.closest('.rw-chip')).not.toHaveAttribute('aria-busy'), { timeout: 4000 })
     expect(within(suggested).getByRole('button', { name: 'Arclight Endoscopy, named in 4 items' })).toBe(chip)
     first.unmount()
+    // The sample service recorded the change itself, not only the answer the page remembered.
+    const followed = (await getWatch()).categories.flatMap((category) => category.entities)
+    expect(followed.find((entity) => entity.name === 'Arclight Endoscopy')).toMatchObject({ status: 'active', category: 'Imaging AI' })
 
     render(<WatchPage />)
     const category = await screen.findByRole('group', { name: 'Imaging AI' }, { timeout: 4000 })
     expect(within(category).getByRole('button', { name: 'Arclight Endoscopy', pressed: true })).toBeInTheDocument()
   })
 
-  it('strikes a rejected suggestion through in place, and lists it under Not of interest on the next visit', async () => {
+  it('strikes a rejected suggestion through in place and lists it under Not of interest at once', async () => {
     const first = render(<WatchPage />)
     const suggested = await screen.findByRole('region', { name: 'Suggested this month' }, { timeout: 4000 })
     fireEvent.click(within(suggested).getByRole('button', { name: 'Not of interest: Quill Robotics' }))
     const takeBack = within(suggested).getByRole('button', { name: 'Take back Quill Robotics' })
     await waitFor(() => expect(takeBack.closest('.rw-chip')).not.toHaveAttribute('aria-busy'), { timeout: 4000 })
-    expect(screen.getByText('Not of interest (1)')).toBeInTheDocument()
+    expect(screen.getByText('Not of interest (2)')).toBeInTheDocument()
     first.unmount()
+    // The sample service recorded the change itself, not only the answer the page remembered.
+    const reg = await getWatch()
+    expect(reg.rejected.find((entity) => entity.name === 'Quill Robotics')).toMatchObject({ status: 'rejected' })
+    expect(reg.suggested.map((entity) => entity.name)).not.toContain('Quill Robotics')
 
     render(<WatchPage />)
     expect(await screen.findByText('Not of interest (2)', undefined, { timeout: 4000 })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Take back Quill Robotics' })).toBeInTheDocument()
+    expect(within(await screen.findByRole('region', { name: 'Suggested this month' })).queryByText('Quill Robotics')).not.toBeInTheDocument()
   })
 })
 

@@ -113,12 +113,57 @@ describe('Suggested', () => {
     expect(pill(within(health).getByRole('button', { name: 'Oura, named in 9 items, not of interest' }))).toHaveClass('rw-chip--rej')
     expect(within(health).getByRole('button', { name: 'Take back Oura' })).toBeInTheDocument()
     expect(await screen.findByText('Oura will not be suggested again.')).toBeInTheDocument()
-    // The Not of interest list keeps the names of earlier visits; this one joins it on the next visit.
-    expect(screen.getByText('Not of interest (1)')).toBeInTheDocument()
+    // It joins the Not of interest list at once, after the name rejected on an earlier visit.
+    expect(screen.getByText('Not of interest (2)')).toBeInTheDocument()
 
     fireEvent.click(undoOf('Oura will not be suggested again.'))
     await waitFor(() => expect(api.changeEntry).toHaveBeenLastCalledWith(21, { status: 'suggested' }))
     expect(await within(health).findByRole('button', { name: 'Not of interest: Oura' })).toBeInTheDocument()
+    expect(screen.getByText('Not of interest (1)')).toBeInTheDocument()
+  })
+
+  it('lists a name crossed on a first visit in Not of interest at once, while its chip stays struck in its row', async () => {
+    api.getWatch.mockResolvedValue({ ...suggestionRegister(), rejected: [] })
+    renderPage()
+    const health = row(await suggestedSection(), 'Healthcare AI & medtech')
+    expect(screen.getByText('Not of interest (0)')).toBeInTheDocument()
+    fireEvent.click(within(health).getByRole('button', { name: 'Not of interest: Oura' }))
+    const list = (await screen.findByText('Not of interest (1)')).closest('details') as HTMLElement
+    expect(within(list).getByRole('button', { name: 'Take back Oura' })).toBeInTheDocument()
+    expect(within(list).queryByText(/^Nothing yet/)).not.toBeInTheDocument()
+    expect(pill(within(health).getByRole('button', { name: 'Oura, named in 9 items, not of interest' }))).toHaveClass('rw-chip--rej')
+  })
+
+  it('reopens the chip in its row when a name struck on this visit is taken back from the list', async () => {
+    renderPage()
+    const health = row(await suggestedSection(), 'Healthcare AI & medtech')
+    fireEvent.click(within(health).getByRole('button', { name: 'Not of interest: Oura' }))
+    await screen.findByText('Oura will not be suggested again.')
+    const list = screen.getByText('Not of interest (2)').closest('details') as HTMLElement
+    fireEvent.click(within(list).getByRole('button', { name: 'Take back Oura' }))
+    await waitFor(() => expect(api.changeEntry).toHaveBeenLastCalledWith(21, { status: 'suggested' }))
+    expect(await screen.findByText('Oura is a suggestion again.')).toBeInTheDocument()
+    expect(within(health).getByRole('button', { name: 'Not of interest: Oura' })).toBeInTheDocument()
+    expect(screen.getByText('Not of interest (1)')).toBeInTheDocument()
+    expect(within(list).queryByRole('button', { name: 'Take back Oura' })).not.toBeInTheDocument()
+  })
+
+  it('does not undo a cross once the name has been watched since', async () => {
+    renderPage()
+    const health = row(await suggestedSection(), 'Healthcare AI & medtech')
+    fireEvent.click(within(health).getByRole('button', { name: 'Not of interest: Oura' }))
+    await screen.findByText('Oura will not be suggested again.')
+    fireEvent.click(within(health).getByRole('button', { name: 'Oura, named in 9 items, not of interest' }))
+    await screen.findByText('Oura is a suggestion again.')
+    fireEvent.click(within(health).getByRole('button', { name: 'Oura, named in 9 items' }))
+    await screen.findByText('Watching Oura. It joins Other.')
+    expect(api.changeEntry).toHaveBeenCalledTimes(3)
+
+    fireEvent.click(undoOf('Oura will not be suggested again.'))
+    // The late Undo sends nothing, so Oura stays watched.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(api.changeEntry).toHaveBeenCalledTimes(3)
+    expect(within(health).getByRole('button', { name: 'Oura, named in 9 items' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('takes a struck name back with a click on the chip', async () => {
@@ -150,6 +195,53 @@ describe('Suggested', () => {
     await waitFor(() => expect(api.setSuggestionStatus).toHaveBeenLastCalledWith([22, 23, 24], 'suggested'))
     expect(await within(section).findByRole('button', { name: 'Not of interest: Novartis' })).toBeInTheDocument()
     expect(within(section).getByRole('button', { name: 'Not of interest: Aidoc' })).toBeInTheDocument()
+  })
+
+  it('raises the Not of interest count by the number of names hidden, and lists them', async () => {
+    renderPage()
+    const section = await suggestedSection()
+    expect(screen.getByText('Not of interest (1)')).toBeInTheDocument()
+    fireEvent.click(within(section).getByRole('button', { name: 'Hide the rest for good' }))
+    await screen.findByText('5 names will not be suggested again.')
+    const list = screen.getByText('Not of interest (6)').closest('details') as HTMLElement
+    const names = within(list)
+      .getAllByRole('button')
+      .map((node) => node.getAttribute('aria-label'))
+    // The names of earlier visits first, then the ones struck on this visit in the order of the rows.
+    expect(names).toEqual(['Take back Old News Corp', 'Take back NHS England', 'Take back Oura', 'Take back Novartis', 'Take back Aidoc', 'Take back Stray Org'])
+  })
+
+  it('leaves out a name whose take-back is still on its way when the rest is hidden', async () => {
+    api.changeEntry.mockImplementation((id: number, body: { status?: string }) =>
+      id === 21 && body.status === 'suggested' ? new Promise(() => {}) : Promise.resolve({}),
+    )
+    renderPage()
+    const section = await suggestedSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Not of interest: Oura' }))
+    await screen.findByText('Oura will not be suggested again.')
+    fireEvent.click(within(section).getByRole('button', { name: 'Take back Oura' }))
+    expect(pill(within(section).getByRole('button', { name: 'Oura, named in 9 items' }))).toHaveAttribute('aria-busy', 'true')
+
+    fireEvent.click(within(section).getByRole('button', { name: 'Hide the rest for good' }))
+    await waitFor(() => expect(api.setSuggestionStatus).toHaveBeenCalledWith([20, 22, 23, 24], 'rejected'))
+  })
+
+  it("does not undo hiding a name that was taken back and watched since, and leaves the service's answer alone", async () => {
+    renderPage()
+    const section = await suggestedSection()
+    fireEvent.click(within(section).getByRole('button', { name: 'Hide the rest for good' }))
+    await screen.findByText('5 names will not be suggested again.')
+    fireEvent.click(within(section).getByRole('button', { name: 'Novartis, named in 24 items, not of interest' }))
+    await screen.findByText('Novartis is a suggestion again.')
+    fireEvent.click(within(section).getByRole('button', { name: 'Novartis, named in 24 items' }))
+    await screen.findByText('Watching Novartis. It joins Pharma AI.')
+
+    fireEvent.click(undoOf('5 names will not be suggested again.'))
+    // Only the names that still look hidden are taken back; Novartis stays watched and is not sent.
+    await waitFor(() => expect(api.setSuggestionStatus).toHaveBeenLastCalledWith([20, 21, 23, 24], 'suggested'))
+    expect(api.changeEntry).toHaveBeenCalledTimes(2)
+    expect(await within(section).findByRole('button', { name: 'Not of interest: Aidoc' })).toBeInTheDocument()
+    expect(within(section).getByRole('button', { name: 'Novartis, named in 24 items' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('counts and offers to undo only the names whose status really changed', async () => {
@@ -221,7 +313,9 @@ describe('Suggested', () => {
     const group = await screen.findByRole('group', { name: 'Regulators' })
     expect(within(group).getByRole('button', { name: 'NHS England' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('Not of interest (2)')).toBeInTheDocument()
-    expect(within(await suggestedSection()).queryByText('NHS England')).not.toBeInTheDocument()
+    const suggested = await suggestedSection()
+    expect(within(suggested).queryByText('NHS England')).not.toBeInTheDocument()
+    expect(within(suggested).queryByText('Oura')).not.toBeInTheDocument()
   })
 })
 
@@ -233,11 +327,11 @@ describe('Not of interest', () => {
     expect(within(list).getByText('These are never suggested again. Take a name back to allow it.')).toBeInTheDocument()
     fireEvent.click(within(list).getByRole('button', { name: 'Take back Old News Corp' }))
     await waitFor(() => expect(api.changeEntry).toHaveBeenCalledWith(30, { status: 'suggested' }))
-    expect(await screen.findByText('Old News Corp can be suggested again from the next run.')).toBeInTheDocument()
+    expect(await screen.findByText('Old News Corp is a suggestion again.')).toBeInTheDocument()
     expect(screen.getByText('Not of interest (0)')).toBeInTheDocument()
     expect(within(list).queryByRole('button', { name: 'Take back Old News Corp' })).not.toBeInTheDocument()
 
-    fireEvent.click(undoOf('Old News Corp can be suggested again from the next run.'))
+    fireEvent.click(undoOf('Old News Corp is a suggestion again.'))
     await waitFor(() => expect(api.changeEntry).toHaveBeenLastCalledWith(30, { status: 'rejected' }))
     expect(await screen.findByText('Not of interest (1)')).toBeInTheDocument()
   })

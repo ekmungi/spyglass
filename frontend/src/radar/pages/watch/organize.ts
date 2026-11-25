@@ -114,9 +114,14 @@ function inNameOrder(list: readonly WatchEntry[], entity: WatchEntry): WatchEntr
   return at < 0 ? [...list, entity] : [...list.slice(0, at), entity, ...list.slice(at)]
 }
 
-/** The groups with `entity` added to its own group ("Other" when it has none), a new group going last. */
+/** The group a name belongs to: its own, or "Other" when it has none (as the server groups it). */
+export function groupOf(entity: WatchEntry): string {
+  return entity.category || 'Other'
+}
+
+/** The groups with `entity` added to its own group, a new group going last. */
 function intoGroup(categories: WatchRegister['categories'], entity: WatchEntry): WatchRegister['categories'] {
-  const name = entity.category || 'Other'
+  const name = groupOf(entity)
   if (!categories.some((category) => category.name === name)) return [...categories, { name, entities: [entity] }]
   return categories.map((category) => (category.name === name ? { ...category, entities: inNameOrder(category.entities, entity) } : category))
 }

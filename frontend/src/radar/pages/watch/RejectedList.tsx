@@ -1,21 +1,25 @@
-// RejectedList: the collapsed "Not of interest (N)" list under Suggested: the names rejected before this
-// visit, each of which can be taken back. A name taken back leaves the list at once, and Undo puts it
-// back where it was; names struck through on this visit join the list on the next one.
+// RejectedList: the collapsed "Not of interest (N)" list under Suggested: every name that looks rejected
+// now, which can each be taken back. The names rejected before this visit come first, then the ones
+// struck through in a suggestion row on this visit, whose chips stay struck in their rows. A name taken
+// back leaves the list at once, and its chip in a row, if it has one, opens again.
 import type { WatchStatus } from '../../api/types'
 import type { WatchEntry } from './api'
-import { takenBackText } from './suggestionText'
+import type { SuggestionRow } from './organize'
+import { decidedText } from './suggestionText'
 
 export interface RejectedListProps {
   /** The names that were rejected when the page loaded, with the looks changed since. */
   rejected: WatchEntry[]
+  /** The suggestion rows, with the looks changed since; their struck names are listed too. */
+  rows: SuggestionRow[]
   /** Give one name a new status in place, with the toast to show after it. */
   change: (entity: WatchEntry, to: WatchStatus, done: string) => void
 }
 
 /** A closed fold with the count in its summary, a one-line explanation and a take-back chip per name. */
-export function RejectedList({ rejected, change }: RejectedListProps) {
-  // A name taken back on this visit looks "suggested" now and is left out until Undo.
-  const shown = rejected.filter((entity) => entity.status === 'rejected')
+export function RejectedList({ rejected, rows, change }: RejectedListProps) {
+  // One look per name: the list holds exactly the names that look rejected now, wherever they are shown.
+  const shown = [...rejected, ...rows.flatMap((row) => row.entities)].filter((entity) => entity.status === 'rejected')
   return (
     <section aria-label="Not of interest" className="rw-section rw-section--fold">
       <details className="rw-fold">
@@ -31,7 +35,7 @@ export function RejectedList({ rejected, change }: RejectedListProps) {
                       type="button"
                       className="rw-chip__main rw-chip__take"
                       aria-label={`Take back ${entity.name}`}
-                      onClick={() => change(entity, 'suggested', takenBackText(entity))}
+                      onClick={() => change(entity, 'suggested', decidedText(entity, 'suggested'))}
                     >
                       <span className="rw-chip__name">{entity.name}</span>
                       <span className="rw-chip__back">Take back</span>

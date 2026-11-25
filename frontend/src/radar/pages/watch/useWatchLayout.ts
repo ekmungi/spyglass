@@ -3,7 +3,7 @@
 // server, and puts the earlier look back if the server refuses. A name changed on this visit keeps its
 // place, and its look, when new data arrives, until the page calls `restructure` for an action that
 // changes the structure.
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../../api/errors'
 import type { SuggestionStatus, WatchStatus } from '../../api/types'
 import { toast } from '../../ui'
@@ -76,6 +76,18 @@ function placeIn(layout: WatchLayout | null, id: number): WatchStatus | undefine
   return undefined
 }
 
+/** The look the layout shows for a name now, wherever it is shown; undefined when it is not shown. */
+function lookIn(layout: WatchLayout | null, id: number): WatchStatus | undefined {
+  if (!layout) return undefined
+  const shown = [
+    ...layout.groups.flatMap((group) => group.entities),
+    ...layout.paused.map((name) => name.entity),
+    ...layout.rows.flatMap((row) => row.entities),
+    ...layout.rejected,
+  ]
+  return shown.find((entity) => entity.id === id)?.status
+}
+
 /** The toast after a watched name is switched: what changes for the daily search. */
 function switchedText(name: string, to: WatchStatus): string {
   return to === 'active'
@@ -92,6 +104,17 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
   // A new answer is laid out during this render, before anything is drawn from the old layout.
   if (view.load !== data) setView({ ...view, load: data, layout: layoutFor(data, view.switches) })
   const switching: ReadonlySet<number> = new Set([...view.switches].filter(([, item]) => item.pending).map(([id]) => id))
+  // The view as last drawn, for an Undo clicked long after its toast appeared.
+  const latest = useRef(view)
+  useEffect(() => {
+    latest.current = view
+  })
+
+  /**
+   * True when a name still shows `look` and has no change on its way. An Undo acts only on such names:
+   * a name the reader changed again since its toast appeared is left as it is now.
+   */
+  const stillShows = (id: number, look: WatchStatus) => lookIn(latest.current.layout, id) === look && !latest.current.switches.get(id)?.pending
 
   /**
    * Record each name's look (and, at its first change, its place) and show the looks at once. Each
@@ -111,7 +134,8 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
 
   /**
    * Give one name a new status: the chip changes at once, then the server is asked. A failure puts the
-   * earlier look back and says why; a success shows `done` with Undo, when given.
+   * earlier look back and says why; a success shows `done` with Undo, when given. The Undo does nothing
+   * when the name no longer shows `to`.
    */
   const switchName = async (entity: WatchEntry, to: WatchStatus, done?: string) => {
     const from = entity.status
@@ -120,7 +144,10 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
       await changeEntry(entity.id, { status: to })
       setLooks([entity], () => to, false)
       remember((current) => registerWithStatuses(current, new Map([[entity.id, to]])))
-      if (done) toast(done, { action: { label: 'Undo', onClick: () => void switchName({ ...entity, status: to }, from) } })
+      const undo = () => {
+        if (stillShows(entity.id, to)) void switchName({ ...entity, status: to }, from)
+      }
+      if (done) toast(done, { action: { label: 'Undo', onClick: undo } })
     } catch (cause) {
       setLooks([entity], () => from, false)
       toast(errorMessage(cause), { tone: 'error' })
@@ -128,8 +155,9 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
   }
 
   /**
-   * Move many suggestions to `to` in one request. Only the names whose status really changed take the
-   * new look; the others, and all of them on a failure, get their earlier look back.
+   * Move many suggestions to `to` in one request; each entity carries its look just before it. Only the
+   * names whose status really changed take the new look; the others, and all of them on a failure, keep
+   * that earlier look. The Undo takes back only the names that still show `to` when it is clicked.
    */
   const switchMany = async (entities: readonly WatchEntry[], to: SuggestionStatus, done?: (count: number) => string) => {
     setLooks(entities, () => to, true)
@@ -144,7 +172,11 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
       if (done) {
         const back = entities.filter((entity) => moved.has(entity.id)).map((entity) => ({ ...entity, status: to }))
         const undoTo: SuggestionStatus = to === 'rejected' ? 'suggested' : 'rejected'
-        toast(done(back.length), { action: { label: 'Undo', onClick: () => void switchMany(back, undoTo) } })
+        const undo = () => {
+          const still = back.filter((entity) => stillShows(entity.id, to))
+          if (still.length > 0) void switchMany(still, undoTo)
+        }
+        toast(done(back.length), { action: { label: 'Undo', onClick: undo } })
       }
     } catch (cause) {
       setLooks(entities, (entity) => entity.status, false)

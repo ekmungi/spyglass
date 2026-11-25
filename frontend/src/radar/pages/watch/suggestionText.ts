@@ -2,11 +2,7 @@
 // toast after each decision, as the approved prototype words them.
 import type { WatchStatus } from '../../api/types'
 import type { WatchEntry } from './api'
-
-/** The group a watched suggestion joins: the one the cleaning step proposed, or "Other". */
-export function groupOf(entity: WatchEntry): string {
-  return entity.category || 'Other'
-}
+import { groupOf } from './organize'
 
 /** "12 items", "1 item". */
 function itemsText(count: number): string {
@@ -27,7 +23,10 @@ export function tipText(entity: WatchEntry): string {
   return `${why}Click to watch it; it joins ${groupOf(entity)}.`
 }
 
-/** The toast after a chip in a suggestion row moves from its look `entity.status` to `to`. */
+/**
+ * The toast after a suggestion moves from its look `entity.status` to `to`, from its chip or from the
+ * Not of interest list. A name taken back is a suggestion again at once.
+ */
 export function decidedText(entity: WatchEntry, to: WatchStatus): string {
   if (to === 'active') return `Watching ${entity.name}. It joins ${groupOf(entity)}.`
   if (to === 'rejected') return `${entity.name} will not be suggested again.`
@@ -37,9 +36,4 @@ export function decidedText(entity: WatchEntry, to: WatchStatus): string {
 /** The toast after "Hide the rest for good". */
 export function hiddenText(count: number): string {
   return `${count} ${count === 1 ? 'name' : 'names'} will not be suggested again.`
-}
-
-/** The toast after a name is taken back from the Not of interest list. */
-export function takenBackText(entity: WatchEntry): string {
-  return `${entity.name} can be suggested again from the next run.`
 }
