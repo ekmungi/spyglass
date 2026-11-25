@@ -48,6 +48,8 @@ class RestoreEntry(BaseModel):
     query: str | None = Field(default=None, max_length=200)
     website: str | None = Field(default=None, max_length=300)
     status: Status = "active"
+    section: str = Field(default="", max_length=120)
+    count: int = Field(default=0, ge=0)
     why: str | None = Field(default=None, max_length=300)
     added_via: str = Field(default="user", max_length=30)
     last_hit_at: str | None = Field(default=None, max_length=40)

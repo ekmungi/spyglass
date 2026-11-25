@@ -5,12 +5,12 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from spyglass_service.radar.api import watch as watch_api
 from spyglass_service.radar.api import watch_manage
 from spyglass_service.models import Item
-from spyglass_service.radar.models import ItemEntity, utcnow
+from spyglass_service.radar.models import ItemEntity, WatchEntity, utcnow
 from spyglass_service.radar.watch import registry
 
 from .test_brief_seed import add_item, make_engine
@@ -85,6 +85,22 @@ def test_remove_returns_the_entries_and_restore_brings_them_back(client) -> None
     entities = group(back, "Endoscopy AI")["entities"]
     assert {e["name"] for e in entities} == {"Alpha Scopes", "Beta Vision"}
     assert next(e for e in entities if e["name"] == "Alpha Scopes")["week_count"] == 1
+
+
+def test_restore_through_the_api_keeps_the_section_and_the_suggestion_count(client) -> None:
+    """Undo after removing a group sends section and count back, and the register keeps them."""
+    entity = add(client, "Alpha Scopes")
+    with Session(client.engine) as s:
+        row = s.get(WatchEntity, entity["id"])
+        row.section, row.suggest_count = "Competitors", 3
+        s.add(row)
+        s.commit()
+    removed = client.patch("/watch/groups", json={"category": "Endoscopy AI", "action": "remove"}).json()
+    assert (removed["removed"][0]["section"], removed["removed"][0]["count"]) == ("Competitors", 3)
+    assert client.post("/watch/groups/restore", json={"entries": removed["removed"]}).json()["restored"] == 1
+    with Session(client.engine) as s:
+        back = s.exec(select(WatchEntity).where(WatchEntity.name == "Alpha Scopes")).one()
+        assert (back.section, back.suggest_count) == ("Competitors", 3)
 
 
 def test_group_errors_are_readable_statuses(client) -> None:
