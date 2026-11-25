@@ -81,15 +81,16 @@ describe('Open original', () => {
     expect(open).not.toHaveBeenCalled()
   })
 
-  it('has no Open original action in the top bar for an unsafe address', () => {
+  it('has no Open the original page action, and nothing to copy, in the top bar for an unsafe address', () => {
     render(<ReaderTopBar detail={detail({ url: 'javascript:alert(1)' })} showPdf={false} onTogglePdf={noop} />)
-    expect(screen.queryByRole('button', { name: /Open original/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open the original page' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Copy the link' })).toBeNull()
   })
 
   it('opens a web address from the top bar', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
     render(<ReaderTopBar detail={detail({ url: 'https://example.org/a' })} showPdf={false} onTogglePdf={noop} />)
-    fireEvent.click(screen.getByRole('button', { name: /Open original/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the original page' }))
     expect(open).toHaveBeenCalledWith('https://example.org/a', '_blank', 'noopener,noreferrer')
   })
 })

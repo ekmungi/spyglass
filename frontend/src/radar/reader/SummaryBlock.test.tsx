@@ -1,4 +1,5 @@
-// Tests for the summary block: the reader's own note, and not repeating a paper's abstract.
+// Tests for the summary block: the reader's own note, not repeating a paper's abstract, and the
+// "Why it matters" label.
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ItemDetail } from '../api/types'
@@ -58,6 +59,14 @@ describe('SummaryBlock abstract', () => {
   it('still shows a snippet that is not in the document', () => {
     render(<SummaryBlock detail={detail({ summary: 'A different one-line description of what the paper is about overall.' })} />)
     expect(screen.getByText(/different one-line description/)).toBeInTheDocument()
+  })
+})
+
+describe('SummaryBlock why line', () => {
+  it('labels the why line "Why it matters", in general terms rather than "to you"', () => {
+    render(<SummaryBlock detail={detail({ why: 'Useful for your detectors.' })} />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Why it matters' })).toHaveClass('r-summary__why-label')
+    expect(screen.queryByText('Why it matters to you')).not.toBeInTheDocument()
   })
 })
 

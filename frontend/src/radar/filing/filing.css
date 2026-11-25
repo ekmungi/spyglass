@@ -28,39 +28,18 @@
   color: var(--faint);
 }
 
-/* The split control: a main button and a small menu button side by side. */
+/* The split control: the File in vault icon button and a small menu button side by side. */
 .r-filebtn,
 .r-filebtn__state {
   display: inline-flex;
   align-items: center;
 }
-/* Each state's label is as wide as the longer label: the other text is laid out invisibly under it
-   (height 0, hidden, no accessible text), so changing state does not change the control's width. */
-.r-filebtn__label {
-  display: inline-flex;
-  flex-direction: column;
-}
-.r-filebtn__label::after {
-  content: attr(data-other) / "";
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
-}
-/* Waiting is one button where "File in vault" is two: the 32px menu button minus the inline
-   chevron (14px) and its gap (8px) is added to the right padding, so both states are equally wide. */
+/* Waiting is one button where "File in vault" is two: it carries its chevron inside and is as wide
+   as the 32px icon button and the 26px menu button together, so changing state moves nothing. */
 .r-filebtn__queued {
-  padding-right: calc(var(--space-2) + 10px);
-}
-.r-filebtn__short {
-  display: none;
-}
-@media (max-width: 760px) {
-  .r-filebtn__long {
-    display: none;
-  }
-  .r-filebtn__short {
-    display: inline;
-  }
+  width: calc(32px + 26px);
+  grid-auto-flow: column;
+  gap: 2px;
 }
 
 /* The Feed's To file view: a status line, the groups that need the reader, then the Waiting list. */

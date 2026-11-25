@@ -1,12 +1,12 @@
-// FileButton: the reader's "File in vault" control. One click adds the item to the To file queue
-// (nothing opens, nothing is written); the small menu beside it offers "File as…". Once queued the
-// button reads "Waiting to be filed" and offers to remove the item or change its choices. An item
-// already filed shows "Filed". Both labels reserve the width of the longer one, so the change of
-// state fades in place instead of pushing the top bar about.
+// FileButton: the reader bar's "File in vault" icon button. One click adds the item to the To file
+// queue (nothing opens, nothing is written); the small menu button beside it offers "File as…".
+// Once queued the icon reads "Waiting to be filed" and its menu offers to remove the item or change
+// its choices. An item already filed shows a disabled "Filed" icon. Each state is as wide as the
+// others, so the change fades in place instead of pushing the bar about. Tooltips open downwards.
 import { useState } from 'react'
 import type { FiledInfo } from '../api/types'
 import { queueItem, unqueueItem, useFiling } from '../state/filingState'
-import { Button, IconButton, IconExpand, IconFiled, IconFileInVault, IconQueued, Menu } from '../ui'
+import { IconButton, IconExpand, IconFiled, IconFileInVault, IconQueued, Menu } from '../ui'
 import { FileAsDialog } from './FileAsDialog'
 import './filing.css'
 
@@ -21,18 +21,6 @@ export interface FileButtonProps {
 const ADD_LABEL = 'File in vault'
 const WAITING_LABEL = 'Waiting to be filed'
 
-/**
- * A label that is as wide as the longer of the two states' labels: the other text is laid out
- * invisibly by CSS from `data-other` (not part of the text or of the accessible name).
- */
-function SteadyLabel({ text, other, className }: { text: string; other: string; className?: string }) {
-  return (
-    <span className={['r-filebtn__label', className ?? ''].filter(Boolean).join(' ')} data-other={other}>
-      {text}
-    </span>
-  )
-}
-
 /** The split control for the reader's top bar. */
 export function FileButton({ itemId, filing, filed }: FileButtonProps) {
   const waiting = useFiling(itemId, filing) === 'waiting'
@@ -42,11 +30,7 @@ export function FileButton({ itemId, filing, filed }: FileButtonProps) {
   const stateClass = `r-filebtn__state${touched ? ' r-appear' : ''}`
 
   if (filed) {
-    return (
-      <Button variant="quiet" size="sm" disabled icon={<IconFiled size={14} />} title={`Filed in ${filed.project || 'your vault'}: ${filed.path}`}>
-        Filed
-      </Button>
-    )
+    return <IconButton label={`Filed in ${filed.project || 'your vault'}`} icon={<IconFiled size={18} />} tooltipSide="bottom" disabled />
   }
 
   return (
@@ -67,34 +51,35 @@ export function FileButton({ itemId, filing, filed }: FileButtonProps) {
               { id: 'change', label: 'Change…', onSelect: () => setDialog('change') },
             ]}
             trigger={
-              <Button variant="quiet" size="sm" className="r-filebtn__queued" icon={<IconQueued size={14} />} aria-label={WAITING_LABEL} title="This item is in your filing queue">
-                <SteadyLabel text={WAITING_LABEL} other={ADD_LABEL} className="r-filebtn__long" />
-                <span className="r-filebtn__short" aria-hidden="true">
-                  To file
-                </span>
-                <IconExpand size={14} />
-              </Button>
+              <IconButton
+                label={WAITING_LABEL}
+                className="r-filebtn__queued"
+                icon={
+                  <>
+                    <IconQueued size={18} />
+                    <IconExpand size={14} />
+                  </>
+                }
+                tooltipSide="bottom"
+              />
             }
           />
         </span>
       ) : (
         <span key="add" className={stateClass}>
-          <Button
-            variant="quiet"
-            size="sm"
-            icon={<IconFileInVault size={14} />}
+          <IconButton
+            label={ADD_LABEL}
+            icon={<IconFileInVault size={18} />}
+            tooltipSide="bottom"
             onClick={() => {
               setTouched(true)
               void queueItem(itemId)
             }}
-            title="Add to your filing queue; nothing is written yet"
-          >
-            <SteadyLabel text={ADD_LABEL} other={WAITING_LABEL} />
-          </Button>
+          />
           <Menu
             label="More ways to file"
             items={[{ id: 'file-as', label: 'File as…', onSelect: () => setDialog('add') }]}
-            trigger={<IconButton label="More ways to file" icon={<IconExpand size={14} />} tooltipSide="bottom" />}
+            trigger={<IconButton label="More ways to file" size="sm" icon={<IconExpand size={14} />} tooltipSide="bottom" />}
           />
         </span>
       )}

@@ -1,9 +1,11 @@
-// Tests for the reader page's wait: the preparing message shows from the click until the copy is
-// ready, gives way to the unavailable view when the copy fails, and offers Try again after a long wait.
+// Tests for the reader page's wait (the preparing message shows from the click until the copy is
+// ready, gives way to the unavailable view when the copy fails, and offers Try again after a long
+// wait), the line under the title, the next-story block at the end, and the J and K keys.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ItemDetail, ReaderStatus } from '../api/types'
-import { clearResourceCache } from '../hooks/useResource'
+import type { ItemDetail, ReaderStatus, TodayResponse } from '../api/types'
+import { clearResourceCache, useResource } from '../hooks/useResource'
+import { resetReadingList, setReadingList } from '../state/readingList'
 import { ReaderPage } from './ReaderPage'
 
 const api = vi.hoisted(() => ({ getItem: vi.fn(), sendSignal: vi.fn() }))
@@ -51,6 +53,7 @@ async function advance(ms: number) {
 
 beforeEach(() => {
   clearResourceCache()
+  resetReadingList()
   vi.clearAllMocks()
   api.sendSignal.mockResolvedValue(undefined)
 })
@@ -132,5 +135,157 @@ describe('ReaderPage wait', () => {
     expect(screen.getByText(PREPARING)).toBeInTheDocument()
     await advance(3000)
     expect(api.getItem).toHaveBeenCalledTimes(23)
+  })
+})
+
+/** A ready item with a site, a date and a 10-minute reading time, and the given byline. */
+function described(byline: string | null): ItemDetail {
+  const ready = detail('ok')
+  return {
+    ...ready,
+    published_at: '2026-11-12T08:00:00Z',
+    reader: { ...(ready.reader as NonNullable<ItemDetail['reader']>), site: 'Example Site', byline, word_count: 2300 },
+  }
+}
+
+describe('the line under the title', () => {
+  it('joins the byline with the source, the date and the reading time, none of which stay in the bar', async () => {
+    api.getItem.mockResolvedValue(described('Ada Lovelace'))
+    const { container } = render(<ReaderPage id={5} />)
+    expect(await screen.findByText('Ada Lovelace · Example Site · 12 Nov 2026 · 10 min read')).toHaveClass('r-reader__byline')
+    expect(container.querySelector('.r-readerbar')?.textContent).not.toMatch(/Example Site|12 Nov 2026|min read/)
+  })
+
+  it('shows the source, the date and the reading time alone when there is no byline', async () => {
+    api.getItem.mockResolvedValue(described(null))
+    render(<ReaderPage id={5} />)
+    expect(await screen.findByText('Example Site · 12 Nov 2026 · 10 min read')).toHaveClass('r-reader__byline')
+  })
+
+  it('says "PDF · N pages" for a long PDF, never "min read"', async () => {
+    const ready = detail('ok')
+    api.getItem.mockResolvedValue({ ...ready, reader: { ...(ready.reader as NonNullable<ItemDetail['reader']>), kind: 'pdf', word_count: 90000, page_count: 212 } })
+    render(<ReaderPage id={5} />)
+    expect(await screen.findByText(/PDF · 212 pages/)).toHaveClass('r-reader__byline')
+    expect(screen.queryByText(/min read/)).not.toBeInTheDocument()
+  })
+})
+
+// Twenty-seven stories; the reader has the second one (id 5) open and the third is id 6.
+const LIST = [4, 5, 6, ...Array.from({ length: 24 }, (_, index) => 200 + index)]
+const NEXT_HEADLINE = 'Northfield Robotics clears its second surgical platform in Europe'
+
+/** Today's answer as the Today page leaves it in the cache: one section whose story leads with item 6. */
+const TODAY = {
+  brief: { day: '2026-11-25', sections: [{ key: 'top', title: 'Top stories', note: null, stories: [{ id: 's6', item_id: 6, headline: NEXT_HEADLINE }] }] },
+  days: [],
+  status: {},
+} as unknown as TodayResponse
+
+/** Load Today's answer into the cache the way the Today page does, then leave. */
+async function visitToday() {
+  function TodayVisit() {
+    const today = useResource('today', async () => TODAY)
+    return today.data ? <p>Today loaded</p> : null
+  }
+  render(<TodayVisit />)
+  await screen.findByText('Today loaded')
+  cleanup()
+}
+
+describe('the next story at the end', () => {
+  it('offers "Next in Today · 3 of 27" with the headline Today holds, and opens it in place of this one', async () => {
+    await visitToday()
+    window.history.replaceState(null, '', '/#/item/5')
+    setReadingList('Today', LIST)
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    const next = await screen.findByRole('link', { name: /^Next in Today · 3 of 27/ })
+    expect(next).toHaveTextContent(NEXT_HEADLINE)
+    const entries = window.history.length
+    fireEvent.click(next)
+    expect(window.location.hash).toBe('#/item/6')
+    expect(window.history.length).toBe(entries)
+  })
+
+  it('takes the headline of a story opened earlier in the reader', async () => {
+    api.getItem.mockResolvedValue({ ...detail('ok'), id: 6, headline: NEXT_HEADLINE })
+    render(<ReaderPage id={6} />)
+    await screen.findByText('The article body.')
+    cleanup()
+    setReadingList('the Feed', LIST)
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    expect(await screen.findByRole('link', { name: /^Next in the Feed · 3 of 27/ })).toHaveTextContent(NEXT_HEADLINE)
+  })
+
+  it("takes the headline from an earlier day's brief when the reader was opened from that day", async () => {
+    function DayVisit() {
+      const brief = useResource('brief:2026-11-20', async () => TODAY.brief)
+      return brief.data ? <p>Day loaded</p> : null
+    }
+    render(<DayVisit />)
+    await screen.findByText('Day loaded')
+    cleanup()
+    window.history.replaceState({ radarIndex: 1, radarFrom: '#/today/2026-11-20' }, '', '/#/item/5')
+    setReadingList('Today', LIST)
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    expect(await screen.findByRole('link', { name: /^Next in Today · 3 of 27/ })).toHaveTextContent(NEXT_HEADLINE)
+  })
+
+  it('shows the position alone as the link when nothing holds the next headline', async () => {
+    setReadingList('the Feed', LIST)
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    const next = await screen.findByRole('link', { name: 'Next in the Feed · 3 of 27' })
+    expect(next).toHaveTextContent(/^Next in the Feed · 3 of 27$/)
+  })
+
+  it('shows nothing after the last story of the list, or without a list', async () => {
+    setReadingList('Today', [4, 5])
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    await screen.findByText('The article body.')
+    expect(screen.queryByText(/^Next in /)).not.toBeInTheDocument()
+    cleanup()
+    resetReadingList()
+    render(<ReaderPage id={5} />)
+    await screen.findByText('The article body.')
+    expect(screen.queryByText(/^Next in /)).not.toBeInTheDocument()
+  })
+})
+
+describe('the J and K keys', () => {
+  it('J opens the next story and K the previous one, each in place of this one', async () => {
+    window.history.replaceState(null, '', '/#/item/5')
+    setReadingList('Today', LIST)
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    await screen.findByText('The article body.')
+    const entries = window.history.length
+    fireEvent.keyDown(window, { key: 'j' })
+    expect(window.location.hash).toBe('#/item/6')
+    fireEvent.keyDown(window, { key: 'k' })
+    expect(window.location.hash).toBe('#/item/4')
+    expect(window.history.length).toBe(entries)
+  })
+
+  it('does nothing while the focus is in a text field or a text area, or without a list', async () => {
+    window.history.replaceState(null, '', '/#/item/5')
+    setReadingList('Today', LIST)
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    await screen.findByText('The article body.')
+    const field = document.body.appendChild(document.createElement('input'))
+    const area = document.body.appendChild(document.createElement('textarea'))
+    fireEvent.keyDown(field, { key: 'j' })
+    fireEvent.keyDown(area, { key: 'k' })
+    expect(window.location.hash).toBe('#/item/5')
+    field.remove()
+    area.remove()
+    act(() => resetReadingList())
+    fireEvent.keyDown(window, { key: 'j' })
+    expect(window.location.hash).toBe('#/item/5')
   })
 })

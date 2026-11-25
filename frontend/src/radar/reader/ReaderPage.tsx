@@ -1,5 +1,6 @@
-// ReaderPage (#/item/<id>): opened over the page you came from. Top bar, title, summary block,
-// the clean document, related items, and the selection toolbar that hands passages to the assistant.
+// ReaderPage (#/item/<id>): opened over the page you came from. Top bar, title with the line under
+// it, summary block, the clean document, related items, the next story of the reading list (also on
+// the J and K keys), and the selection toolbar that hands passages to the assistant.
 import { useEffect, useRef, useState } from 'react'
 import { getItem } from '../api/client'
 import { errorMessage } from '../api/errors'
@@ -12,8 +13,11 @@ import { plainText } from '../lib/plainText'
 import { goBack } from '../router'
 import { markOpened } from '../state/itemState'
 import { Button, EmptyState, SectionHeading } from '../ui'
+import { NextStory } from './NextStory'
 import { PreparingCopy } from './PreparingCopy'
 import { ReaderBody } from './ReaderBody'
+import { ReaderHead } from './ReaderHead'
+import { useStoryKeys } from './storyPosition'
 import { ReaderTopBar } from './ReaderTopBar'
 import { SelectionToolbar } from './SelectionToolbar'
 import { SummaryBlock } from './SummaryBlock'
@@ -40,12 +44,6 @@ const LOADING_SLOW_AFTER_MS = 10_000
 function LoadingCopy() {
   const slow = useAfterDelay(LOADING_SLOW_AFTER_MS)
   return <PreparingCopy delayMs={PREPARING_MESSAGE_DELAY_MS} slow={slow} />
-}
-
-/** The reader's title: the headline the reader clicked, except for papers, which keep their own title. */
-function readerTitle(detail: ItemDetail): string {
-  const isPaper = detail.kind === 'paper' || detail.reader?.kind === 'paper' || detail.reader?.kind === 'pdf'
-  return plainText(isPaper ? detail.reader?.title || detail.title || detail.headline : detail.headline)
 }
 
 /** Related items at the end of the document (embedding neighbours). */
@@ -83,6 +81,8 @@ export function ReaderPage({ id }: { id: number }) {
   const polls = pollCount.id === id ? pollCount.count : 0
 
   useReaderSignals(id)
+  // J and K open the next and previous story of the list, even while this one is still loading.
+  useStoryKeys(id)
 
   useEffect(() => {
     markOpened(id)
@@ -124,13 +124,11 @@ export function ReaderPage({ id }: { id: number }) {
       <>
         <ReaderTopBar detail={detail} showPdf={showPdf} onTogglePdf={() => setShowPdf((value) => !value)} />
         <article className={`r-reader r-reader--${detail.reader?.kind ?? 'article'}`}>
-          <header className="r-reader__head">
-            <h1 className="r-reader__title">{readerTitle(detail)}</h1>
-            {detail.reader?.byline && <p className="r-reader__byline">{detail.reader.byline}</p>}
-          </header>
+          <ReaderHead detail={detail} />
           <SummaryBlock detail={detail} />
           <ReaderBody detail={detail} showPdf={showPdf} proseRef={proseRef} onRefreshed={reload} slow={slow} onRetry={retryPending} />
           <Related detail={detail} />
+          <NextStory id={detail.id} />
         </article>
         <SelectionToolbar docRef={proseRef} layerRef={layerRef} watchKey={`${detail.id}:${detail.reader?.status}:${showPdf}`} />
       </>

@@ -37,7 +37,7 @@ describe('RadarApp', () => {
 
     const title = await screen.findByRole('heading', { level: 1, name: /Aster AI releases Aster 4/ }, { timeout: 4000 })
     const reader = title.closest('.r-layer--reader') as HTMLElement
-    expect(within(reader).getByText('Why it matters to you')).toBeInTheDocument()
+    expect(within(reader).getByText('Why it matters')).toBeInTheDocument()
     expect(within(reader).getByText(/fall by about 60 percent from next month/)).toBeInTheDocument()
     // The article's table is wrapped for sideways scrolling.
     await waitFor(() => expect(reader.querySelector('.r-table-wrap table')).not.toBeNull())

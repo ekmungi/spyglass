@@ -184,3 +184,25 @@ describe('waiting and filed', () => {
     expect(screen.queryByRole('button', { name: 'File in vault' })).not.toBeInTheDocument()
   })
 })
+
+describe('icon buttons in the reader bar', () => {
+  // The bar sits at the top of the window, so every tooltip opens below its button.
+  const tipBelow = (name: string | RegExp) => expect(screen.getByRole('button', { name }).closest('.r-tip')).toHaveClass('r-tip--bottom')
+
+  it('shows File in vault and its menu button as icon buttons with their tooltips below', () => {
+    render(<FileButton itemId={101} filing={null} filed={null} />)
+    expect(screen.getByRole('button', { name: 'File in vault' })).toHaveClass('r-iconbtn')
+    tipBelow('File in vault')
+    tipBelow('More ways to file')
+  })
+
+  it('shows the waiting and the filed states as icon buttons too', () => {
+    render(<FileButton itemId={101} filing="waiting" filed={null} />)
+    expect(screen.getByRole('button', { name: 'Waiting to be filed' })).toHaveClass('r-iconbtn')
+    tipBelow('Waiting to be filed')
+    cleanup()
+    render(<FileButton itemId={101} filing={null} filed={{ path: 'Inbox/Note.md', project: 'Imaging AI', at: '2026-11-12T08:00:00Z' }} />)
+    expect(screen.getByRole('button', { name: 'Filed in Imaging AI' })).toHaveClass('r-iconbtn')
+    tipBelow('Filed in Imaging AI')
+  })
+})

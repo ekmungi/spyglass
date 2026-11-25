@@ -43,6 +43,14 @@ export function clearResourceCache(key?: string): void {
   else cache.delete(key)
 }
 
+/**
+ * The last answer kept for a key, or undefined when there is none. It only reads the cache and never
+ * loads anything; the reader uses it to name the next story from a page that was already loaded.
+ */
+export function peekResource<T>(key: string): T | undefined {
+  return cache.get(key) as T | undefined
+}
+
 /** The state for a key at first sight: the cached answer when there is one. */
 function initial<T>(key: string | null): State<T> {
   const cached = key ? (cache.get(key) as T | undefined) : undefined

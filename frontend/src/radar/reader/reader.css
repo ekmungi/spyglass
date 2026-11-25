@@ -24,22 +24,45 @@
   gap: var(--space-2);
   min-width: 0;
 }
-.r-readerbar__meta {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--muted);
+/* Previous and next story, then the count ("2 of 27 in Today"), which gives way first when narrow. */
+.r-readerbar__nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.r-readerbar__count {
+  margin-left: var(--space-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.r-readerbar__actions {
+.r-readerbar__actions,
+.r-readerbar__width {
   display: flex;
   align-items: center;
   gap: 2px;
   flex: none;
 }
+/* A thin upright rule between groups of buttons. */
+.r-readerbar__sep {
+  flex: none;
+  width: 1px;
+  height: var(--space-5);
+  margin: 0 var(--space-2);
+  background: var(--rule-strong);
+}
+/* Just after a copy: the tick's tooltip stays up and reads "Link copied" in the accent colour. */
+.r-copylink.is-copied .r-tip__bubble {
+  opacity: 1;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+/* In a narrow window the column already fills it, so the width steps and the count make room. */
 @media (max-width: 760px) {
-  .r-readerbar__actions .r-btn--quiet:not([aria-haspopup]) {
+  .r-readerbar__width,
+  .r-readerbar__width + .r-readerbar__sep,
+  .r-readerbar__count {
     display: none;
   }
 }
@@ -430,6 +453,23 @@
 }
 .r-related__link:hover .r-headline {
   text-decoration-color: var(--rule-strong);
+}
+
+/* The next story of the reading list, at the very end: its position, then its headline. */
+.r-reader-next {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-12);
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--rule-strong);
+  color: inherit;
+  text-decoration: none;
+}
+.r-reader-next .r-headline {
+  transition: color var(--dur-fast) var(--ease-enter);
+}
+.r-reader-next:hover .r-headline {
+  color: var(--accent);
 }
 
 /* Floating selection toolbar */

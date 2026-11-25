@@ -1,7 +1,7 @@
 // SummaryBlock: where the item was filed (when it was), the reader's own note (for a link they sent)
 // with a quiet "Open in Claude Code…" beside it, the key points as a short list, then "Why it
-// matters to you", above the document. Lines that only repeat the document's opening (a paper's
-// abstract) are left out here so the abstract is not shown twice.
+// matters" (in general terms, for every item), above the document. Lines that only repeat the
+// document's opening (a paper's abstract) are left out here so the abstract is not shown twice.
 import type { ItemDetail } from '../api/types'
 import { openClaudeDialog } from '../claude/claudeStore'
 import { formatDate } from '../lib/format'
@@ -55,7 +55,7 @@ export function SummaryBlock({ detail }: { detail: ItemDetail }) {
       {fallback && <p className="r-summary__snippet">{fallback}</p>}
       {detail.why && (
         <div className="r-summary__why">
-          <h2 className="r-summary__why-label">Why it matters to you</h2>
+          <h2 className="r-summary__why-label">Why it matters</h2>
           <p>{detail.why}</p>
         </div>
       )}
