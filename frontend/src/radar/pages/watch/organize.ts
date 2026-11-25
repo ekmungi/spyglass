@@ -1,16 +1,8 @@
 // The Watch page's layout, decided once per load: which names show in which group, the Paused list
-// and the suggestion rows; plus the in-place change of one name's look and the steps a group moves.
+// and the suggestion rows; plus the in-place change of one name's look, the register with names moved
+// to the list their status puts them in, and the steps a group moves.
 import type { WatchStatus } from '../../api/types'
-import { isWithinDays } from '../sources/format'
 import type { WatchEntry, WatchRegister } from './api'
-
-/** How many days a hit counts as recent for a suggestion's "Last mentioned" line. */
-export const RECENT_DAYS = 7
-
-/** True when the entity was hit within the last RECENT_DAYS days. */
-export function hasRecentHit(entity: WatchEntry, now: Date = new Date()): boolean {
-  return isWithinDays(entity.last_hit_at, RECENT_DAYS, now)
-}
 
 /** A followed group as laid out at load: only the names that were active then, in the server's order. */
 export interface LayoutGroup {
@@ -106,13 +98,58 @@ export function withStatuses(layout: WatchLayout, statuses: StatusById): WatchLa
   }
 }
 
-/** The register with the given followed names' statuses changed, in a copy. */
+/** The three lists of the register a status puts a name in. */
+type Shelf = 'groups' | 'suggested' | 'rejected'
+
+/** Where a status puts a name: watched and paused names in their group, the others in their own list. */
+function shelfOf(status: WatchStatus): Shelf {
+  if (status === 'suggested' || status === 'rejected') return status
+  return 'groups'
+}
+
+/** The list with `entity` inserted where the server would list it: by name, ignoring case. */
+function inNameOrder(list: readonly WatchEntry[], entity: WatchEntry): WatchEntry[] {
+  const name = entity.name.toLowerCase()
+  const at = list.findIndex((other) => other.name.toLowerCase() > name)
+  return at < 0 ? [...list, entity] : [...list.slice(0, at), entity, ...list.slice(at)]
+}
+
+/** The groups with `entity` added to its own group ("Other" when it has none), a new group going last. */
+function intoGroup(categories: WatchRegister['categories'], entity: WatchEntry): WatchRegister['categories'] {
+  const name = entity.category || 'Other'
+  if (!categories.some((category) => category.name === name)) return [...categories, { name, entities: [entity] }]
+  return categories.map((category) => (category.name === name ? { ...category, entities: inNameOrder(category.entities, entity) } : category))
+}
+
+/**
+ * The register with the given names' statuses changed, in a copy. A name whose new status belongs in
+ * another list moves there, in the order the server keeps: a watched suggestion joins its group, a
+ * rejected one the rejected list, and a name taken back the suggestions. Names that stay in their
+ * list keep their place. Used to lay out a name where the page first showed it, and to keep the
+ * answer remembered for the next visit in step with a confirmed change.
+ */
 export function registerWithStatuses(register: WatchRegister, statuses: StatusById): WatchRegister {
   if (statuses.size === 0) return register
-  return {
+  const patch = (list: readonly WatchEntry[]) => list.map((entity) => patched(entity, statuses))
+  const staying = (list: readonly WatchEntry[], shelf: Shelf) => patch(list).filter((entity) => shelfOf(entity.status) === shelf)
+  const leaving = (list: readonly WatchEntry[], shelf: Shelf) => patch(list).filter((entity) => shelfOf(entity.status) !== shelf)
+
+  const moving = [
+    ...register.categories.flatMap((category) => leaving(category.entities, 'groups')),
+    ...leaving(register.suggested, 'suggested'),
+    ...leaving(register.rejected, 'rejected'),
+  ]
+  const kept: WatchRegister = {
     ...register,
-    categories: register.categories.map((category) => ({ ...category, entities: category.entities.map((entity) => patched(entity, statuses)) })),
+    categories: register.categories.map((category) => ({ ...category, entities: staying(category.entities, 'groups') })),
+    suggested: staying(register.suggested, 'suggested'),
+    rejected: staying(register.rejected, 'rejected'),
   }
+  return moving.reduce<WatchRegister>((next, entity) => {
+    const shelf = shelfOf(entity.status)
+    if (shelf === 'groups') return { ...next, categories: intoGroup(next.categories, entity) }
+    return { ...next, [shelf]: inNameOrder(next[shelf], entity) }
+  }, kept)
 }
 
 /**

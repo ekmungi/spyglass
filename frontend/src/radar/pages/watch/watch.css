@@ -147,10 +147,6 @@
   align-items: baseline;
   gap: var(--space-1) var(--space-3);
 }
-.rw-hit {
-  font-size: var(--text-xs);
-  color: var(--accent);
-}
 .rw-why {
   margin: var(--space-1) 0 0;
   color: var(--ink-2);
@@ -316,7 +312,8 @@
   translate: none;
 }
 .rw-chip .rw-chip__main:focus-visible,
-.rw-chip .rw-chip__more:focus-visible {
+.rw-chip .rw-chip__more:focus-visible,
+.rw-chip .rw-chip__x:focus-visible {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 .rw-chip[aria-busy="true"] .rw-chip__main {
@@ -334,16 +331,28 @@
 .rw-chip .r-menu {
   align-self: stretch;
 }
-.rw-chip .rw-chip__more {
+.rw-chip .rw-chip__more,
+.rw-chip .rw-chip__x {
   width: 21px;
   height: 100%;
   padding: 0 3px 0 0;
   border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
   color: var(--muted);
 }
-.rw-chip .rw-chip__more:hover {
+.rw-chip .rw-chip__x {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+.rw-chip .rw-chip__more:hover,
+.rw-chip .rw-chip__x:hover {
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 9%, transparent);
+}
+/* The space a watched suggestion keeps for its cross is not a control. */
+.rw-chip span.rw-chip__x:hover {
+  background: none;
 }
 .rw-chip--on {
   background: var(--watch-bg);
@@ -362,6 +371,94 @@
 }
 .rw-chip--off:hover {
   background: var(--surface);
+}
+
+/* Suggestion chips: open (raised, with a plus), watched on this visit (green) or rejected (dashed, struck through). */
+.rw-chips > .r-tip {
+  max-width: 100%;
+}
+.rw-chip__plus {
+  width: 7px;
+  flex: none;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1;
+}
+.rw-chip .r-chip__count {
+  font-weight: 400;
+}
+.rw-chip--on .r-chip__count {
+  color: inherit;
+  opacity: 0.7;
+}
+.rw-chip--sug {
+  background: var(--paper-raised);
+}
+.rw-chip--sug:hover,
+.rw-chip--rej:hover {
+  background: var(--surface);
+}
+.rw-chip--rej {
+  border-style: dashed;
+  color: var(--faint);
+}
+.rw-chip--rej .rw-chip__name {
+  text-decoration: line-through;
+}
+.rw-chip--rej .r-chip__count {
+  color: inherit;
+}
+
+/* A chip in the Not of interest list: one button, the name struck through and "Take back". */
+.rw-chip .rw-chip__take {
+  display: inline-flex;
+  align-items: center;
+  padding-right: 12px;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  cursor: pointer;
+}
+.rw-chip__back {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* Under the suggestions: how many are undecided, and "Hide the rest for good". */
+.rw-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-top: var(--space-3);
+}
+
+/* Not of interest sits right above the Topics line when no topic is followed. */
+.rw-section--fold:has(+ .rw-section--line) {
+  margin-bottom: 0;
+}
+.rw-topics-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--text-sm);
+  color: var(--ink-2);
+}
+.rw-topics-line__link {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.rw-topics-line__link:hover {
+  text-decoration: underline;
 }
 
 /* The dot that says watched (filled) or paused (a ring), in the chips and in the key. */

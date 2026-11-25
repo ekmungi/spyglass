@@ -1,12 +1,13 @@
-// Watch page: the topics you follow, suggestions waiting for a yes, then the companies, labs and regulators
-// Spyglass checks every day as chips, one row per group, and the Paused list. One click on a chip pauses or
-// watches a name in place. One Add button opens every way to add; a group menu and an AI review tidy the list.
+// Watch page: the companies, labs and regulators Spyglass checks every day as chips, one row per group,
+// and the Paused list; then the suggested organisations as chips, one row per profile section; the
+// Not of interest list; and the topics you follow. One click on a chip changes a name in place. One
+// Add button opens every way to add; a group menu and an AI review tidy the list.
 import './watch/watch.css'
 import { useCallback, useState } from 'react'
 import { errorMessage } from '../api/errors'
 import type { RemovedWatchEntity, SectionKey, WatchApplyResponse, WatchGroupBody, WatchGroupResponse } from '../api/types'
 import { navigate } from '../router'
-import { Button, EmptyState, IconAdd, SectionHeading, Skeleton, toast, type MenuItem } from '../ui'
+import { Button, EmptyState, IconAdd, Skeleton, toast, type MenuItem } from '../ui'
 import {
   addEntry,
   changeEntry,
@@ -20,7 +21,7 @@ import {
   type WatchEntry,
   type WatchRegister,
 } from './watch/api'
-import { AddDialog } from './watch/AddDialog'
+import { AddDialog, type AddStep } from './watch/AddDialog'
 import { EntityDialog } from './watch/EntityDialog'
 import type { FollowFields } from './watch/FollowPane'
 import type { GroupMenuAction } from './watch/GroupHeading'
@@ -28,12 +29,13 @@ import { GroupDialog, type GroupDialogState } from './watch/GroupDialogs'
 import { MoveDialog } from './watch/MoveDialog'
 import { RemoveNameDialog } from './watch/RemoveNameDialog'
 import { categoryNames, groupSteps, type LayoutGroup } from './watch/organize'
+import { RejectedList } from './watch/RejectedList'
 import { describeApplied } from './watch/reviewText'
 import { ReviewPanel } from './watch/ReviewPanel'
+import { SuggestedSection } from './watch/SuggestedSection'
 import { TopicsSection } from './watch/TopicsSection'
 import { WatchingSection } from './watch/WatchingSection'
 import { useWatchLayout } from './watch/useWatchLayout'
-import { WatchRow } from './watch/WatchRow'
 import { useLoad } from './sources/useLoad'
 
 /** The open per-name dialog; `group` is the group the name is shown in or labelled with. */
@@ -55,19 +57,19 @@ function registerOf<T extends WatchRegister>({ categories, suggested, rejected, 
 export default function WatchPage() {
   const loaded = useLoad<WatchRegister>((signal) => getWatch(signal), 'watch')
   const { data, error, loading } = loaded
-  const [busyId, setBusyId] = useState<number | null>(null)
   const [busyGroup, setBusyGroup] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogState>(null)
   const [groupDialog, setGroupDialog] = useState<GroupDialogState>(null)
   const [groupProblem, setGroupProblem] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
-  const [adding, setAdding] = useState(false)
+  // The step the Add dialog opens at while it is open.
+  const [adding, setAdding] = useState<AddStep | null>(null)
   const [reviewing, setReviewing] = useState(false)
   const [topicsToken, setTopicsToken] = useState(0)
 
   // Laid out once per load; a chip click changes only that chip's look, and the chip keeps its place
   // until an action that changes the structure. Every reload and replace below is such an action.
-  const { layout, switching, toggle, restructure } = useWatchLayout(data, loaded.remember)
+  const { layout, switching, toggle, change, changeMany, restructure } = useWatchLayout(data, loaded.remember)
   const reload = () => {
     restructure()
     loaded.reload()
@@ -78,41 +80,12 @@ export default function WatchPage() {
   }
 
   const closeDialog = useCallback(() => setDialog(null), [])
-  const closeAdd = useCallback(() => setAdding(false), [])
+  const closeAdd = useCallback(() => setAdding(null), [])
   const closeReview = useCallback(() => setReviewing(false), [])
   const closeGroupDialog = useCallback(() => {
     setGroupDialog(null)
     setGroupProblem(null)
   }, [])
-
-  /** Run one change on one name, reload the register, and report a failure in words. */
-  const act = async (entry: WatchEntry, run: () => Promise<unknown>, done?: string, undo?: () => Promise<unknown>) => {
-    setBusyId(entry.id)
-    try {
-      await run()
-      reload()
-      if (done) {
-        toast(done, {
-          action: undo
-            ? {
-                label: 'Undo',
-                onClick: () => {
-                  undo().then(reload, (cause) => toast(errorMessage(cause), { tone: 'error' }))
-                },
-              }
-            : undefined,
-        })
-      }
-    } catch (cause) {
-      toast(errorMessage(cause), { tone: 'error' })
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  const accept = (entry: WatchEntry) => act(entry, () => changeEntry(entry.id, { status: 'active' }), `Now watching ${entry.name}`)
-  const dismiss = (entry: WatchEntry) =>
-    act(entry, () => changeEntry(entry.id, { status: 'muted' }), `Dismissed ${entry.name}`, () => changeEntry(entry.id, { status: 'suggested' }))
 
   /** Move one name to another group; the rows change, so the list is loaded again. */
   const moveName = async (entry: WatchEntry, to: string) => {
@@ -140,14 +113,14 @@ export default function WatchPage() {
 
   const addOrganisation = async (fields: EntryFields) => {
     await addEntry(fields)
-    setAdding(false)
+    setAdding(null)
     reload()
     toast(`Now watching ${fields.name}`)
   }
 
   const followTopic = async (fields: FollowFields) => {
     await createTrack({ label: fields.label, query: fields.query, section: fields.section as SectionKey, kind: 'topic' })
-    setAdding(false)
+    setAdding(null)
     setTopicsToken((value) => value + 1)
     toast(`Now following ${fields.label}`)
   }
@@ -255,9 +228,8 @@ export default function WatchPage() {
     { id: 'remove', label: 'Remove…', onSelect: () => setDialog({ kind: 'remove', entry }) },
   ]
 
-  const suggested = data?.suggested ?? []
   const watching = layout !== null && (layout.groups.length > 0 || layout.paused.length > 0)
-  const empty = layout !== null && !watching && suggested.length === 0
+  const empty = layout !== null && !watching && layout.rows.every((row) => row.entities.length === 0)
   const groupNames = data ? categoryNames(data) : []
 
   return (
@@ -268,14 +240,12 @@ export default function WatchPage() {
           <Button variant="quiet" size="sm" onClick={() => setReviewing(true)}>
             Review with AI
           </Button>
-          <Button variant="secondary" icon={<IconAdd size={16} />} onClick={() => setAdding(true)}>
+          <Button variant="secondary" icon={<IconAdd size={16} />} onClick={() => setAdding('choose')}>
             Add
           </Button>
         </div>
       </div>
       <p className="r-page-meta">{EXPLAINER}</p>
-
-      <TopicsSection refreshToken={topicsToken} />
 
       {loading && !data && (
         <div aria-busy="true" aria-label="Loading your watch list" className="rw-skeleton">
@@ -293,33 +263,6 @@ export default function WatchPage() {
         </div>
       )}
 
-      {suggested.length > 0 && (
-        <section aria-labelledby="watch-suggested" className="rw-section">
-          <SectionHeading id="watch-suggested" note="Waiting for your yes">
-            Suggested
-          </SectionHeading>
-          <ul className="r-rows">
-            {suggested.map((entry) => (
-              <WatchRow
-                key={entry.id}
-                entry={entry}
-                busy={busyId === entry.id}
-                actions={
-                  <>
-                    <Button size="sm" variant="secondary" disabled={busyId === entry.id} aria-label={`Accept ${entry.name}`} onClick={() => void accept(entry)}>
-                      Accept
-                    </Button>
-                    <Button size="sm" variant="quiet" disabled={busyId === entry.id} aria-label={`Dismiss ${entry.name}`} onClick={() => void dismiss(entry)}>
-                      Dismiss
-                    </Button>
-                  </>
-                }
-              />
-            ))}
-          </ul>
-        </section>
-      )}
-
       {layout && watching && (
         <WatchingSection layout={layout} busyIds={switching} busyGroup={busyGroup} menuFor={menuFor} onToggle={toggle} onGroupAction={onGroupAction} />
       )}
@@ -328,12 +271,17 @@ export default function WatchPage() {
         <EmptyState
           title="Nothing on your watch list yet"
           body="Use Add to find who matters for a topic, follow a topic, or add a name yourself."
-          action={<Button onClick={() => setAdding(true)}>Add something to watch</Button>}
+          action={<Button onClick={() => setAdding('choose')}>Add something to watch</Button>}
         />
       )}
 
+      {layout && <SuggestedSection rows={layout.rows} busyIds={switching} change={change} changeMany={changeMany} />}
+      {layout && <RejectedList rejected={layout.rejected} change={change} />}
+      <TopicsSection refreshToken={topicsToken} onFollow={() => setAdding('follow')} />
+
       {adding && (
         <AddDialog
+          start={adding}
           categories={groupNames}
           onClose={closeAdd}
           discover={discoverTopic}

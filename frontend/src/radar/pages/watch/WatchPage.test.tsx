@@ -1,5 +1,6 @@
-// Tests for the Watch page: layout, the watched names as chips and the Paused list, the chip menu, the
-// Add dialog's three paths, suggestions and errors.
+// Tests for the Watch page: the order of its sections, the watched names as chips and the Paused list,
+// the chip menu, the Add dialog's three paths, the Topics line and errors. The suggestions are tested
+// in WatchSuggestions.test.tsx and the group actions in WatchGroups.test.tsx.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/errors'
@@ -21,6 +22,7 @@ const api = vi.hoisted(() => ({
   deleteTrack: vi.fn(),
   patchWatchGroup: vi.fn(),
   restoreWatchGroup: vi.fn(),
+  setSuggestionStatus: vi.fn(),
   reviewWatch: vi.fn(),
   applyWatchReview: vi.fn(),
 }))
@@ -69,12 +71,16 @@ describe('WatchPage layout', () => {
     expect(screen.queryByLabelText('Find who matters for a topic')).not.toBeInTheDocument()
   })
 
-  it('shows suggestions first, then Watching: each group a heading followed by its names as chips', async () => {
+  it('shows Watching first, then Suggested, then Not of interest, then the topics you follow', async () => {
     renderPage()
-    expect(await screen.findByRole('heading', { name: 'Suggested' })).toBeInTheDocument()
-    expect(screen.getByText('Gamma Labs')).toBeInTheDocument()
-    const headings = screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)
-    expect(headings.slice(0, 4)).toEqual(['Topics you follow', 'You are not following any topics yet', 'Suggested', 'Watching'])
+    await screen.findByText('Topics you follow: none yet.')
+    const order = ['Watching', 'Suggested this month', 'Not of interest', 'Topics you follow'].map((name) => screen.getByRole('region', { name }))
+    expect(screen.getAllByRole('region')).toEqual(order)
+  })
+
+  it('shows each group of Watching as a heading followed by its names as chips', async () => {
+    renderPage()
+    expect(await screen.findByRole('heading', { name: 'Watching' })).toBeInTheDocument()
     expect(screen.getByText('2 watched · 1 group')).toBeInTheDocument()
 
     const group = screen.getByRole('group', { name: 'Imaging AI' })
@@ -99,17 +105,12 @@ describe('WatchPage layout', () => {
     expect(screen.queryByText(/^Muted \(/)).not.toBeInTheDocument()
   })
 
-  it('accepts a suggestion by making it active and reloads the list', async () => {
+  it('is one line with "Follow a topic" at the end when no topic is followed, which opens that step of the Add dialog', async () => {
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Accept Gamma Labs' }))
-    await waitFor(() => expect(api.changeEntry).toHaveBeenCalledWith(9, { status: 'active' }))
-    await waitFor(() => expect(api.getWatch).toHaveBeenCalledTimes(2))
-  })
-
-  it('dismisses a suggestion by muting it', async () => {
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss Gamma Labs' }))
-    await waitFor(() => expect(api.changeEntry).toHaveBeenCalledWith(9, { status: 'muted' }))
+    const topics = (await screen.findByText('Topics you follow: none yet.')).closest('section') as HTMLElement
+    fireEvent.click(within(topics).getByRole('button', { name: 'Follow a topic' }))
+    const dialog = screen.getByRole('dialog', { name: 'Follow a topic' })
+    expect(within(dialog).getByLabelText('Search phrase')).toBeInTheDocument()
   })
 
   it('asks before removing a name', async () => {
@@ -201,19 +202,17 @@ describe('Watching chips', () => {
   it('keeps the look of a switch still on its way when the list is loaded again', async () => {
     let finish: (value: unknown) => void = () => {}
     api.changeEntry.mockImplementation((id: number) => (id === 1 ? new Promise((resolve) => (finish = resolve)) : Promise.resolve({})))
-    // The reload that follows accepting Gamma Labs was read before Alpha Scopes' change reached the service.
-    const accepted = register()
-    accepted.categories[0] = {
-      ...accepted.categories[0],
-      entities: [...accepted.categories[0].entities, { ...accepted.suggested[0], status: 'active' as const, category: 'Imaging AI' }],
-    }
-    accepted.suggested = []
-    api.getWatch.mockResolvedValueOnce(register()).mockResolvedValueOnce(accepted)
+    // The reload that follows adding Delta Corp was read before Alpha Scopes' change reached the service.
+    const added = register()
+    added.categories[0] = { ...added.categories[0], entities: [...added.categories[0].entities, entry({ id: 40, name: 'Delta Corp' })] }
+    api.getWatch.mockResolvedValueOnce(register()).mockResolvedValueOnce(added)
     renderPage()
     const group = await screen.findByRole('group', { name: 'Imaging AI' })
     fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Accept Gamma Labs' }))
-    expect(await within(group).findByRole('button', { name: 'Gamma Labs' })).toBeInTheDocument()
+    const dialog = await openAdd(/Add one organisation/)
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Delta Corp' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
+    expect(await within(group).findByRole('button', { name: 'Delta Corp' })).toBeInTheDocument()
     expect(within(group).getByRole('button', { name: 'Alpha Scopes' })).toHaveAttribute('aria-pressed', 'false')
 
     finish({})

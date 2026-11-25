@@ -66,8 +66,11 @@ function twoGroups(): WatchRegister {
   return next
 }
 
-/** The group names in the order the page shows them. */
-const shownGroups = () => screen.getAllByRole('heading', { level: 3 }).map((node) => node.textContent)
+/** The group names in the order the page shows them under Watching (the suggestion rows have headings too). */
+const shownGroups = () =>
+  within(screen.getByRole('region', { name: 'Watching' }))
+    .getAllByRole('heading', { level: 3 })
+    .map((node) => node.textContent)
 
 describe('group actions', () => {
   it('pauses a whole group in one choice and lays the page out again from the answer, without another request', async () => {

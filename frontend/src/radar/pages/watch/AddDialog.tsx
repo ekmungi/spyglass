@@ -7,15 +7,16 @@ import { DiscoverPane } from './DiscoverPane'
 import { EntityForm } from './EntityForm'
 import { FollowPane, type FollowFields } from './FollowPane'
 
-type Step = 'choose' | 'discover' | 'follow' | 'organisation'
+/** The dialog's steps: the three choices, then the chosen way to add. */
+export type AddStep = 'choose' | 'discover' | 'follow' | 'organisation'
 
-const CHOICES: { step: Exclude<Step, 'choose'>; title: string; body: string }[] = [
+const CHOICES: { step: Exclude<AddStep, 'choose'>; title: string; body: string }[] = [
   { step: 'discover', title: 'Find who matters for a topic', body: 'Name a topic and Spyglass proposes the organisations to watch for it.' },
   { step: 'follow', title: 'Follow a topic', body: 'Search the news for a subject every day, such as a technique or a product.' },
   { step: 'organisation', title: 'Add one organisation', body: 'A company, lab or regulator you already know.' },
 ]
 
-const TITLES: Record<Step, string> = {
+const TITLES: Record<AddStep, string> = {
   choose: 'Add to Watch',
   discover: 'Find who matters for a topic',
   follow: 'Follow a topic',
@@ -23,6 +24,8 @@ const TITLES: Record<Step, string> = {
 }
 
 export interface AddDialogProps {
+  /** The step it opens at; the three choices unless given (Back always returns to them). */
+  start?: AddStep
   /** Group names already in use, offered as suggestions for a new organisation. */
   categories: string[]
   onClose: () => void
@@ -33,9 +36,9 @@ export interface AddDialogProps {
   onAddOrganisation: (fields: EntryFields) => Promise<void>
 }
 
-/** Mount it while it should be open (it starts at the three choices each time). */
-export function AddDialog({ categories, onClose, discover, onDiscovered, onFollow, onAddOrganisation }: AddDialogProps) {
-  const [step, setStep] = useState<Step>('choose')
+/** Mount it while it should be open (it starts at `start` each time). */
+export function AddDialog({ start = 'choose', categories, onClose, discover, onDiscovered, onFollow, onAddOrganisation }: AddDialogProps) {
+  const [step, setStep] = useState<AddStep>(start)
   const [saving, setSaving] = useState(false)
   const formId = useId()
   const back = () => setStep('choose')

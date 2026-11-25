@@ -148,6 +148,45 @@ describe('registerWithStatuses', () => {
     expect(layout.groups.map((g) => g.name)).toEqual(['Imaging AI', 'Regulators'])
     expect(before.categories[0].entities[1].status).toBe('active')
   })
+
+  it('moves a watched suggestion into its group and a rejected one into the rejected list, in name order', () => {
+    const before = {
+      ...register(),
+      suggested: [
+        entry({ id: 9, name: 'Gamma Labs', status: 'suggested', category: 'Imaging AI' }),
+        entry({ id: 10, name: 'Beta Org', status: 'suggested', category: '' }),
+        entry({ id: 11, name: 'Kappa Inc', status: 'suggested' }),
+      ],
+      rejected: [entry({ id: 30, name: 'Alpha News', status: 'rejected' }), entry({ id: 31, name: 'Zed Corp', status: 'rejected' })],
+    }
+    const after = registerWithStatuses(before, new Map([[9, 'active'], [10, 'active'], [11, 'rejected']]))
+    // The server lists names by name inside a group, and puts a name with no group in "Other", last.
+    expect(after.categories.map((c) => [c.name, c.entities.map((e) => e.name)])).toEqual([
+      ['Imaging AI', ['Alpha Scopes', 'Gamma Labs', 'Zeta Vision']],
+      ['Regulators', ['FDA']],
+      ['Other', ['Beta Org']],
+    ])
+    expect(after.categories[0].entities[1].status).toBe('active')
+    expect(after.suggested).toEqual([])
+    expect(after.rejected.map((e) => [e.name, e.status])).toEqual([
+      ['Alpha News', 'rejected'],
+      ['Kappa Inc', 'rejected'],
+      ['Zed Corp', 'rejected'],
+    ])
+    expect(before.suggested).toHaveLength(3)
+  })
+
+  it('takes a name back out of its group or the rejected list when its status is "suggested"', () => {
+    const before = { ...register(), rejected: [entry({ id: 30, name: 'Alpha News', status: 'rejected' })] }
+    const after = registerWithStatuses(before, new Map([[2, 'suggested'], [30, 'suggested']]))
+    expect(after.categories[0].entities.map((e) => e.name)).toEqual(['Alpha Scopes'])
+    expect(after.suggested.map((e) => [e.name, e.status])).toEqual([
+      ['Alpha News', 'suggested'],
+      ['Gamma Labs', 'suggested'],
+      ['Zeta Vision', 'suggested'],
+    ])
+    expect(after.rejected).toEqual([])
+  })
 })
 
 describe('groupSteps', () => {

@@ -1,5 +1,5 @@
 // The secondary pages against the sample-mode fixtures (the same shapes the real service sends):
-// they must load, and accepting or dismissing a watch suggestion must change the list.
+// they must load, and watching or rejecting a watch suggestion must change the list by the next visit.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { setFetchForTesting } from '../api/transport'
@@ -28,25 +28,34 @@ afterEach(() => {
 })
 
 describe('Watch page in sample mode', () => {
-  it('moves an accepted suggestion into its category', async () => {
+  it('watches a suggestion in place, and shows it in its group on the next visit', async () => {
+    const first = render(<WatchPage />)
+    const suggested = await screen.findByRole('region', { name: 'Suggested this month' }, { timeout: 4000 })
+    const chip = within(suggested).getByRole('button', { name: 'Arclight Endoscopy, named in 4 items' })
+    fireEvent.click(chip)
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+    // The chip stays in its row on this visit; the next visit is opened once the service has agreed.
+    await waitFor(() => expect(chip.closest('.rw-chip')).not.toHaveAttribute('aria-busy'), { timeout: 4000 })
+    expect(within(suggested).getByRole('button', { name: 'Arclight Endoscopy, named in 4 items' })).toBe(chip)
+    first.unmount()
+
     render(<WatchPage />)
-    const suggested = await screen.findByRole('region', { name: 'Suggested' }, { timeout: 4000 })
-    expect(within(suggested).getByText('Arclight Endoscopy')).toBeInTheDocument()
-
-    fireEvent.click(within(suggested).getByRole('button', { name: 'Accept Arclight Endoscopy' }))
-
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Suggested' })).not.toHaveTextContent('Arclight Endoscopy'), { timeout: 4000 })
-    const category = screen.getByRole('group', { name: 'Imaging AI' })
+    const category = await screen.findByRole('group', { name: 'Imaging AI' }, { timeout: 4000 })
     expect(within(category).getByRole('button', { name: 'Arclight Endoscopy', pressed: true })).toBeInTheDocument()
   })
 
-  it('removes a dismissed suggestion from the list', async () => {
+  it('strikes a rejected suggestion through in place, and lists it under Not of interest on the next visit', async () => {
+    const first = render(<WatchPage />)
+    const suggested = await screen.findByRole('region', { name: 'Suggested this month' }, { timeout: 4000 })
+    fireEvent.click(within(suggested).getByRole('button', { name: 'Not of interest: Quill Robotics' }))
+    const takeBack = within(suggested).getByRole('button', { name: 'Take back Quill Robotics' })
+    await waitFor(() => expect(takeBack.closest('.rw-chip')).not.toHaveAttribute('aria-busy'), { timeout: 4000 })
+    expect(screen.getByText('Not of interest (1)')).toBeInTheDocument()
+    first.unmount()
+
     render(<WatchPage />)
-    const suggested = await screen.findByRole('region', { name: 'Suggested' }, { timeout: 4000 })
-    fireEvent.click(within(suggested).getByRole('button', { name: 'Dismiss Quill Robotics' }))
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Suggested' })).not.toHaveTextContent('Quill Robotics'), { timeout: 4000 })
-    // Dismissed names are kept out of the way, not deleted.
-    expect(screen.getByText(/^Paused \(1\)$/)).toBeInTheDocument()
+    expect(await screen.findByText('Not of interest (2)', undefined, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Take back Quill Robotics' })).toBeInTheDocument()
   })
 })
 

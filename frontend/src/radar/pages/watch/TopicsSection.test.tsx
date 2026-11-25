@@ -1,4 +1,4 @@
-// Tests for "Topics you follow" on the Watch page: rows, the Feed link, pause, stop with undo, edit and the empty state.
+// Tests for "Topics you follow" on the Watch page: rows, the Feed link, pause, stop with undo, edit and the one line shown with no topic.
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Track } from '../../api/types'
@@ -69,11 +69,15 @@ describe('TopicsSection', () => {
     expect(screen.getByRole('link', { name: 'Clearance for a detector' })).toHaveAttribute('href', '#/item/55')
   })
 
-  it('explains how to follow something when there are no topics', async () => {
+  it('is one line with a "Follow a topic" link when no topic is followed', async () => {
     api.getTracks.mockResolvedValue([])
-    renderSection()
-    expect(await screen.findByText('You are not following any topics yet')).toBeInTheDocument()
-    expect(screen.getByText(/Use Add, at the top of the page, to follow a topic/)).toBeInTheDocument()
+    const onFollow = vi.fn()
+    render(<TopicsSection onFollow={onFollow} />)
+    expect(await screen.findByText('Topics you follow: none yet.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Topics you follow' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Topics you follow' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Follow a topic' }))
+    expect(onFollow).toHaveBeenCalledTimes(1)
   })
 
   it('pauses a topic and offers Resume afterwards', async () => {
