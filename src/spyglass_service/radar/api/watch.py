@@ -46,8 +46,8 @@ class EntityChanges(BaseModel):
     kind: Kind | None = None
     category: str | None = Field(default=None, max_length=60)
     status: Status | None = None
-    # As many as Undo of a removed group takes back: each suggestion refresh can add a spelling, and
-    # Details saves them all with the entry.
+    # Up to 50, as many as Undo of a removed group sends back (POST /watch/groups/restore): the
+    # collection can give a name more than ten spellings.
     aliases: list[str] | None = Field(default=None, max_length=50)
     query: str | None = Field(default=None, max_length=200)
     website: str | None = Field(default=None, max_length=300)
