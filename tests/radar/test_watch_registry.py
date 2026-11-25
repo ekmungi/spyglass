@@ -63,7 +63,9 @@ def test_grouped_sorts_categories_limits_recent_and_separates_suggested(tmp_path
     with Session(engine) as s:
         z = registry.create_entity(s, "Zeta", category="Imaging AI")
         registry.create_entity(s, "Alpha", category="Endoscopy AI")
-        registry.create_entity(s, "Maybe", category="AI labs", status="suggested")
+        maybe = registry.create_entity(s, "Maybe", category="AI labs", status="suggested")
+        maybe.section = "health"  # placed by a collection cycle, so it is shown
+        s.add(maybe)
         ids = [add_item(engine, f"Zeta news {i}", age_hours=i + 1) for i in range(5)]
         hidden = add_item(engine, "Judged out", score=2, tier="out", age_hours=0.5)
         for i in [*ids, hidden]:
@@ -146,6 +148,25 @@ def test_grouped_uses_the_stored_order_then_the_alphabet(tmp_path) -> None:
         assert groups.group_order(s) == ["Gamma", "Missing", "Other", "Alpha"]
         shown = [c["name"] for c in registry.grouped(s)["categories"]]
         assert shown == ["Gamma", "Other", "Alpha", "Beta", "Delta"]
+    engine.dispose()
+
+
+def test_a_suggestion_no_collection_has_placed_is_not_listed(tmp_path) -> None:
+    """An older mention-based suggestion (no topic, no section) waits for the first cycle to place it.
+
+    Until then it is in neither `suggested` nor any count, so the page cannot show it or hide it.
+    """
+    engine = make_engine(tmp_path)
+    with Session(engine) as s:
+        for name in ("Legacy One", "Legacy Two"):
+            registry.create_entity(s, name, status="suggested", added_via="discovered", why="named in 3 relevant items")
+        placed = registry.create_entity(s, "Placed Co", status="suggested", added_via="discovered")
+        placed.section, placed.suggest_count = "health", 4
+        s.add(placed)
+        s.commit()
+        registry.create_entity(s, "Found Co", status="suggested", added_via="discovered", topic="RSNA")
+        picture = registry.grouped(s)
+        assert [e["name"] for e in picture["suggested"]] == ["Found Co", "Placed Co"]
     engine.dispose()
 
 

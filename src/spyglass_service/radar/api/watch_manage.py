@@ -142,15 +142,17 @@ def set_suggestions_status(body: SuggestionsBody, request: Request) -> dict:
     """Hide many suggestions at once ("rejected"), or take them back ("suggested"); answers the fresh register.
 
     Only names that are currently a suggestion or rejected are touched, so a watched or paused
-    name can never be changed through this route; such ids, and unknown ids, are ignored. The
-    answer also carries `changed`, the ids whose status actually changed, in the order sent.
+    name can never be changed through this route; such ids, and unknown ids, are ignored. A
+    suggestion the page does not show (`registry.shown_suggestion`: one no cycle has placed yet)
+    is ignored too, so it cannot be hidden unseen. The answer also carries `changed`, the ids
+    whose status actually changed, in the order sent.
     """
     wanted = list(dict.fromkeys(body.ids))
     with Session(request.app.state.engine) as session:
         rows = session.exec(
             select(WatchEntity).where(WatchEntity.id.in_(wanted), WatchEntity.status.in_(("suggested", "rejected")))
         ).all()
-        by_id = {row.id: row for row in rows}
+        by_id = {row.id: row for row in rows if row.status == "rejected" or registry.shown_suggestion(row)}
         changed = [i for i in wanted if i in by_id and by_id[i].status != body.status]
         for i in changed:
             by_id[i].status = body.status

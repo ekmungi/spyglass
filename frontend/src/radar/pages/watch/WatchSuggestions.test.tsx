@@ -8,7 +8,7 @@ import { ToastViewport } from '../../ui'
 import WatchPage from '../WatchPage'
 import { clearLoadCache } from '../sources/useLoad'
 import type { WatchRegister } from './api'
-import { clearToasts, suggestionRegister } from './testFixtures'
+import { clearToasts, entry, suggestionRegister } from './testFixtures'
 
 const api = vi.hoisted(() => ({
   getWatch: vi.fn(),
@@ -195,6 +195,18 @@ describe('Suggested', () => {
     await waitFor(() => expect(api.setSuggestionStatus).toHaveBeenLastCalledWith([22, 23, 24], 'suggested'))
     expect(await within(section).findByRole('button', { name: 'Not of interest: Novartis' })).toBeInTheDocument()
     expect(within(section).getByRole('button', { name: 'Not of interest: Aidoc' })).toBeInTheDocument()
+  })
+
+  it('never shows or hides a suggestion no collection has placed, even if the service sends one', async () => {
+    const withLegacy = suggestionRegister()
+    withLegacy.suggested = [...withLegacy.suggested, entry({ id: 40, name: 'Legacy Co', status: 'suggested', section: '', count: 0, category: 'Discovered' })]
+    api.getWatch.mockResolvedValue(withLegacy)
+    renderPage()
+    const section = await suggestedSection()
+    expect(within(section).queryByText('Legacy Co')).not.toBeInTheDocument()
+    expect(within(section).getByText('5 undecided')).toBeInTheDocument()
+    fireEvent.click(within(section).getByRole('button', { name: 'Hide the rest for good' }))
+    await waitFor(() => expect(api.setSuggestionStatus).toHaveBeenCalledWith([20, 21, 22, 23, 24], 'rejected'))
   })
 
   it('raises the Not of interest count by the number of names hidden, and lists them', async () => {

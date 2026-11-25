@@ -176,10 +176,19 @@ def test_up_and_down_reorder_the_groups_and_answer_the_fresh_register(client) ->
     assert client.patch("/watch/groups", json={"category": "Nowhere", "action": "up"}).status_code == 404
 
 
-def suggest(client, name: str, status: str = "suggested") -> int:
-    """Store a name as a suggestion (or another status) through the API; returns its id."""
+def suggest(client, name: str, status: str = "suggested", section: str = "health") -> int:
+    """Store a name as a suggestion (or another status) through the API; returns its id.
+
+    The suggestion sits in `section`, as a collection cycle places it; "" leaves it unplaced, like an
+    older mention-based suggestion that no cycle has looked at yet.
+    """
     entity = add(client, name)
     assert client.patch(f"/watch/{entity['id']}", json={"status": status}).status_code == 200
+    with Session(client.engine) as s:
+        row = s.get(WatchEntity, entity["id"])
+        row.section = section
+        s.add(row)
+        s.commit()
     return entity["id"]
 
 
@@ -213,6 +222,17 @@ def test_followed_ids_are_ignored(client) -> None:
     assert body["changed"] == [suggestion]
     statuses = {e["name"]: e["status"] for c in body["categories"] for e in c["entities"]}
     assert statuses == {"Alpha Scopes": "active", "Beta Vision": "muted"}
+
+
+def test_a_suggestion_no_cycle_has_placed_cannot_be_hidden(client) -> None:
+    """The page never shows an unplaced suggestion, and the route will not hide one either."""
+    unplaced = suggest(client, "Legacy Co", section="")
+    placed = suggest(client, "Placed Co")
+    body = client.post("/watch/suggestions/status", json={"ids": [unplaced, placed], "status": "rejected"}).json()
+    assert body["changed"] == [placed]
+    assert body["suggested"] == [] and [e["name"] for e in body["rejected"]] == ["Placed Co"]
+    with Session(client.engine) as s:
+        assert s.get(WatchEntity, unplaced).status == "suggested"
 
 
 def test_suggestion_status_rejects_a_followed_status_and_too_many_ids(client) -> None:

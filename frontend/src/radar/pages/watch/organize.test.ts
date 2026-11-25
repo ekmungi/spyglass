@@ -100,6 +100,21 @@ describe('layoutRegister', () => {
     expect(layout.rows[1].entities.map((e) => e.name)).toEqual(['Stray'])
   })
 
+  it('leaves out a suggestion no collection has placed (no topic and no section), even if the server sends one', () => {
+    const reg = {
+      ...register(),
+      sections: [{ key: 'ai', label: 'AI research' }],
+      suggested: [
+        entry({ id: 10, name: 'Legacy Co', status: 'suggested', section: '', count: 0 }),
+        entry({ id: 11, name: 'Stray', status: 'suggested', section: 'gone', count: 1 }),
+      ],
+    }
+    const layout = layoutRegister(reg)
+    // "Other" still holds a placed name whose section has left the profile.
+    expect(layout.rows.map((r) => r.label)).toEqual(['AI research', 'Other'])
+    expect(layout.rows.flatMap((r) => r.entities).map((e) => e.name)).toEqual(['Stray'])
+  })
+
   it('passes the rejected names through for the Not of interest list', () => {
     const reg = { ...register(), rejected: [entry({ id: 30, name: 'Nope Inc', status: 'rejected' })] }
     expect(layoutRegister(reg).rejected.map((e) => e.name)).toEqual(['Nope Inc'])

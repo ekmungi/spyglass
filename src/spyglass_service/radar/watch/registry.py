@@ -104,6 +104,16 @@ def entity_dict(entity: WatchEntity) -> dict:
     }
 
 
+def shown_suggestion(entity: WatchEntity) -> bool:
+    """True for a suggestion the watch page may show: one a topic search found or one a cycle placed.
+
+    A mention-based suggestion from before the suggestions were chosen per profile section has no
+    topic and no section. It waits, unseen, until the next collection cycle places it in a section
+    or deletes it; until then it is never shown and never hidden in a batch.
+    """
+    return entity.status == "suggested" and bool(entity.topic or entity.section)
+
+
 def known_names(session: Session) -> set[str]:
     """Normalised names and aliases of every entity in the register, whatever its status."""
     return {norm_name(n) for e in session.exec(select(WatchEntity)).all() for n in entity_names(e)}
@@ -247,8 +257,9 @@ def grouped(session: Session, *, now: datetime | None = None) -> dict:
     the Feed in the last 7 days) and its recent items, and every category carries the same count
     for the whole group (an item found by two names counts once) and `paused`, true when every
     name in it is muted. `suggested` and `rejected` list those names, each as `entity_dict`
-    (suggestions carry their `section` and `count`). `sections` is the profile's sections as
-    `{"key", "label"}`. `now` (naive UTC) is only for tests.
+    (suggestions carry their `section` and `count`); `suggested` holds only the suggestions
+    `shown_suggestion` allows. `sections` is the profile's sections as `{"key", "label"}`. `now`
+    (naive UTC) is only for tests.
     """
     entities = session.exec(select(WatchEntity)).all()
     followed = [e for e in entities if e.status in FOLLOWED]
@@ -277,7 +288,7 @@ def grouped(session: Session, *, now: datetime | None = None) -> dict:
             }
             for n in ordered(categories, group_order(session))
         ],
-        "suggested": [entity_dict(e) for e in by_name if e.status == "suggested"],
+        "suggested": [entity_dict(e) for e in by_name if shown_suggestion(e)],
         "rejected": [entity_dict(e) for e in by_name if e.status == "rejected"],
         "sections": [
             {"key": str(s.get("key")), "label": str(s.get("label") or s.get("key"))}

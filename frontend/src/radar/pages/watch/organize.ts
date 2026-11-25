@@ -43,7 +43,9 @@ const byCountThenName = (a: WatchEntry, b: WatchEntry) => b.count - a.count || a
  * nothing moves while it is open. Groups keep the server's order and hold the names that are active
  * now (a group with none is not shown); muted names go to `paused` with their group's name. Suggestion
  * rows are one per profile section in profile order (every section is listed, empty or not), then
- * one per topic search, then a row for names that match no profile section if there are any.
+ * one per topic search, then a row for names whose section is no longer in the profile, if there are
+ * any. A suggestion with neither a topic nor a section, which no collection has placed yet, is left
+ * out: the service does not send one, and this is the second guard.
  */
 export function layoutRegister(register: WatchRegister): WatchLayout {
   const groups: LayoutGroup[] = []
@@ -55,7 +57,7 @@ export function layoutRegister(register: WatchRegister): WatchLayout {
   }
 
   const searched = register.suggested.filter((entity) => entity.topic)
-  const profiled = register.suggested.filter((entity) => !entity.topic)
+  const profiled = register.suggested.filter((entity) => !entity.topic && entity.section)
   const known = new Set(register.sections.map((section) => section.key))
   const rows: SuggestionRow[] = register.sections.map((section) => ({
     key: section.key,
