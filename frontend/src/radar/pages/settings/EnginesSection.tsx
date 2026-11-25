@@ -1,4 +1,5 @@
 // EnginesSection: the "AI engines" group: the default engine and model, then one row per engine.
+import { useState } from 'react'
 import { Button, SectionHeading, Skeleton } from '../../ui'
 import type { EngineRow, SettingsValues } from './api'
 import { CustomServer } from './CustomServer'
@@ -20,8 +21,22 @@ export interface EnginesSectionProps {
   onSettingsSaved?: (stored: SettingsValues) => void
 }
 
-/** Lists every engine; each row saves on its own. */
+/**
+ * Splits the engines into the rows to list and the number of engines that are not set up, which the
+ * button offers to show. A custom server counts as set up whatever its status, because the reader
+ * added it on purpose and it would otherwise disappear from the list the moment it was added.
+ * With none set up, or all set up, there is nothing to fold away: every row is listed, no button shows.
+ */
+function foldEngines(engines: readonly EngineRow[], showAll: boolean): { rows: EngineRow[]; notSetUp: number } {
+  const off = engines.filter((engine) => !engine.available && !engine.custom)
+  const foldable = off.length > 0 && off.length < engines.length
+  return { rows: foldable && !showAll ? engines.filter((engine) => !off.includes(engine)) : [...engines], notSetUp: foldable ? off.length : 0 }
+}
+
+/** Lists the engines that are set up (every engine on request); each row saves on its own. */
 export function EnginesSection({ engines, loading, error, onRetry, onEngines, savedDefault, onDefaultSaved, settings, onSettingsSaved }: EnginesSectionProps) {
+  const [showAll, setShowAll] = useState(false)
+  const folded = engines ? foldEngines(engines, showAll) : null
   return (
     <section aria-labelledby="settings-engines" className="rst-section">
       <SectionHeading id="settings-engines" note="Used by the assistant in the reader">
@@ -38,11 +53,11 @@ export function EnginesSection({ engines, loading, error, onRetry, onEngines, sa
           <Button onClick={onRetry}>Try again</Button>
         </div>
       )}
-      {engines && (
+      {engines && folded && (
         <>
           <DefaultEngine key={engines.map((engine) => `${engine.id}${engine.available}`).join(',')} engines={engines} saved={savedDefault} onSaved={onDefaultSaved} />
           <ul className="r-rows rst-engines">
-            {engines.map((engine) => (
+            {folded.rows.map((engine) => (
               <EngineItem
                 key={engine.id}
                 engine={engine}
@@ -51,6 +66,11 @@ export function EnginesSection({ engines, loading, error, onRetry, onEngines, sa
               />
             ))}
           </ul>
+          {folded.notSetUp > 0 && (
+            <Button variant="quiet" size="sm" onClick={() => setShowAll((current) => !current)}>
+              {showAll ? 'Show only the engines that are set up' : `Show the ${folded.notSetUp} ${folded.notSetUp === 1 ? 'engine that is' : 'engines that are'} not set up`}
+            </Button>
+          )}
           <CustomServer existingIds={engines.map((engine) => engine.id)} onAdded={(added) => onEngines([...engines, added])} />
           {/* Shown only when this copy of the service reports the setting (an older one does not). */}
           {settings && 'radar_llm_provider' in settings && onSettingsSaved && (

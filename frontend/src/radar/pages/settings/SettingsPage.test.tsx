@@ -1,8 +1,9 @@
 // Tests for the Settings page: engines (status, key storage, switches, addresses, defaults), the
 // brief and vault groups with validation, the theme, and the error states.
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/errors'
+import * as client from '../../api/client'
 import { resetFilingConfigured, setFilingConfigured } from '../../state/filingConfigured'
 import SettingsPage from '../SettingsPage'
 import type { EngineRow } from './api'
@@ -27,6 +28,8 @@ vi.mock('../../api/client', async (importOriginal) => ({
   getBrowsers: vi.fn().mockResolvedValue([]),
   getExtensionFolder: vi.fn().mockRejectedValue(new Error('not the desktop app')),
   getAutostart: vi.fn().mockResolvedValue({ available: false, enabled: false }),
+  // The "Parts not installed" note asks which optional parts are missing; most tests have none missing.
+  getCapabilities: vi.fn().mockResolvedValue({ pdf_reading: 'full', local_ai: true, missing: [] }),
 }))
 
 const SECRET = 'sk-test-secret-1234567890'
@@ -65,6 +68,17 @@ function engines(): EngineRow[] {
 
 const settings = { vault_path: 'C:/Vault', radar_brief_time: '06:30', radar_timezone: '', radar_collect_hours: 2, assist_default_engine: 'openrouter', assist_default_model: 'openrouter-a' }
 
+
+/** Choose a tab of the Settings strip by its visible name. */
+function openTab(name: string) {
+  fireEvent.click(screen.getByRole('tab', { name }))
+}
+
+/** Press the button that lists the engines that are not set up (the list shows only the set-up ones at first). */
+async function showEveryEngine() {
+  fireEvent.click(await screen.findByRole('button', { name: /engines? that (is|are) not set up/ }))
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   document.documentElement.removeAttribute('data-theme')
@@ -84,8 +98,10 @@ afterEach(() => {
 })
 
 describe('AI engines', () => {
-  it('lists every engine with its status in words and the reason when it is not usable', async () => {
+  it('lists every engine, once all are shown, with its status in words and the reason when it is not usable', async () => {
     render(<SettingsPage />)
+    openTab('AI engines')
+    await showEveryEngine()
     expect(await screen.findByText('OpenAI')).toBeInTheDocument()
     expect(screen.getByText('No API key saved.')).toBeInTheDocument()
     expect(screen.getByText('No local server is running.')).toBeInTheDocument()
@@ -98,6 +114,8 @@ describe('AI engines', () => {
 
   it('sends a pasted key once and never shows it again', async () => {
     render(<SettingsPage />)
+    openTab('AI engines')
+    await showEveryEngine()
     const field = await screen.findByLabelText('API key for OpenAI')
     expect(field).toHaveAttribute('type', 'password')
     fireEvent.change(field, { target: { value: SECRET } })
@@ -113,6 +131,8 @@ describe('AI engines', () => {
   it('does not leave a key in the field when storing it fails', async () => {
     api.configureEngine.mockRejectedValueOnce(new ApiError('The operating system key store is not available.', { status: 503, kind: 'http', path: '/engines/openai' }))
     render(<SettingsPage />)
+    openTab('AI engines')
+    await showEveryEngine()
     const field = await screen.findByLabelText('API key for OpenAI')
     fireEvent.change(field, { target: { value: SECRET } })
     fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
@@ -123,6 +143,8 @@ describe('AI engines', () => {
 
   it('switches a command-line engine on', async () => {
     render(<SettingsPage />)
+    openTab('AI engines')
+    await showEveryEngine()
     fireEvent.click(await screen.findByRole('switch', { name: 'Use Claude Code' }))
     await waitFor(() => expect(api.configureEngine).toHaveBeenCalledWith('claude_code', { enabled: true }))
     expect(await screen.findByText('Switched on.')).toBeInTheDocument()
@@ -130,6 +152,8 @@ describe('AI engines', () => {
 
   it('saves a local server address and refuses a malformed one', async () => {
     render(<SettingsPage />)
+    openTab('AI engines')
+    await showEveryEngine()
     const address = await screen.findByLabelText('Server address for LM Studio')
     fireEvent.change(address, { target: { value: 'localhost:1234' } })
     fireEvent.click(screen.getAllByRole('button', { name: 'Save address' })[0])
@@ -142,6 +166,7 @@ describe('AI engines', () => {
 
   it('adds a custom server and removes one after a second click', async () => {
     render(<SettingsPage />)
+    openTab('AI engines')
     fireEvent.click(await screen.findByRole('button', { name: 'Add a custom server' }))
     fireEvent.change(screen.getByLabelText('Server name'), { target: { value: 'Office Box' } })
     fireEvent.change(screen.getByLabelText('Server address'), { target: { value: 'http://10.0.0.9:8000/v1' } })
@@ -157,6 +182,7 @@ describe('AI engines', () => {
 
   it('saves the default engine and model through the settings', async () => {
     render(<SettingsPage />)
+    openTab('AI engines')
     fireEvent.change(await screen.findByLabelText('Default engine'), { target: { value: 'anthropic' } })
     expect(screen.getByLabelText('Default model')).toHaveValue('anthropic-a')
     fireEvent.change(screen.getByLabelText('Default model'), { target: { value: 'anthropic-b' } })
@@ -168,6 +194,7 @@ describe('AI engines', () => {
   it('warns when the service does not report the default back', async () => {
     api.patchSettings.mockResolvedValue({ vault_path: 'C:/Vault' })
     render(<SettingsPage />)
+    openTab('AI engines')
     fireEvent.click(await screen.findByRole('button', { name: 'Save default' }))
     expect(await screen.findByText(/did not confirm the new default/)).toBeInTheDocument()
   })
@@ -175,6 +202,7 @@ describe('AI engines', () => {
   it('shows an error and a retry when the engines cannot be loaded', async () => {
     api.loadEngines.mockRejectedValueOnce(new ApiError('Spyglass is not reachable. Check that the service is running, then try again.', { status: 0, kind: 'network', path: '/engines' }))
     render(<SettingsPage />)
+    openTab('AI engines')
     expect(await screen.findByRole('alert')).toHaveTextContent('Spyglass is not reachable')
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('OpenRouter', { selector: '.rst-name' })).toBeInTheDocument()
@@ -205,6 +233,7 @@ describe('Daily brief and Vault', () => {
 
   it('has no folder-for-saved-notes field, and explains the queue in three plain sentences', async () => {
     render(<SettingsPage />)
+    openTab('Vault and filing')
     expect(await screen.findByLabelText('Vault folder')).toHaveValue('C:/Vault')
     expect(screen.queryByLabelText('Folder for saved notes')).not.toBeInTheDocument()
     expect(screen.getByText(/Spyglass never writes into the vault itself\. File in vault adds an item to a queue\. File now opens one Claude Code session in the vault, where your own vault skills file the items after your yes\./)).toBeInTheDocument()
@@ -213,6 +242,7 @@ describe('Daily brief and Vault', () => {
   it('where filing is not set up, explains it in one place and leaves the queue out of the Vault group', async () => {
     setFilingConfigured(false)
     render(<SettingsPage />)
+    openTab('Vault and filing')
     expect(await screen.findByLabelText('Vault folder')).toHaveValue('C:/Vault')
     expect(screen.getByText(/Filing into a notes vault is an optional integration\./)).toBeInTheDocument()
     expect(screen.queryByLabelText(/^Off/)).not.toBeInTheDocument()
@@ -222,6 +252,7 @@ describe('Daily brief and Vault', () => {
 
   it('saves the vault folder alone and reports a failure in words', async () => {
     render(<SettingsPage />)
+    openTab('Vault and filing')
     fireEvent.change(await screen.findByLabelText('Vault folder'), { target: { value: 'D:/Notes' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save vault settings' }))
     await waitFor(() => expect(api.patchSettings).toHaveBeenCalledWith({ vault_path: 'D:/Notes' }))
@@ -234,6 +265,7 @@ describe('Daily brief and Vault', () => {
 
   it('does not save an empty vault folder', async () => {
     render(<SettingsPage />)
+    openTab('Vault and filing')
     fireEvent.change(await screen.findByLabelText('Vault folder'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save vault settings' }))
     expect(await screen.findByText('Enter the folder your vault lives in.')).toBeInTheDocument()
@@ -252,10 +284,212 @@ describe('Daily brief and Vault', () => {
 describe('Appearance', () => {
   it('switches the theme through the app theme mechanism', async () => {
     render(<SettingsPage />)
+    openTab('Appearance')
     fireEvent.click(await screen.findByLabelText('Dark'))
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
     fireEvent.click(screen.getByLabelText('Follow system'))
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false)
+  })
+})
+
+/** The ids of the parts that are on screen (not in a hidden part), without the "settings-" start, in page order. */
+function partsOnScreen(): string[] {
+  return Array.from(document.querySelectorAll('[id^="settings-"]'))
+    .filter((heading) => !heading.closest('[hidden]'))
+    .map((heading) => heading.id.replace('settings-', ''))
+}
+
+/** The part with this heading id, whether or not it is hidden; null when it is not in the document at all. */
+const partNamed = (name: string) => document.getElementById(`settings-${name}`)
+
+describe('Settings tabs', () => {
+  afterEach(() => {
+    window.location.hash = ''
+    // Back to "no part is missing", which the other tests rely on.
+    vi.mocked(client.getCapabilities).mockResolvedValue({ pdf_reading: 'full', local_ai: true, missing: [] })
+  })
+
+  it('has the six tabs in order, with General selected and the page in its wide width', () => {
+    const { container } = render(<SettingsPage />)
+    const strip = screen.getByRole('tablist', { name: 'Settings' })
+    expect(within(strip).getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'General',
+      'AI engines',
+      'Appearance',
+      'Bringing things in',
+      'Vault and filing',
+      'Privacy and usage',
+    ])
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true')
+    expect(container.firstElementChild).toHaveClass('r-page', 'r-page--wide')
+  })
+
+  it('shows on each tab exactly its own parts', async () => {
+    vi.mocked(client.getCapabilities).mockResolvedValue({ pdf_reading: 'basic', local_ai: false, missing: [{ id: 'pdf', name: 'PDF reading', effect: 'PDF reading is basic.', how_to_add: 'Modify the install.' }] })
+    render(<SettingsPage />)
+    await waitFor(() => expect(partsOnScreen()).toEqual(['brief', 'desktop', 'parts']))
+    const expected: Array<[string, string[]]> = [
+      ['AI engines', ['engines']],
+      ['Appearance', ['appearance']],
+      ['Bringing things in', ['extension', 'bring-in']],
+      ['Vault and filing', ['vault', 'filing']],
+      ['Privacy and usage', ['privacy', 'usage']],
+    ]
+    for (const [tab, parts] of expected) {
+      openTab(tab)
+      expect(partsOnScreen()).toEqual(parts)
+    }
+    // Coming back asks the service again which parts are missing, so the note appears a moment later.
+    openTab('General')
+    await waitFor(() => expect(partsOnScreen()).toEqual(['brief', 'desktop', 'parts']))
+  })
+
+  it('leaves a tab that has not been opened out of the document, and a part with nothing to keep when its tab is left', async () => {
+    render(<SettingsPage />)
+    await screen.findByLabelText('Brief time')
+    for (const name of ['engines', 'appearance', 'extension', 'bring-in', 'vault', 'filing', 'privacy', 'usage']) expect(partNamed(name)).toBeNull()
+    openTab('Privacy and usage')
+    expect(partNamed('privacy')).not.toBeNull()
+    openTab('General')
+    expect(partNamed('privacy')).toBeNull()
+    expect(partNamed('usage')).toBeNull()
+    expect(partNamed('desktop')).not.toBeNull()
+    openTab('Appearance')
+    expect(partNamed('desktop')).toBeNull()
+  })
+
+  it('opens the tab that holds the part named in the address, and scrolls the part into view', async () => {
+    const scroll = vi.fn()
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = scroll
+    window.location.hash = '#/settings?section=bring-in'
+    try {
+      render(<SettingsPage />)
+      expect(screen.getByRole('tab', { name: 'Bringing things in' })).toHaveAttribute('aria-selected', 'true')
+      expect(partsOnScreen()).toEqual(['extension', 'bring-in'])
+      await waitFor(() => expect(scroll).toHaveBeenCalled())
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
+  })
+
+  it.each([
+    ['engines', 'AI engines'],
+    ['extension', 'Bringing things in'],
+    ['vault', 'Vault and filing'],
+    ['usage', 'Privacy and usage'],
+    ['appearance', 'Appearance'],
+    ['desktop', 'General'],
+  ])('opens %s on the tab "%s"', (section, tab) => {
+    window.location.hash = `#/settings?section=${section}`
+    render(<SettingsPage />)
+    expect(screen.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('moves to the tab of a part named by a link followed while the page is open', async () => {
+    render(<SettingsPage />)
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true')
+    act(() => {
+      window.location.hash = '#/settings?section=vault'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Vault and filing' })).toHaveAttribute('aria-selected', 'true'))
+    expect(partsOnScreen()).toEqual(['vault', 'filing'])
+  })
+
+  it('opens General when the address names no part, or one that does not exist', () => {
+    window.location.hash = '#/settings?section=nothing'
+    render(<SettingsPage />)
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps what was typed and not yet saved in the Daily brief, the Vault, and an engine key, when the reader comes back', async () => {
+    render(<SettingsPage />)
+    fireEvent.change(await screen.findByLabelText('Brief time'), { target: { value: '07:45' } })
+    openTab('AI engines')
+    await showEveryEngine()
+    fireEvent.change(await screen.findByLabelText('API key for OpenAI'), { target: { value: SECRET } })
+    openTab('Vault and filing')
+    fireEvent.change(await screen.findByLabelText('Vault folder'), { target: { value: 'D:/Unsaved' } })
+    // On another tab the parts are hidden: they are not on screen, yet the typed text is still held.
+    openTab('Privacy and usage')
+    expect(partsOnScreen()).toEqual(['privacy', 'usage'])
+    expect(screen.getByLabelText('Vault folder')).not.toBeVisible()
+    openTab('General')
+    expect(screen.getByLabelText('Brief time')).toHaveValue('07:45')
+    openTab('AI engines')
+    expect(screen.getByLabelText('API key for OpenAI')).toHaveValue(SECRET)
+    expect(screen.getByRole('button', { name: 'Show only the engines that are set up' })).toBeInTheDocument()
+    openTab('Vault and filing')
+    expect(screen.getByLabelText('Vault folder')).toHaveValue('D:/Unsaved')
+    expect(api.patchSettings).not.toHaveBeenCalled()
+  })
+
+  it('shows the loading error of the settings only on the tabs that need them', async () => {
+    api.loadSettings.mockRejectedValueOnce(new ApiError('Spyglass is not reachable. Check that the service is running, then try again.', { status: 0, kind: 'network', path: '/api/settings' }))
+    render(<SettingsPage />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Spyglass is not reachable')
+    openTab('Appearance')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('The list of AI engines', () => {
+  /** Nine engines, the first two set up. */
+  function nine(): EngineRow[] {
+    return [
+      engine({ id: 'e1', label: 'Engine One' }),
+      engine({ id: 'e2', label: 'Engine Two' }),
+      ...[3, 4, 5, 6, 7, 8, 9].map((n) => engine({ id: `e${n}`, label: `Engine ${n}`, available: false, reason: 'Not set up.', models: [] })),
+    ]
+  }
+
+  it('lists only the engines that are set up, then every engine after one button, and back', async () => {
+    api.loadEngines.mockResolvedValue(nine())
+    render(<SettingsPage />)
+    openTab('AI engines')
+    expect(await screen.findByText('Engine One', { selector: '.rst-name' })).toBeInTheDocument()
+    expect(document.querySelectorAll('.rst-engine')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Show the 7 engines that are not set up' }))
+    expect(document.querySelectorAll('.rst-engine')).toHaveLength(9)
+    fireEvent.click(screen.getByRole('button', { name: 'Show only the engines that are set up' }))
+    expect(document.querySelectorAll('.rst-engine')).toHaveLength(2)
+  })
+
+  it('says "engine that is" for one engine that is not set up', async () => {
+    api.loadEngines.mockResolvedValue([engine({ id: 'e1', label: 'Engine One' }), engine({ id: 'e2', label: 'Engine Two', available: false, models: [] })])
+    render(<SettingsPage />)
+    openTab('AI engines')
+    expect(await screen.findByRole('button', { name: 'Show the 1 engine that is not set up' })).toBeInTheDocument()
+  })
+
+  it('shows the whole list and no button when none is set up, or when all are', async () => {
+    api.loadEngines.mockResolvedValue(nine().map((entry) => ({ ...entry, available: false })))
+    const none = render(<SettingsPage />)
+    openTab('AI engines')
+    expect(await screen.findByText('Engine One', { selector: '.rst-name' })).toBeInTheDocument()
+    expect(document.querySelectorAll('.rst-engine')).toHaveLength(9)
+    expect(screen.queryByRole('button', { name: /not set up|set up$/ })).not.toBeInTheDocument()
+    none.unmount()
+
+    api.loadEngines.mockResolvedValue(nine().map((entry) => ({ ...entry, available: true })))
+    render(<SettingsPage />)
+    openTab('AI engines')
+    expect(await screen.findByText('Engine One', { selector: '.rst-name' })).toBeInTheDocument()
+    expect(document.querySelectorAll('.rst-engine')).toHaveLength(9)
+    expect(screen.queryByRole('button', { name: /not set up|set up$/ })).not.toBeInTheDocument()
+  })
+
+  it('counts a custom server the reader added as set up, so it does not vanish when its server is down', async () => {
+    api.loadEngines.mockResolvedValue([
+      engine({ id: 'e1', label: 'Engine One' }),
+      engine({ id: 'custom-x', label: 'Lab box', kind: 'custom', custom: true, available: false, models: [], base_url: 'http://10.0.0.5/v1' }),
+      engine({ id: 'e3', label: 'Engine 3', available: false, models: [] }),
+    ])
+    render(<SettingsPage />)
+    openTab('AI engines')
+    expect(await screen.findByText('Lab box', { selector: '.rst-name' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show the 1 engine that is not set up' })).toBeInTheDocument()
   })
 })
 

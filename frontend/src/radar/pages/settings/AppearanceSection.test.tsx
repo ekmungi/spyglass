@@ -21,34 +21,49 @@ afterEach(() => {
 })
 
 describe('AppearanceSection', () => {
-  it('lists the reading and interface fonts in groups, each sample set in its own typeface', () => {
+  /** The labels of the entries of a menu, in order. */
+  const entries = (menu: HTMLElement) => within(menu).getAllByRole('option').map((option) => option.textContent)
+
+  it('offers each font choice as one menu with one sample, the samples set in the chosen typeface', () => {
     render(<AppearanceSection />)
-    const reading = screen.getByRole('group', { name: 'Reading font' })
-    const names = within(reading).getAllByRole('radio').map((radio) => radio.getAttribute('aria-label'))
+    const reading = screen.getByRole('combobox', { name: 'Reading font' })
     // The default alone, then "From your notes theme", then "More" (Newsreader is there now).
-    expect(names).toEqual(['Fira Sans', 'Source Sans 3', 'Nunito Sans', 'Newsreader', 'Source Serif 4', 'Literata', 'Lora', 'Crimson Pro', 'Sans (same as interface)'])
-    expect(within(reading).getByRole('radio', { name: 'Fira Sans' })).toBeChecked()
-    expect(within(reading).getByText('From your notes theme')).toBeInTheDocument()
-    expect(within(reading).getByText('More')).toBeInTheDocument()
-    const lora = within(reading).getByRole('radio', { name: 'Lora' }).closest('label')?.querySelector('.rst-font__text') as HTMLElement
-    expect(lora.style.fontFamily).toContain('Lora Variable')
-    expect(within(lora).getByText(/Regulators clear the first/)).toBeInTheDocument()
-    const ui = screen.getByRole('group', { name: 'Interface font' })
-    expect(within(ui).getAllByRole('radio').map((radio) => radio.getAttribute('aria-label'))).toEqual(['Fira Sans', 'Source Sans 3', 'Nunito Sans', 'Inter', 'Figtree', 'DM Sans', 'IBM Plex Sans', 'Geist', 'System'])
-    expect(within(ui).getByRole('radio', { name: 'Fira Sans' })).toBeChecked()
+    expect(entries(reading)).toEqual(['Fira Sans (default)', 'Source Sans 3', 'Nunito Sans', 'Newsreader', 'Source Serif 4', 'Literata', 'Lora', 'Crimson Pro', 'Sans (same as interface)'])
+    expect(within(reading).getByRole('group', { name: 'From your notes theme' })).toBeInTheDocument()
+    expect(within(reading).getByRole('group', { name: 'More' })).toBeInTheDocument()
+    expect(reading).toHaveValue('fira-sans')
+    const ui = screen.getByRole('combobox', { name: 'Interface font' })
+    expect(entries(ui)).toEqual(['Fira Sans (default)', 'Source Sans 3', 'Nunito Sans', 'Inter', 'Figtree', 'DM Sans', 'IBM Plex Sans', 'Geist', 'System'])
+    expect(ui).toHaveValue('fira-sans')
+    // No radio per font any more: one sample under each menu, whatever the number of fonts.
+    expect(screen.queryAllByRole('radio', { name: /Lora|Inter|Geist/ })).toHaveLength(0)
+    const readingSample = within(screen.getByRole('group', { name: 'Reading font' })).getByText(/Regulators clear the first/).closest('.rst-font__sample') as HTMLElement
+    expect(document.querySelectorAll('.rst-font__sample')).toHaveLength(2)
+    expect(readingSample.style.fontFamily).toContain('Fira Sans')
+    fireEvent.change(reading, { target: { value: 'lora' } })
+    expect(readingSample.style.fontFamily).toContain('Lora Variable')
+    expect(within(readingSample).getByText(/The trial covered 1,200 patients/)).toBeInTheDocument()
   })
 
   it('applies a reading font, an interface font and a text size at once and remembers them', () => {
     render(<AppearanceSection />)
-    fireEvent.click(screen.getByRole('radio', { name: 'Literata' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Reading font' }), { target: { value: 'literata' } })
     expect(root.style.getPropertyValue('--font-serif')).toContain('Literata')
-    fireEvent.click(within(screen.getByRole('group', { name: 'Interface font' })).getByRole('radio', { name: 'Inter' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Interface font' }), { target: { value: 'inter' } })
     expect(root.style.getPropertyValue('--font-sans')).toContain('Inter')
     fireEvent.click(screen.getByRole('radio', { name: 'Large' }))
     expect(root.style.getPropertyValue('--type-scale')).toBe('1.12')
     expect(window.localStorage.getItem('radar.font.reading')).toBe('"literata"')
     expect(window.localStorage.getItem('radar.font.ui')).toBe('"inter"')
     expect(window.localStorage.getItem('radar.textsize')).toBe('"large"')
+  })
+
+  it('sets the reading font "Sans" in the interface font, in its sample too', () => {
+    render(<AppearanceSection />)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Interface font' }), { target: { value: 'geist' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Reading font' }), { target: { value: 'sans' } })
+    const sample = within(screen.getByRole('group', { name: 'Reading font' })).getByText(/Regulators clear the first/).closest('.rst-font__sample') as HTMLElement
+    expect(sample.style.fontFamily).toContain('Geist')
   })
 
   it('shows the text width as a word and a number', () => {
@@ -123,13 +138,13 @@ describe('AppearanceSection', () => {
   it('resets everything with "Reset to defaults"', () => {
     render(<AppearanceSection />)
     fireEvent.click(screen.getByRole('radio', { name: 'Dark' }))
-    fireEvent.click(screen.getByRole('radio', { name: 'Lora' }))
-    fireEvent.click(within(screen.getByRole('group', { name: 'Interface font' })).getByRole('radio', { name: 'Geist' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Reading font' }), { target: { value: 'lora' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Interface font' }), { target: { value: 'geist' } })
     fireEvent.change(screen.getByRole('slider', { name: 'Text width' }), { target: { value: '900' } })
     fireEvent.click(screen.getByRole('button', { name: 'Reset to defaults' }))
     expect(screen.getByRole('radio', { name: 'Follow system' })).toBeChecked()
-    expect(within(screen.getByRole('group', { name: 'Reading font' })).getByRole('radio', { name: 'Fira Sans' })).toBeChecked()
-    expect(within(screen.getByRole('group', { name: 'Interface font' })).getByRole('radio', { name: 'Fira Sans' })).toBeChecked()
+    expect(screen.getByRole('combobox', { name: 'Reading font' })).toHaveValue('fira-sans')
+    expect(screen.getByRole('combobox', { name: 'Interface font' })).toHaveValue('fira-sans')
     expect(root.style.getPropertyValue('--font-serif')).toContain('"Fira Sans"')
     expect(screen.getByTestId('text-width-value')).toHaveTextContent('Medium · 680px')
     expect(root.hasAttribute('data-theme')).toBe(false)

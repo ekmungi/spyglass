@@ -44,7 +44,6 @@ export function AppearanceSection() {
 
       <FontChoices
         legend="Reading font"
-        name="reading-font"
         options={READING_FONTS}
         value={appearance.readingFont}
         onChange={setReadingFont}
@@ -55,7 +54,6 @@ export function AppearanceSection() {
 
       <FontChoices
         legend="Interface font"
-        name="interface-font"
         options={UI_FONTS}
         value={appearance.uiFont}
         onChange={setUiFont}

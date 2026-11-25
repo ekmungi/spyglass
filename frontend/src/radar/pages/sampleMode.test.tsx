@@ -82,6 +82,8 @@ describe('Profile page in sample mode', () => {
 describe('Settings and Find papers in sample mode', () => {
   it('lists the engines with the service fields', async () => {
     render(<SettingsPage />)
+    // The engines have their own tab; the one the sample sets up is listed at once, the others behind a button.
+    fireEvent.click(screen.getByRole('tab', { name: 'AI engines' }))
     expect((await screen.findAllByText('Claude (subscription)', {}, { timeout: 4000 })).length).toBeGreaterThan(0)
     expect(screen.getAllByText('OpenRouter').length).toBeGreaterThan(0)
   })

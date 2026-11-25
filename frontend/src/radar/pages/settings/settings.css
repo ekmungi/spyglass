@@ -1,4 +1,8 @@
 /* Settings page: grouped forms on hairlines, one save per group. Tokens only. */
+/* The open tab's parts, a little way under the strip of tabs. */
+.rst-tabpanel {
+  padding-top: var(--space-8);
+}
 .rst-section {
   margin-bottom: var(--space-10);
 }
@@ -260,12 +264,9 @@
   }
 }
 
-/* Settings keeps its own fixed column instead of following the Text width setting, so changing the
-   width never moves the slider (or any other control) out from under the reader's hand. 680px is the
-   designed default width. */
-.r-page.rst-page {
-  max-width: 680px;
-}
+/* Settings keeps a fixed column (the shared wide page, 920px, set by r-page--wide on the page) instead of
+   following the Text width setting, so changing the width never moves the slider (or any other control)
+   out from under the reader's hand. */
 .rst-steps {
   margin: var(--space-3) 0;
   padding-left: var(--space-5);

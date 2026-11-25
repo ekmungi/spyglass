@@ -1,14 +1,13 @@
-// FontChoices: a radio list of fonts where each option is shown in its own typeface, with a real
-// headline and a line of body text so the choice can be judged by reading, not by a name.
+// FontChoices: one menu of fonts with a real headline and a line of body text below it, set in the
+// chosen font, so the choice can be judged by reading rather than by a name.
 import { useEffect } from 'react'
 import { FONT_GROUP_LABELS, FONT_SAMPLE, headingMinWeight, type FontGroup, type FontOption, type ReadingFontId } from '../../appearance/catalog'
 import { loadFont } from '../../appearance/appearanceStore'
+import { Select } from '../../ui'
 
 export interface FontChoicesProps<Id extends string> {
-  /** Visible group title, also the accessible name of the radio group. */
+  /** Visible group title, also the accessible name of the menu. */
   legend: string
-  /** Form field name shared by the radios. */
-  name: string
   options: ReadonlyArray<FontOption<Id>>
   value: Id
   onChange: (id: Id) => void
@@ -16,52 +15,42 @@ export interface FontChoicesProps<Id extends string> {
   defaultId: Id
   /** The font stack for an option whose own stack is empty (reading font "Sans" follows this). */
   inheritedStack: string
-  /** Whether samples are set as reading text (serif headline weight) or as interface text. */
+  /** Whether the sample is set as reading text (serif headline weight) or as interface text. */
   sampleStyle: 'reading' | 'interface'
 }
 
-/** One fieldset of font radios. Opening it fetches every option's font so each previews faithfully. */
-export function FontChoices<Id extends string>({ legend, name, options, value, onChange, defaultId, inheritedStack, sampleStyle }: FontChoicesProps<Id>) {
-  useEffect(() => {
-    options.forEach((option) => void loadFont(option))
-  }, [options])
+/** One fieldset: the font menu and the sample of the chosen font. Choosing an entry sets the font at once. */
+export function FontChoices<Id extends string>({ legend, options, value, onChange, defaultId, inheritedStack, sampleStyle }: FontChoicesProps<Id>) {
+  const chosen = options.find((option) => option.id === value) ?? options[0]
 
-  // Options arrive ordered default, notes theme, more; each group becomes a list under its own small heading.
-  const groups = (['default', 'notes', 'more'] as FontGroup[])
-    .map((group) => ({ group, items: options.filter((option) => option.group === group) }))
-    .filter((entry) => entry.items.length > 0)
+  // The sample shows the chosen font, so its files must be loaded; choosing an entry loads the new one.
+  useEffect(() => {
+    if (chosen) void loadFont(chosen)
+  }, [chosen])
+
+  /** A menu entry: the font's name, marked when it is the default. */
+  const entry = (option: FontOption<Id>) => ({ value: option.id, label: option.id === defaultId ? `${option.label} (default)` : option.label })
+  // Options arrive ordered default, notes theme, more; the default group has no title and is listed first, plain.
+  const grouped = (['notes', 'more'] as FontGroup[])
+    .map((group) => ({ label: FONT_GROUP_LABELS[group] ?? '', options: options.filter((option) => option.group === group).map(entry) }))
+    .filter((menuGroup) => menuGroup.options.length > 0)
+  const plain = options.filter((option) => option.group === 'default').map(entry)
+
+  const family = chosen?.stack || inheritedStack
 
   return (
     <fieldset className="rst-fonts">
       <legend className="rst-fonts__legend">{legend}</legend>
-      {groups.map(({ group, items }) => (
-        <div key={group} role="group" aria-label={FONT_GROUP_LABELS[group] ?? undefined}>
-          {FONT_GROUP_LABELS[group] && <p className="rst-fonts__group">{FONT_GROUP_LABELS[group]}</p>}
-          <ul className="r-rows">
-            {items.map((option) => {
-              const family = option.stack || inheritedStack
-              return (
-                <li key={option.id}>
-                  <label className="rst-font">
-                    <input type="radio" name={name} value={option.id} aria-label={option.label} checked={value === option.id} onChange={() => onChange(option.id)} />
-                    <span className="rst-font__text" style={{ fontFamily: family }}>
-                      <span className="rst-font__name">
-                        {option.label}
-                        {option.id === defaultId && <span className="rst-font__tag"> · default</span>}
-                      </span>
-                      <span
-                        className={`rst-font__headline rst-font__headline--${sampleStyle}`}
-                        style={sampleStyle === 'reading' ? { fontWeight: Math.max(500, headingMinWeight(option.id as ReadingFontId)) } : undefined}
-                      >{FONT_SAMPLE.headline}</span>
-                      <span className="rst-font__body">{FONT_SAMPLE.body}</span>
-                    </span>
-                  </label>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      ))}
+      <Select label={legend} hideLabel value={chosen?.id ?? ''} onChange={(id) => onChange(id as Id)} options={plain} groups={grouped} className="rst-fonts__menu" />
+      <div className="rst-font__sample" style={{ fontFamily: family }}>
+        <span
+          className={`rst-font__headline rst-font__headline--${sampleStyle}`}
+          style={sampleStyle === 'reading' && chosen ? { fontWeight: Math.max(500, headingMinWeight(chosen.id as ReadingFontId)) } : undefined}
+        >
+          {FONT_SAMPLE.headline}
+        </span>
+        <span className="rst-font__body">{FONT_SAMPLE.body}</span>
+      </div>
     </fieldset>
   )
 }
