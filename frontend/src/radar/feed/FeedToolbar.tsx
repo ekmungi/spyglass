@@ -6,6 +6,9 @@ import { focusComposer, setAssistTarget } from '../assistant/assistStore'
 import { IconAsk, IconButton, IconFilter, IconSearch, Menu, Tabs, type MenuItem, type TabItem } from '../ui'
 import type { FeedView } from './feedViews'
 
+/** What the Missed view lists, shown as the tab's hover text. */
+const MISSED_TITLE = 'Top and notable items from the last 7 days that you have not opened, saved or filed'
+
 /** The key of the "All sections" tab; no real section has this key. */
 const ALL_SECTIONS = 'all'
 
@@ -21,7 +24,7 @@ export interface FeedToolbarProps {
   filingOn: boolean
   missedCount: number
   filingCount: number | null
-  sections: { key: string; label: string }[]
+  sections: { key: string; label: string; description?: string }[]
   /** The key of the chosen section, or undefined for all of them. */
   section: string | undefined
   onSection: (key: string | null) => void
@@ -32,12 +35,12 @@ export const FeedToolbar = forwardRef<HTMLDivElement, FeedToolbarProps>(function
   const { search, onSearch, filterItems, filterCount, view, onView, filingOn, missedCount, filingCount, sections, section, onSection } = props
   const views: TabItem[] = [
     { key: 'everything', label: 'Everything' },
-    { key: 'missed', label: 'Missed', count: missedCount || undefined },
+    { key: 'missed', label: 'Missed', count: missedCount || undefined, title: MISSED_TITLE },
     { key: 'saved', label: 'Saved' },
     { key: 'from_you', label: 'From you' },
     ...(filingOn ? [{ key: 'to_file', label: 'To file', count: filingCount || undefined }] : []),
   ]
-  const sectionTabs: TabItem[] = [{ key: ALL_SECTIONS, label: 'All sections' }, ...sections.map(({ key, label }) => ({ key, label }))]
+  const sectionTabs: TabItem[] = [{ key: ALL_SECTIONS, label: 'All sections' }, ...sections.map(({ key, label, description }) => ({ key, label, title: description || label }))]
   return (
     <div className="r-feed-filters" ref={ref}>
       <div className="r-feed-filters__top">

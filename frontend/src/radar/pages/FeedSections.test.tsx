@@ -1,5 +1,5 @@
 // The sections strip on the Feed carries the profile's own section names: the built-in defaults before
-// the profile has loaded, the profile's labels (never shortened) after.
+// the profile has loaded, the profile's labels (never shortened) after, with its description as the tooltip.
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { setFetchForTesting } from '../api/transport'
@@ -57,17 +57,20 @@ describe('Feed sections strip', () => {
     ])
   })
 
-  it('show exactly the profile labels, in full, once it has loaded', async () => {
+  it('show exactly the profile labels, in full, with the description as the tooltip, once it has loaded', async () => {
     setFetchForTesting(withProfile)
     render(<FeedPage params={{}} />)
     await waitFor(() => expect(chipNames()).toEqual(PROFILE_SECTIONS.map((section) => section.label)))
+    const tab = within(screen.getByRole('tablist', { name: 'Sections' })).getByRole('tab', { name: 'Healthcare AI & medtech' })
+    expect(tab).toHaveAttribute('title', 'Clinical AI and devices.')
   })
 
   it('equal the sample profile labels after the sample service answers', async () => {
     setFetchForTesting(mockFetch)
     render(<FeedPage params={{}} />)
     await screen.findByPlaceholderText(/Search titles/)
-    await waitFor(() => expect(within(screen.getByRole('tablist', { name: 'Sections' })).getByRole('tab', { name: 'Where AI is heading' })).toBeInTheDocument())
+    // The description reaches the tab only once the sample profile has loaded, so this wait is the signal that it did.
+    await waitFor(() => expect(within(screen.getByRole('tablist', { name: 'Sections' })).getByRole('tab', { name: 'Where AI is heading' })).toHaveAttribute('title', expect.stringContaining('Sample description')))
     expect(chipNames()).toEqual(DEFAULT_SECTIONS.map((section) => section.label))
   })
 })

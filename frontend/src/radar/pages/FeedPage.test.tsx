@@ -105,6 +105,11 @@ describe('FeedPage toolbar', () => {
     await waitFor(() => expect(missed.textContent).toMatch(/^Missed\s*\d+$/))
   })
 
+  it('explains the Missed view in its tooltip', async () => {
+    render(<FeedPage params={{}} />)
+    expect(await screen.findByRole('tab', { name: /^Missed/ })).toHaveAttribute('title', 'Top and notable items from the last 7 days that you have not opened, saved or filed')
+  })
+
   it('puts the same parameter in the address as the old chip when Saved is chosen, and clears the views on Everything', async () => {
     render(<FeedPage params={{}} />)
     fireEvent.click(await screen.findByRole('tab', { name: 'Saved' }))

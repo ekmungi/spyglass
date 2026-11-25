@@ -11,6 +11,8 @@ export interface TabItem {
   count?: string | number
   /** When set, a red exclamation mark follows the label; this text is its accessible name. */
   alert?: string
+  /** Hover text for the tab, for a longer explanation than its label. */
+  title?: string
 }
 
 export interface TabsProps {
@@ -61,6 +63,7 @@ export function Tabs({ tabs, value, onChange, label, quiet = false }: TabsProps)
               className="r-tabs__tab"
               aria-selected={selected}
               tabIndex={index === stop ? 0 : -1}
+              title={tab.title}
               onClick={() => onChange(tab.key)}
               onKeyDown={(event) => onKeyDown(event, index)}
             >

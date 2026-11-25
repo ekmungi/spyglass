@@ -55,6 +55,13 @@ describe('Tabs', () => {
     expect(screen.getByRole('tab', { name: /^Feeds/ })).toContainElement(screen.getByRole('img', { name: 'One feed is failing' }))
   })
 
+  it('puts the title of a tab on its button as hover text, and leaves the others without one', () => {
+    const tabs: TabItem[] = [{ key: 'a', label: 'First', title: 'The first one' }, { key: 'b', label: 'Second' }]
+    render(<Tabs tabs={tabs} value="a" onChange={() => undefined} label="Views" />)
+    expect(screen.getByRole('tab', { name: 'First' })).toHaveAttribute('title', 'The first one')
+    expect(screen.getByRole('tab', { name: 'Second' })).not.toHaveAttribute('title')
+  })
+
   it('draws the lighter look of a second strip when quiet', () => {
     const { container } = render(<Tabs tabs={TABS} value="saved" onChange={() => undefined} label="Sections" quiet />)
     expect(container.firstElementChild).toHaveClass('r-tabs', 'r-tabs--quiet')
