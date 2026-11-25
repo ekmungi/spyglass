@@ -81,12 +81,23 @@ export function layoutRegister(register: WatchRegister): WatchLayout {
   return { groups, paused, rows, rejected: register.rejected }
 }
 
+/** Name ids mapped to a status. */
+export type StatusById = ReadonlyMap<number, WatchStatus>
+
+/** The entity with the status `statuses` gives its id, or the entity itself when it gives none. */
+function patched(entity: WatchEntry, statuses: StatusById): WatchEntry {
+  const status = statuses.get(entity.id)
+  return status === undefined || status === entity.status ? entity : { ...entity, status }
+}
+
 /**
- * The same layout with one name's status changed wherever the name is shown. Nothing is added,
- * removed or reordered, so a chip keeps its place under the cursor; the layout given is not changed.
+ * The same layout with the given names' statuses changed wherever the names are shown. Nothing is
+ * added, removed or reordered, so a chip keeps its place under the cursor; the layout given is not
+ * changed, and it is returned as it is when there is nothing to change.
  */
-export function withStatus(layout: WatchLayout, id: number, status: WatchStatus): WatchLayout {
-  const patch = (entity: WatchEntry) => (entity.id === id ? { ...entity, status } : entity)
+export function withStatuses(layout: WatchLayout, statuses: StatusById): WatchLayout {
+  if (statuses.size === 0) return layout
+  const patch = (entity: WatchEntry) => patched(entity, statuses)
   return {
     groups: layout.groups.map((group) => ({ ...group, entities: group.entities.map(patch) })),
     paused: layout.paused.map((name) => ({ ...name, entity: patch(name.entity) })),
@@ -95,14 +106,12 @@ export function withStatus(layout: WatchLayout, id: number, status: WatchStatus)
   }
 }
 
-/** The register with one followed name's status changed, as the next load will send it. */
-export function registerWithStatus(register: WatchRegister, id: number, status: WatchStatus): WatchRegister {
+/** The register with the given followed names' statuses changed, in a copy. */
+export function registerWithStatuses(register: WatchRegister, statuses: StatusById): WatchRegister {
+  if (statuses.size === 0) return register
   return {
     ...register,
-    categories: register.categories.map((category) => ({
-      ...category,
-      entities: category.entities.map((entity) => (entity.id === id ? { ...entity, status } : entity)),
-    })),
+    categories: register.categories.map((category) => ({ ...category, entities: category.entities.map((entity) => patched(entity, statuses)) })),
   }
 }
 

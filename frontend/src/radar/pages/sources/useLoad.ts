@@ -15,7 +15,8 @@ export interface LoadState<T> {
   replace: (next: T) => void
   /**
    * Change only the answer remembered for the next visit, leaving the page as it is: for a change the
-   * server confirmed that the page shows in place instead of re-rendering from new data.
+   * server confirmed that the page shows in place instead of re-rendering from new data. The change is
+   * also applied to the answer of a fetch that is out now, which may have been read before it.
    */
   remember: (update: (current: T) => T) => void
 }
@@ -53,6 +54,9 @@ export function useLoad<T>(fetcher: (signal: AbortSignal) => Promise<T>, cacheKe
   })
   const [round, setRound] = useState(0)
   const fetcherRef = useRef(fetcher)
+  // Changes remembered while a fetch is out. Its answer may have been read before them, so they are
+  // applied to it again before it is remembered (each update sets a value, so applying twice is harmless).
+  const lateUpdates = useRef<((current: T) => T)[]>([])
 
   useEffect(() => {
     fetcherRef.current = fetcher
@@ -60,10 +64,12 @@ export function useLoad<T>(fetcher: (signal: AbortSignal) => Promise<T>, cacheKe
 
   useEffect(() => {
     const controller = new AbortController()
+    lateUpdates.current = []
     fetcherRef.current(controller.signal).then(
       (data) => {
         if (controller.signal.aborted) return
-        if (cacheKey) answers.set(cacheKey, data)
+        if (cacheKey) answers.set(cacheKey, lateUpdates.current.reduce((answer, update) => update(answer), data))
+        lateUpdates.current = []
         // An unchanged answer keeps the data object on screen as it is: no re-render, no jump.
         setSnapshot((previous) => {
           if (previous.data !== null && sameAnswer(previous.data, data)) {
@@ -97,8 +103,10 @@ export function useLoad<T>(fetcher: (signal: AbortSignal) => Promise<T>, cacheKe
 
   const remember = useCallback(
     (update: (current: T) => T) => {
-      const current = cacheKey ? (answers.get(cacheKey) as T | undefined) : undefined
-      if (cacheKey && current !== undefined) answers.set(cacheKey, update(current))
+      if (!cacheKey) return
+      const current = answers.get(cacheKey) as T | undefined
+      if (current !== undefined) answers.set(cacheKey, update(current))
+      lateUpdates.current = [...lateUpdates.current, update]
     },
     [cacheKey],
   )

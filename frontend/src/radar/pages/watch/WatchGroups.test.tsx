@@ -128,6 +128,27 @@ describe('group actions', () => {
     expect(api.patchWatchGroup).toHaveBeenNthCalledWith(2, { category: 'Regulators', action: 'up' })
   })
 
+  it('shows the order the service reached when a later step of a move fails, so the next move goes one place', async () => {
+    const shown = twoGroups()
+    const dormant = { name: 'Dormant', paused: true, entities: [entry({ id: 7, name: 'Quiet Co', category: 'Dormant', status: 'muted' })] }
+    const [imaging, regulators] = shown.categories
+    api.getWatch.mockResolvedValue({ ...shown, categories: [imaging, dormant, regulators] })
+    api.patchWatchGroup
+      .mockResolvedValueOnce({ ...shown, categories: [dormant, imaging, regulators], removed: [] })
+      .mockRejectedValueOnce(new ApiError('Spyglass is not reachable.', { status: 0, kind: 'network', path: '/watch/groups' }))
+      .mockResolvedValue({ ...shown, categories: [dormant, regulators, imaging], removed: [] })
+    renderPage()
+    await chooseFromGroupMenu('Imaging AI', 'Move down')
+    expect(await screen.findByText('Spyglass is not reachable.')).toBeInTheDocument()
+    expect(api.patchWatchGroup).toHaveBeenCalledTimes(2)
+
+    // The first step passed Dormant, so one more step now reaches Regulators.
+    await chooseFromGroupMenu('Imaging AI', 'Move down')
+    expect(await screen.findByText('Moved Imaging AI down')).toBeInTheDocument()
+    expect(api.patchWatchGroup).toHaveBeenCalledTimes(3)
+    expect(shownGroups()).toEqual(['Regulators', 'Imaging AI'])
+  })
+
   it('renames a group, and Undo renames it back', async () => {
     const renamed = register()
     renamed.categories[0] = { ...renamed.categories[0], name: 'Scopes' }

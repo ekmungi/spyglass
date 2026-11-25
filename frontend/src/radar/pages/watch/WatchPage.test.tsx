@@ -6,7 +6,7 @@ import { ApiError } from '../../api/errors'
 import { ToastViewport } from '../../ui'
 import WatchPage from '../WatchPage'
 import { clearLoadCache } from '../sources/useLoad'
-import type { DiscoverResult } from './api'
+import type { DiscoverResult, WatchRegister } from './api'
 import { clearToasts, entry, register } from './testFixtures'
 
 const api = vi.hoisted(() => ({
@@ -196,6 +196,76 @@ describe('Watching chips', () => {
     renderPage()
     expect(await screen.findByText('Paused (2)')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Zeta Vision, in Imaging AI' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('keeps the look of a switch still on its way when the list is loaded again', async () => {
+    let finish: (value: unknown) => void = () => {}
+    api.changeEntry.mockImplementation((id: number) => (id === 1 ? new Promise((resolve) => (finish = resolve)) : Promise.resolve({})))
+    // The reload that follows accepting Gamma Labs was read before Alpha Scopes' change reached the service.
+    const accepted = register()
+    accepted.categories[0] = {
+      ...accepted.categories[0],
+      entities: [...accepted.categories[0].entities, { ...accepted.suggested[0], status: 'active' as const, category: 'Imaging AI' }],
+    }
+    accepted.suggested = []
+    api.getWatch.mockResolvedValueOnce(register()).mockResolvedValueOnce(accepted)
+    renderPage()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    fireEvent.click(within(group).getByRole('button', { name: 'Alpha Scopes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Accept Gamma Labs' }))
+    expect(await within(group).findByRole('button', { name: 'Gamma Labs' })).toBeInTheDocument()
+    expect(within(group).getByRole('button', { name: 'Alpha Scopes' })).toHaveAttribute('aria-pressed', 'false')
+
+    finish({})
+    expect(await screen.findByText(/^Paused Alpha Scopes\./)).toBeInTheDocument()
+    expect(within(screen.getByRole('group', { name: 'Imaging AI' })).getByRole('button', { name: 'Alpha Scopes' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('keeps a name paused on this visit in its group when the quiet refresh of a revisit lands', async () => {
+    const first = renderPage()
+    await screen.findByRole('group', { name: 'Imaging AI' })
+    first.unmount()
+    // The revisit shows the remembered list at once and asks the service again quietly.
+    let answer: (value: WatchRegister) => void = () => {}
+    api.getWatch.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+    renderPage()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    fireEvent.click(within(group).getByRole('button', { name: 'Zeta Vision' }))
+    await screen.findByText(/^Paused Zeta Vision\./)
+
+    const fresh = register()
+    fresh.categories[0] = {
+      ...fresh.categories[0],
+      week_count: 5,
+      entities: fresh.categories[0].entities.map((e) => (e.id === 2 ? { ...e, status: 'muted' as const } : e)),
+    }
+    answer(fresh)
+    await screen.findByRole('link', { name: '5 items this week' })
+    const row = screen.getByRole('group', { name: 'Imaging AI' })
+    expect(within(row).getByRole('button', { name: 'Zeta Vision' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByText('Paused (1)')).toBeInTheDocument()
+  })
+
+  it('remembers a switch for the next visit even when the quiet refresh read the list before it', async () => {
+    const first = renderPage()
+    await screen.findByRole('group', { name: 'Imaging AI' })
+    first.unmount()
+    let answer: (value: WatchRegister) => void = () => {}
+    api.getWatch.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+    const second = renderPage()
+    const group = await screen.findByRole('group', { name: 'Imaging AI' })
+    fireEvent.click(within(group).getByRole('button', { name: 'Zeta Vision' }))
+    await screen.findByText(/^Paused Zeta Vision\./)
+    // This answer was read before the change reached the service.
+    const before = register()
+    before.categories[0] = { ...before.categories[0], week_count: 5 }
+    answer(before)
+    await screen.findByRole('link', { name: '5 items this week' })
+    second.unmount()
+
+    api.getWatch.mockReturnValue(new Promise(() => {}))
+    renderPage()
+    expect(await screen.findByText('Paused (2)')).toBeInTheDocument()
   })
 
   it('puts the chip back and says why when the change fails', async () => {

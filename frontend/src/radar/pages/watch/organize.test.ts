@@ -1,7 +1,8 @@
 // layoutRegister: the one-time layout of the Watch page (groups, paused names, suggestion rows, rejected
-// names); withStatus: one name's look changed in place; groupSteps: how far "Move up" and "Move down" go.
+// names); withStatuses and registerWithStatuses: names' statuses changed in a copy; groupSteps: how far
+// "Move up" and "Move down" go.
 import { describe, expect, it } from 'vitest'
-import { groupSteps, layoutRegister, registerWithStatus, withStatus } from './organize'
+import { groupSteps, layoutRegister, registerWithStatuses, withStatuses } from './organize'
 import { entry, register } from './testFixtures'
 
 describe('layoutRegister', () => {
@@ -119,31 +120,32 @@ describe('layoutRegister', () => {
   })
 })
 
-describe('withStatus', () => {
-  it('changes one name where it is shown and moves nothing', () => {
+describe('withStatuses', () => {
+  it('changes the given names where they are shown and moves nothing', () => {
     const layout = layoutRegister(register())
-    const paused = withStatus(layout, 1, 'muted')
-    expect(paused.groups[0].entities.map((e) => [e.name, e.status])).toEqual([
+    const changed = withStatuses(layout, new Map([[1, 'muted'], [3, 'active']]))
+    expect(changed.groups[0].entities.map((e) => [e.name, e.status])).toEqual([
       ['Alpha Scopes', 'muted'],
       ['Zeta Vision', 'active'],
     ])
-    expect(paused.paused.map((p) => p.entity.name)).toEqual(['FDA'])
+    expect(changed.paused.map((p) => [p.entity.name, p.entity.status, p.group])).toEqual([['FDA', 'active', 'Regulators']])
     // The layout it was given is left as it was.
     expect(layout.groups[0].entities[0].status).toBe('active')
   })
 
-  it('changes a name in the Paused list in place', () => {
-    const resumed = withStatus(layoutRegister(register()), 3, 'active')
-    expect(resumed.paused.map((p) => [p.entity.name, p.entity.status, p.group])).toEqual([['FDA', 'active', 'Regulators']])
-    expect(resumed.groups.map((g) => g.name)).toEqual(['Imaging AI'])
+  it('returns the same layout when there is nothing to change', () => {
+    const layout = layoutRegister(register())
+    expect(withStatuses(layout, new Map())).toBe(layout)
   })
 })
 
-describe('registerWithStatus', () => {
-  it('changes one followed name in a copy, so the next layout puts it where its status says', () => {
+describe('registerWithStatuses', () => {
+  it('changes the given followed names in a copy, so the next layout puts each where its status says', () => {
     const before = register()
-    const after = registerWithStatus(before, 2, 'muted')
-    expect(layoutRegister(after).paused.map((p) => p.entity.name)).toEqual(['Zeta Vision', 'FDA'])
+    const after = registerWithStatuses(before, new Map([[2, 'muted'], [3, 'active']]))
+    const layout = layoutRegister(after)
+    expect(layout.paused.map((p) => p.entity.name)).toEqual(['Zeta Vision'])
+    expect(layout.groups.map((g) => g.name)).toEqual(['Imaging AI', 'Regulators'])
     expect(before.categories[0].entities[1].status).toBe('active')
   })
 })

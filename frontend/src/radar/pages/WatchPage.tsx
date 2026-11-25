@@ -4,9 +4,9 @@
 import './watch/watch.css'
 import { useCallback, useState } from 'react'
 import { errorMessage } from '../api/errors'
-import type { RemovedWatchEntity, SectionKey, WatchApplyResponse, WatchGroupBody } from '../api/types'
+import type { RemovedWatchEntity, SectionKey, WatchApplyResponse, WatchGroupBody, WatchGroupResponse } from '../api/types'
 import { navigate } from '../router'
-import { Button, Dialog, EmptyState, IconAdd, SectionHeading, Skeleton, toast, type MenuItem } from '../ui'
+import { Button, EmptyState, IconAdd, SectionHeading, Skeleton, toast, type MenuItem } from '../ui'
 import {
   addEntry,
   changeEntry,
@@ -26,6 +26,7 @@ import type { FollowFields } from './watch/FollowPane'
 import type { GroupMenuAction } from './watch/GroupHeading'
 import { GroupDialog, type GroupDialogState } from './watch/GroupDialogs'
 import { MoveDialog } from './watch/MoveDialog'
+import { RemoveNameDialog } from './watch/RemoveNameDialog'
 import { categoryNames, groupSteps, type LayoutGroup } from './watch/organize'
 import { describeApplied } from './watch/reviewText'
 import { ReviewPanel } from './watch/ReviewPanel'
@@ -52,7 +53,8 @@ function registerOf<T extends WatchRegister>({ categories, suggested, rejected, 
 
 /** The Watch page (no props): the register by group, suggestions, topics, and every way to add or tidy. */
 export default function WatchPage() {
-  const { data, error, loading, reload, replace, remember } = useLoad<WatchRegister>((signal) => getWatch(signal), 'watch')
+  const loaded = useLoad<WatchRegister>((signal) => getWatch(signal), 'watch')
+  const { data, error, loading } = loaded
   const [busyId, setBusyId] = useState<number | null>(null)
   const [busyGroup, setBusyGroup] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogState>(null)
@@ -63,8 +65,17 @@ export default function WatchPage() {
   const [reviewing, setReviewing] = useState(false)
   const [topicsToken, setTopicsToken] = useState(0)
 
-  // Laid out once per load; a chip click changes only that chip's look until the next load.
-  const { layout, switching, toggle } = useWatchLayout(data, remember)
+  // Laid out once per load; a chip click changes only that chip's look, and the chip keeps its place
+  // until an action that changes the structure. Every reload and replace below is such an action.
+  const { layout, switching, toggle, restructure } = useWatchLayout(data, loaded.remember)
+  const reload = () => {
+    restructure()
+    loaded.reload()
+  }
+  const replace = (next: WatchRegister) => {
+    restructure()
+    loaded.replace(next)
+  }
 
   const closeDialog = useCallback(() => setDialog(null), [])
   const closeAdd = useCallback(() => setAdding(false), [])
@@ -169,7 +180,9 @@ export default function WatchPage() {
 
   /**
    * One whole-group change, sent `times` times in a row (a move past hidden groups). The answer is the
-   * fresh register, so no second request is needed; the page is laid out again from it.
+   * fresh register, so no second request is needed; the page is laid out again from it. When a later
+   * step fails, the page shows the answer of the last step that went through, which is how the
+   * service has it, so the next move is counted from there.
    */
   const changeGroup = async (
     body: WatchGroupBody,
@@ -179,13 +192,16 @@ export default function WatchPage() {
   ) => {
     setBusyGroup(body.category)
     setGroupProblem(null)
+    let last: WatchGroupResponse | null = null
     try {
-      let result = await patchWatchGroup(body)
-      for (let step = 1; step < times; step += 1) result = await patchWatchGroup(body)
+      for (let step = 0; step < times; step += 1) last = await patchWatchGroup(body)
+      const result = last
+      if (!result) return
       replace(registerOf(result))
       setGroupDialog(null)
       toast(message(result.removed), { action: undo ? { label: 'Undo', onClick: () => void undo(result.removed) } : undefined })
     } catch (cause) {
+      if (last) replace(registerOf(last))
       const text = errorMessage(cause)
       if (groupDialog) setGroupProblem(text)
       else toast(text, { tone: 'error' })
@@ -371,24 +387,13 @@ export default function WatchPage() {
         />
       )}
 
-      <Dialog
+      <RemoveNameDialog
         open={dialog?.kind === 'remove'}
+        name={dialog?.kind === 'remove' ? dialog.entry.name : null}
+        busy={removing}
         onClose={closeDialog}
-        title={dialog?.kind === 'remove' ? `Remove ${dialog.entry.name}?` : 'Remove'}
-        footer={
-          <>
-            <Button variant="quiet" onClick={closeDialog}>
-              Cancel
-            </Button>
-            <Button variant="primary" disabled={removing} onClick={() => void confirmRemove()}>
-              Remove
-            </Button>
-          </>
-        }
-      >
-        <p className="r-meta">Spyglass stops checking this name and forgets which items mention it. The items themselves stay in your feed.</p>
-        <p className="r-meta">To stop the searches and keep the name, close this and click the name once: it turns grey.</p>
-      </Dialog>
+        onRemove={() => void confirmRemove()}
+      />
     </div>
   )
 }

@@ -1,12 +1,13 @@
 // useWatchLayout: lay the Watch page out once per load and keep that layout. A chip click switches
 // one name between watched and paused in place, asks the server, and puts the earlier look back if
-// the server refuses, so no chip moves or disappears until the next load.
+// the server refuses. A name switched on this visit keeps its place, and its look, when new data
+// arrives, until the page calls `restructure` for an action that changes the structure.
 import { useState } from 'react'
 import { errorMessage } from '../../api/errors'
 import type { WatchStatus } from '../../api/types'
 import { toast } from '../../ui'
 import { changeEntry, type WatchEntry, type WatchRegister } from './api'
-import { layoutRegister, registerWithStatus, withStatus, type WatchLayout } from './organize'
+import { layoutRegister, registerWithStatuses, withStatuses, type StatusById, type WatchLayout } from './organize'
 
 export interface WatchLayoutState {
   /** The layout of the last load with the looks switched since; null before the first load. */
@@ -15,6 +16,49 @@ export interface WatchLayoutState {
   switching: ReadonlySet<number>
   /** Switch one name: watched becomes paused, paused becomes watched. */
   toggle: (entity: WatchEntry) => void
+  /**
+   * Call before an action that changes the structure (add, remove, move, a group action, an applied
+   * review): its answer then lays the names switched on this visit out where their status puts them,
+   * except those still on their way to the server, which keep their place and look.
+   */
+  restructure: () => void
+}
+
+/** One name switched on this visit. */
+interface Switch {
+  /** The status that decides where the name is shown: where the page put it before the first switch. */
+  place: WatchStatus
+  /** The status the chip shows. */
+  look: WatchStatus
+  /** Its request is on the way. */
+  pending: boolean
+}
+
+type Switches = ReadonlyMap<number, Switch>
+
+interface View {
+  /** The answer the layout was made from. */
+  load: WatchRegister | null
+  layout: WatchLayout | null
+  switches: Switches
+}
+
+/** One field of every switch, by name id. */
+function pick(switches: Switches, field: 'place' | 'look'): StatusById {
+  return new Map([...switches].map(([id, item]) => [id, item[field]]))
+}
+
+/** Lay `data` out with each switched name in its kept place and with its current look. */
+function layoutFor(data: WatchRegister | null, switches: Switches): WatchLayout | null {
+  if (!data) return null
+  return withStatuses(layoutRegister(registerWithStatuses(data, pick(switches, 'place'))), pick(switches, 'look'))
+}
+
+/** Where the layout shows a name: "active" in a group, "muted" in the Paused list. */
+function placeIn(layout: WatchLayout | null, id: number): WatchStatus | undefined {
+  if (layout?.groups.some((group) => group.entities.some((entity) => entity.id === id))) return 'active'
+  if (layout?.paused.some((name) => name.entity.id === id)) return 'muted'
+  return undefined
 }
 
 /** The toast after a switch: what changes for the daily search. */
@@ -24,26 +68,23 @@ function switchedText(name: string, to: WatchStatus): string {
     : `Paused ${name}. Spyglass stops searching for it. Nothing is deleted.`
 }
 
-/** A copy of the set without `id`. */
-function without(ids: ReadonlySet<number>, id: number): ReadonlySet<number> {
-  const next = new Set(ids)
-  next.delete(id)
-  return next
-}
-
 /**
- * The layout for `data` (a new load or a replaced register lays the page out afresh) and the chip
- * switch. `remember` keeps the answer shown on the next visit in step with each confirmed switch.
+ * The layout for `data` and the chip switch. A new answer is laid out afresh, keeping the switched
+ * names in place. `remember` keeps the answer shown on the next visit in step with each confirmed switch.
  */
 export function useWatchLayout(data: WatchRegister | null, remember: (update: (current: WatchRegister) => WatchRegister) => void): WatchLayoutState {
-  const [view, setView] = useState<{ load: WatchRegister | null; layout: WatchLayout | null }>({ load: null, layout: null })
+  const [view, setView] = useState<View>({ load: null, layout: null, switches: new Map() })
   // A new answer is laid out during this render, before anything is drawn from the old layout.
-  if (view.load !== data) setView({ load: data, layout: data ? layoutRegister(data) : null })
-  const [switching, setSwitching] = useState<ReadonlySet<number>>(() => new Set())
+  if (view.load !== data) setView({ ...view, load: data, layout: layoutFor(data, view.switches) })
+  const switching: ReadonlySet<number> = new Set([...view.switches].filter(([, item]) => item.pending).map(([id]) => id))
 
-  /** Change one name's look in the layout on screen, leaving every chip where it is. */
-  const patchStatus = (id: number, status: WatchStatus) =>
-    setView((current) => (current.layout ? { ...current, layout: withStatus(current.layout, id, status) } : current))
+  /** Record a name's look (and, at its first switch, its place) and show the look at once. */
+  const setLook = (id: number, from: WatchStatus, look: WatchStatus, pending: boolean) =>
+    setView((current) => {
+      const place = current.switches.get(id)?.place ?? placeIn(current.layout, id) ?? from
+      const switches = new Map(current.switches).set(id, { place, look, pending })
+      return { ...current, switches, layout: current.layout && withStatuses(current.layout, new Map([[id, look]])) }
+    })
 
   /**
    * Watch or pause one name: the chip changes at once, then the server is asked. A failure puts the
@@ -51,19 +92,17 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
    */
   const switchName = async (entity: WatchEntry, to: WatchStatus, announce = true) => {
     const from = entity.status
-    patchStatus(entity.id, to)
-    setSwitching((ids) => new Set(ids).add(entity.id))
+    setLook(entity.id, from, to, true)
     try {
       await changeEntry(entity.id, { status: to })
-      remember((current) => registerWithStatus(current, entity.id, to))
+      setLook(entity.id, from, to, false)
+      remember((current) => registerWithStatuses(current, new Map([[entity.id, to]])))
       if (announce) {
         toast(switchedText(entity.name, to), { action: { label: 'Undo', onClick: () => void switchName({ ...entity, status: to }, from, false) } })
       }
     } catch (cause) {
-      patchStatus(entity.id, from)
+      setLook(entity.id, from, from, false)
       toast(errorMessage(cause), { tone: 'error' })
-    } finally {
-      setSwitching((ids) => without(ids, entity.id))
     }
   }
 
@@ -71,5 +110,8 @@ export function useWatchLayout(data: WatchRegister | null, remember: (update: (c
     if (!switching.has(entity.id)) void switchName(entity, entity.status === 'active' ? 'muted' : 'active')
   }
 
-  return { layout: view.layout, switching, toggle }
+  const restructure = () =>
+    setView((current) => ({ ...current, switches: new Map([...current.switches].filter(([, item]) => item.pending)) }))
+
+  return { layout: view.layout, switching, toggle, restructure }
 }
