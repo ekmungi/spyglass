@@ -23,8 +23,8 @@ from spyglass_service.radar.usage_parse import Tokens
 logger = logging.getLogger(__name__)
 
 # What a model call was for. `other` covers the small writing jobs without a name of their own.
-PURPOSES = ("chat", "feed_chat", "triage", "digest", "brief_opening", "watch_review", "discovery",
-            "filing", "other")
+PURPOSES = ("chat", "feed_chat", "triage", "digest", "brief_opening", "watch_review", "watch_suggest",
+            "discovery", "filing", "other")
 # How the judging roles map to a purpose when the caller does not name one.
 _ROLE_PURPOSE = {"triage": "triage", "digest": "digest"}
 

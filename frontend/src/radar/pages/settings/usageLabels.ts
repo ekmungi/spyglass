@@ -7,6 +7,7 @@ const PURPOSES: Record<string, string> = {
   digest: 'Reading and summarising items',
   brief_opening: 'The brief’s opening',
   watch_review: 'Watch checks',
+  watch_suggest: 'Sorting names for the watch page',
   discovery: 'Finding companies to watch',
   filing: 'Filing',
   other: 'Other writing jobs',
