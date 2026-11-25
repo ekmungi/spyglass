@@ -1,8 +1,8 @@
 // Sources page: where Spyglass gets its material. A header line (last collection, next brief,
 // Collect now), then one strip of tabs: what the reader sends in, the feeds, the automatic searches
-// and the FDA device decisions. Only the selected group is shown.
+// and the FDA device decisions. Only the selected group is shown; the others stay in the page, hidden.
 import './sources/sources.css'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button, Skeleton, Tabs, type TabItem } from '../ui'
 import { loadSources, loadStatus, type FeedRow, type SourcesView, type StatusView } from './sources/api'
 import { CollectBar } from './sources/CollectBar'
@@ -14,6 +14,15 @@ import { SignalsSection } from './sources/SignalsSection'
 import { signalRows } from './sources/signalRows'
 import { useLoad } from './sources/useLoad'
 
+/** One tab's content. It stays in the page when it is not selected, only hidden, so its state is kept. */
+function Panel({ shown, children }: { shown: boolean; children: ReactNode }) {
+  return (
+    <div role="tabpanel" className="rs-panel" hidden={!shown}>
+      {children}
+    </div>
+  )
+}
+
 type SourcesTab = 'from-you' | 'feeds' | 'signals' | 'fda'
 
 /** The Sources page (no props). */
@@ -24,11 +33,12 @@ export default function SourcesPage() {
   const [selected, setSelected] = useState<SourcesTab>('from-you')
 
   // "Searches" is left out when the server reports no such collector, so the strip never opens an empty tab.
+  const hasSignals = view !== null && signalRows(view.collectors).length > 0
   const tabs: TabItem[] = view
     ? [
         { key: 'from-you', label: 'From you' },
         { key: 'feeds', label: 'Feeds', alert: failingAlert(view.feeds) },
-        ...(signalRows(view.collectors).length > 0 ? [{ key: 'signals', label: 'Searches' }] : []),
+        ...(hasSignals ? [{ key: 'signals', label: 'Searches' }] : []),
         { key: 'fda', label: 'FDA decisions' },
       ]
     : []
@@ -72,12 +82,22 @@ export default function SourcesPage() {
       {view && (
         <>
           <Tabs label="Sources" tabs={tabs} value={tab} onChange={(key) => setSelected(key as SourcesTab)} />
-          <div role="tabpanel" className="rs-panel">
-            {tab === 'from-you' && <FromYou collectors={view.collectors} />}
-            {tab === 'feeds' && <FeedsSection feeds={view.feeds} onChange={setFeeds} />}
-            {tab === 'signals' && <SignalsSection collectors={view.collectors} />}
-            {tab === 'fda' && <FdaSection collectors={view.collectors} />}
-          </div>
+          {/* Every group stays mounted and the unselected ones are hidden, so text typed and not yet submitted
+              (a feed address, a link, the FDA codes) is still there after a visit to another tab. */}
+          <Panel shown={tab === 'from-you'}>
+            <FromYou collectors={view.collectors} />
+          </Panel>
+          <Panel shown={tab === 'feeds'}>
+            <FeedsSection feeds={view.feeds} onChange={setFeeds} />
+          </Panel>
+          {hasSignals && (
+            <Panel shown={tab === 'signals'}>
+              <SignalsSection collectors={view.collectors} />
+            </Panel>
+          )}
+          <Panel shown={tab === 'fda'}>
+            <FdaSection collectors={view.collectors} />
+          </Panel>
         </>
       )}
     </div>

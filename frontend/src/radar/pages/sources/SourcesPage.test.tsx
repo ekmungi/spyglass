@@ -135,7 +135,9 @@ describe('SourcesPage', () => {
       ],
     })
     render(<SourcesPage />)
-    expect(await screen.findByRole('img', { name: '1 feed is failing' })).toBeInTheDocument()
+    const feedsTab = await screen.findByRole('tab', { name: /^Feeds/ })
+    expect(within(feedsTab).getByRole('img', { name: '1 feed is failing' })).toBeInTheDocument()
+    expect(within(screen.getByRole('tab', { name: /^From you/ })).queryByRole('img')).not.toBeInTheDocument()
     await openTab('Feeds')
     const failing = screen.getByText('Policy Notes').closest('li') as HTMLElement
     expect(within(failing).getByRole('img', { name: 'This feed is failing' })).toBeInTheDocument()
@@ -151,13 +153,31 @@ describe('SourcesPage', () => {
       feeds: [feed({ id: 1, name: 'A', status: 'error' }), feed({ id: 2, name: 'B', status: 'error' })],
     })
     const first = render(<SourcesPage />)
-    expect(await screen.findByRole('img', { name: '2 feeds are failing' })).toBeInTheDocument()
+    expect(within(await screen.findByRole('tab', { name: /^Feeds/ })).getByRole('img', { name: '2 feeds are failing' })).toBeInTheDocument()
     first.unmount()
     clearLoadCache()
     api.loadSources.mockResolvedValue({ ...view(), feeds: [feed({ id: 1, name: 'A' }), feed({ id: 2, name: 'B', enabled: false })] })
     render(<SourcesPage />)
-    await screen.findByRole('tab', { name: /^Feeds/ })
-    expect(screen.queryByRole('img', { name: /failing/ })).not.toBeInTheDocument()
+    const feedsTab = await screen.findByRole('tab', { name: /^Feeds/ })
+    expect(within(feedsTab).queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('keeps what was typed and not yet submitted when the reader visits another tab and comes back', async () => {
+    render(<SourcesPage />)
+    await openTab('Feeds')
+    fireEvent.change(await screen.findByLabelText('Add a feed'), { target: { value: 'https://half.example/fe' } })
+    await openTab('FDA decisions')
+    const codes = await screen.findByLabelText('Product codes')
+    await waitFor(() => expect(codes).toBeEnabled()) // the settings have loaded; a later load would overwrite the text
+    fireEvent.change(codes, { target: { value: 'QAS, QIH' } })
+    await openTab('From you')
+    fireEvent.change(screen.getByLabelText('Add a link'), { target: { value: 'https://half.example/story' } })
+    await openTab('Feeds')
+    expect(screen.getByLabelText('Add a feed')).toHaveValue('https://half.example/fe')
+    await openTab('FDA decisions')
+    expect(screen.getByLabelText('Product codes')).toHaveValue('QAS, QIH')
+    await openTab('From you')
+    expect(screen.getByLabelText('Add a link')).toHaveValue('https://half.example/story')
   })
 
   it('replaces the working feeds by one line of counts and lists them on request', async () => {
