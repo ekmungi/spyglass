@@ -193,3 +193,78 @@ def test_a_story_collects_the_watched_organisations_of_all_its_members() -> None
     b = Candidate(item_id=2, score=50, when=NOW, watch=(("A Co", "Cat"), ("B Lab", "AI labs")))
     merged = Story(members=(a, b))
     assert merged.watch == (("A Co", "Cat"), ("B Lab", "AI labs")) and merged.competitor
+
+
+def run(start: int, count: int, score: int, tier: str, **kw) -> list[Story]:
+    """`count` stories with ids from `start` and the same score and tier (equal rank, id order)."""
+    return [story(start + i, score, tier=tier, **kw) for i in range(count)]
+
+
+def more_of(plans) -> dict[str, list[int]]:
+    """Section key -> lead item ids of the unpicked stories kept under it."""
+    return {p.key: [s.lead.item_id for s in p.more] for p in plans}
+
+
+def test_left_over_stories_go_to_the_first_section_that_fits() -> None:
+    picked_top = [story(1000 + i, 100 - i, tier="top") for i in range(5)]
+    picked_notable = [story(1100 + i, 95 - i, tier="notable") for i in range(6)]
+    picked_skim = [story(1200 + i, 89 - i, tier="skim") for i in range(6)]
+    watch = run(100, 5, 80, "notable", competitor=True)  # the five watch slots
+    papers = run(200, 3, 75, "notable", kind="paper", section="health")  # all three are picked
+    left = [
+        # An eligible paper (score 70) ranks below the not eligible one (score 69, but fresher).
+        story(204, 70, tier="notable", kind="paper", section="health", when=NOW - timedelta(days=3)),
+        story(205, 69, tier="notable", kind="paper", section="health", when=NOW - timedelta(minutes=1)),
+        story(106, 60, tier="notable", competitor=True),
+        story(401, 55, tier="notable"),
+        story(301, 50, tier="top"),
+        story(107, 30, tier="skim", competitor=True),  # too weak for the watch list
+        story(501, 40, tier="skim"),
+    ]
+    plans, _ = rank.build_sections(
+        picked_top + picked_notable + picked_skim + watch + papers + left, NOW)
+    got = more_of(plans)
+    assert got["watch"] == [106]
+    assert got["papers"] == [204, 205]  # eligible papers first, then the others
+    assert got["top"] == [301]
+    assert got["notable"] == [401]
+    assert got["skim"] == [501, 107]
+    # Each left-over story is in exactly one `more`, and none of them is a picked story.
+    flat = [i for ids in got.values() for i in ids]
+    assert len(flat) == len(set(flat)) == 7
+    assert not set(flat) & {s.lead.item_id for p in plans for s in p.stories}
+
+
+def test_a_section_without_picked_stories_takes_none() -> None:
+    # No paper is eligible, so there is no Papers section: the paper falls through to Worth knowing.
+    stories = (run(1, 5, 99, "top") + run(10, 6, 90, "notable") + run(20, 6, 60, "skim")
+               + [story(30, 30, tier="notable", kind="paper", section="health")])
+    plans, _ = rank.build_sections(stories, NOW)
+    assert "papers" not in keys(plans)
+    assert more_of(plans)["notable"] == [30]
+
+
+def test_more_is_capped_at_twelve_and_pool_counts_all() -> None:
+    plans, _ = rank.build_sections([story(i, 100 - i, tier="skim") for i in range(1, 26)], NOW)
+    skim = next(p for p in plans if p.key == "skim")
+    assert rank.MORE_MAX == 12
+    assert len(skim.stories) == rank.SKIM_MAX
+    assert [s.lead.item_id for s in skim.more] == list(range(rank.SKIM_MAX + 1, rank.SKIM_MAX + 13))
+    assert skim.pool == 25  # the picked six plus all nineteen left over
+
+
+def test_from_you_has_no_more() -> None:
+    stories = run(1, 3, 5, "out", from_user=True) + run(10, 9, 40, "skim")
+    plans, _ = rank.build_sections(stories, NOW)
+    from_you = next(p for p in plans if p.key == "from_you")
+    assert from_you.more == () and from_you.pool == 3
+    assert [s.lead.item_id for s in next(p for p in plans if p.key == "skim").more] == [16, 17, 18]
+
+
+def test_a_story_whose_lead_has_no_headline_is_not_kept() -> None:
+    stories = run(1, 6, 60, "skim") + [
+        story(7, 50, tier="skim"), story(8, 45, tier="skim", has_headline=False),
+        story(9, 40, tier="skim")]
+    skim = next(p for p in rank.build_sections(stories, NOW)[0] if p.key == "skim")
+    assert [s.lead.item_id for s in skim.more] == [7, 9]
+    assert skim.pool == 8  # the story without a headline is not counted either

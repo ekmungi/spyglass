@@ -47,7 +47,8 @@ def test_a_day_the_model_was_down_is_degraded_not_quiet(engine) -> None:
     doc = compose_brief(engine, SETTINGS, None, llm=LLM, now=NOW)
     assert doc["unjudged"] == 40 and doc["degraded"] is True
     assert doc["quiet"] is False and doc["filtered_out"] == 0
-    assert "40 items" in doc["notice"] and "incomplete" in doc["notice"]
+    assert doc["notice"] == ("40 collected items are still waiting to be judged, so a story "
+                             "may be missing from today's selection.")
 
 
 def test_filtered_out_counts_only_judged_items_that_were_left_out(engine) -> None:
@@ -206,3 +207,13 @@ def test_one_stray_unjudged_item_does_not_make_a_large_day_incomplete() -> None:
     assert is_degraded(10, 5000)   # at least ten items
     assert is_degraded(3, 40)      # a meaningful share of a small day
     assert not is_degraded(2, 0)   # nothing collected: no share to speak of
+
+
+def test_the_notice_does_not_say_brief() -> None:
+    """The sentence names today's selection, and says "item is" for a single item."""
+    from spyglass_service.radar.brief.document import degraded_notice
+
+    assert degraded_notice(1) == ("1 collected item is still waiting to be judged, so a story "
+                                  "may be missing from today's selection.")
+    assert "brief" not in degraded_notice(1).lower() and "brief" not in degraded_notice(12).lower()
+    assert degraded_notice(0) is None

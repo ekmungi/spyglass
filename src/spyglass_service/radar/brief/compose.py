@@ -178,7 +178,7 @@ def compose_brief(
         unjudged = unjudged_ids(session, since, ref)
         plans, quiet = build_sections(stories, ref, unjudged=len(unjudged),
                                       profile_sections=frozenset(section_keys(get_profile(session))))
-        wanted = [m.item_id for p in plans for s in p.stories for m in s.members]
+        wanted = [m.item_id for p in plans for s in (*p.stories, *p.more) for m in s.members]
         items = {i["id"]: i for i in radar_items(session, wanted)}
         collected = int(session.exec(
             select(func.count(Item.id)).where(Item.fetched_at > since, Item.fetched_at <= ref)

@@ -24,6 +24,7 @@ NOTABLE_MAX = 6        # Worth knowing.
 SKIM_MAX = 6           # Skim: headline only.
 QUIET_BELOW = 3        # Fewer than this many top/notable stories makes the day quiet.
 WORTH_TIERS = ("top", "notable")
+MORE_MAX = 12          # Unpicked stories kept per section for the reader to page through.
 
 # --- Rank bonuses --------------------------------------------------------------------------
 PUBLICATION_BONUS = 5       # Per additional publication that reported the event...
@@ -43,15 +44,25 @@ SECTION_TITLES = {
 }
 # Display order in the document.
 SECTION_ORDER = ("top", "watch", "notable", "papers", "from_you", "skim")
+# The order in which sections pick their stories, which is also the order a left-over story
+# is offered to them.
+PICK_ORDER = ("from_you", "watch", "papers", "top", "notable", "skim")
 
 
 @dataclass(frozen=True)
 class SectionPlan:
-    """One filled section: its key, an optional note such as "5 picked from 96", and stories."""
+    """One filled section: its key, an optional note such as "5 picked from 96", and stories.
+
+    `more` holds the best stories that were judged and not picked, which the reader can page
+    through (at most MORE_MAX, best first); `pool` counts the picked stories plus every
+    left-over story that met the section's rule, before that cap.
+    """
 
     key: str
     stories: tuple[Story, ...]
     note: str | None = None
+    more: tuple[Story, ...] = ()
+    pool: int = 0
 
     @property
     def title(self) -> str:
@@ -128,6 +139,41 @@ def _leading_worth_knowing(pool: list[Story]) -> list[Story]:
     return chosen
 
 
+def _meets_rule(key: str, story: Story) -> bool:
+    """True when a left-over story meets the pick rule of section `key`, without its limit."""
+    lead = story.lead
+    if key == "watch":
+        return story.competitor and lead.score >= WATCH_MIN_SCORE
+    if key == "papers":
+        return lead.kind == "paper"
+    if key == "top":
+        return lead.tier == "top"
+    if key == "notable":
+        return lead.tier in WORTH_TIERS
+    return key == "skim"  # Skim takes everything else
+
+
+def _left_overs(remaining: list[Story], present: list[str],
+                profile_sections: frozenset[str] | None) -> dict[str, list[Story]]:
+    """Give each story no section picked to the first present section whose rule it meets.
+
+    `remaining` is in rank order and `present` lists the sections that have picked stories, in
+    the order they pick. A story without a headline is dropped. A section without picked
+    stories takes none, so its candidates fall through to the next section. The papers list
+    puts the papers that could have taken a slot before the others.
+    """
+    found: dict[str, list[Story]] = {key: [] for key in present}
+    for s in remaining:
+        if not s.lead.has_headline:
+            continue
+        key = next((k for k in present if k != "from_you" and _meets_rule(k, s)), None)
+        if key is not None:
+            found[key].append(s)
+    if "papers" in found:  # a stable sort keeps the rank order inside both groups
+        found["papers"].sort(key=lambda s: not paper_eligible(s, profile_sections))
+    return found
+
+
 def build_sections(stories: list[Story], now: datetime, *, unjudged: int = 0,
                    profile_sections: frozenset[str] | None = None
                    ) -> tuple[list[SectionPlan], bool]:
@@ -176,8 +222,11 @@ def build_sections(stories: list[Story], now: datetime, *, unjudged: int = 0,
     take("notable", _leading_worth_knowing(remaining))
     take("skim", remaining[:SKIM_MAX])
 
+    # Whatever no section picked is offered under the first section that would have taken it.
+    left = _left_overs(remaining, [k for k in PICK_ORDER if picked.get(k)], profile_sections)
     plans = [
-        SectionPlan(key=k, stories=tuple(picked[k]), note=notes.get(k))
+        SectionPlan(key=k, stories=tuple(picked[k]), note=notes.get(k),
+                    more=tuple(left[k][:MORE_MAX]), pool=len(picked[k]) + len(left[k]))
         for k in SECTION_ORDER
         if picked.get(k)
     ]

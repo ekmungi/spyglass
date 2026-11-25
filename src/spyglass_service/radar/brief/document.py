@@ -179,13 +179,19 @@ def story_members(session: Session, item_id: int) -> list[int]:
     return []
 
 
+# The lists of a section that hold stories: the picked ones and the unpicked ones.
+_STORY_LISTS = ("stories", "more")
+
+
 def refresh_states(session: Session, doc: dict) -> dict:
     """A copy of the document with each story's `state` block re-read from the database.
 
     A story's section label is also re-read from the profile, so a section renamed after the
-    brief was composed reads the same on Today as everywhere else.
+    brief was composed reads the same on Today as everywhere else. This covers the stories under
+    `more` as well as the picked ones.
     """
-    lead_ids = [st["item_id"] for sec in doc.get("sections", []) for st in sec.get("stories", [])]
+    lead_ids = [st["item_id"] for sec in doc.get("sections", []) for key in _STORY_LISTS
+                for st in sec.get(key, [])]
     states = {}
     if lead_ids:
         states = {
@@ -195,10 +201,12 @@ def refresh_states(session: Session, doc: dict) -> dict:
               for s in load_profile(session).get("sections", [])}
     sections = []
     for sec in doc.get("sections", []):
-        stories = [{**st, "state": _state_dict(states.get(st["item_id"])),
-                    "section_label": labels.get(st.get("section"), st.get("section_label", ""))}
-                   for st in sec.get("stories", [])]
-        sections.append({**sec, "stories": stories})
+        # A stored document from before `more` existed has no such key; it stays without one.
+        refreshed = {key: [{**st, "state": _state_dict(states.get(st["item_id"])),
+                            "section_label": labels.get(st.get("section"), st.get("section_label", ""))}
+                           for st in sec[key]]
+                     for key in _STORY_LISTS if key in sec}
+        sections.append({**sec, **refreshed})
     return {**doc, "sections": sections}
 
 
@@ -221,9 +229,9 @@ def degraded_notice(unjudged: int) -> str | None:
     """The sentence shown above a brief that is incomplete, or None when nothing is missing."""
     if unjudged <= 0:
         return None
-    noun = "item has" if unjudged == 1 else "items have"
-    return (f"{unjudged} {noun} not been judged yet, usually because the AI service was "
-            "unavailable; this brief is incomplete.")
+    noun = "item is" if unjudged == 1 else "items are"
+    return (f"{unjudged} collected {noun} still waiting to be judged, so a story may be "
+            "missing from today's selection.")
 
 
 def build_document(
@@ -241,7 +249,8 @@ def build_document(
 
     `unjudged` holds the ids of items in the brief's window that have no usable judgement.
     They are reported as `unjudged` with `degraded` and a `notice`, and never counted in
-    `filtered_out` (which means judged and left out).
+    `filtered_out` (which means judged and left out). The unpicked stories under `more` do not
+    count as shown, so `filtered_out` still counts them and a later brief may pick them.
     """
     sections = [
         {
@@ -249,6 +258,9 @@ def build_document(
             "title": p.title,
             "note": p.note,
             "stories": [story_dict(s, items) for s in p.stories],
+            # Judged and not picked: the reader pages through these; they are never "shown".
+            "more": [story_dict(s, items) for s in p.more],
+            "pool": p.pool,
         }
         for p in plans
     ]

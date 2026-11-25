@@ -149,6 +149,7 @@ def _candidate(item: Item, a: Assessment | None, mine: bool, watch_of: dict[int,
         watch=tuple(watch_of.get(item.id, ())),
         upvotes=upvotes.get(item.id, 0),
         url=item.url,
+        has_headline=bool(a and a.headline and a.headline.strip()),
     )
 
 

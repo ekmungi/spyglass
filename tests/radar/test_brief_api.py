@@ -168,3 +168,28 @@ def test_story_section_labels_follow_the_profile_after_a_rename(env) -> None:
         session.add(RadarDoc(key=PROFILE_KEY, body=dumps(renamed)))
         session.commit()
     assert labels() == {"Clinical AI"}
+
+
+def test_the_documents_carry_more_and_pool_and_refresh_them(env) -> None:
+    client, engine = env
+    ids = [add_item(engine, f"Story {i}", score=60 - i, tier="skim", headline=f"Headline {i}",
+                    age_hours=2 + i * 0.01) for i in range(8)]
+    compose_brief(engine, SETTINGS, None, "2026-11-12", llm=lambda m, s: {"opening": "x"}, now=NOW)
+    with Session(engine) as session:
+        session.add(ItemState(item_id=ids[6], saved_at=datetime.now(UTC)))
+        session.commit()
+    for body in (client.get("/briefs/2026-11-12").json(), client.get("/today").json()["brief"]):
+        section = body["sections"][0]
+        assert section["pool"] == 8 and [s["item_id"] for s in section["more"]] == ids[6:]
+        assert section["more"][0]["state"]["saved"] is True
+
+
+def test_a_stored_document_without_more_is_served(env) -> None:
+    client, engine = env
+    with Session(engine) as session:
+        session.add(RadarBrief(day="2026-11-03", doc=json.dumps({
+            "day": "2026-11-03", "generated_at": "2026-11-03T06:00:00",
+            "sections": [{"key": "top", "title": "Top stories", "note": None, "stories": []}]})))
+        session.commit()
+    resp = client.get("/briefs/2026-11-03")
+    assert resp.status_code == 200 and "more" not in resp.json()["sections"][0]

@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 
 from spyglass_service.models import Feed, Item
 from spyglass_service.radar.brief.compose import briefed_item_ids, brief_tz, compose_brief, local_today
-from spyglass_service.radar.brief.document import fallback_opening, refresh_states
+from spyglass_service.radar.brief.document import fallback_opening, refresh_states, story_item_ids
 from spyglass_service.radar.models import ItemState, RadarBrief, loads
 
 from .test_brief_seed import NOW, add_item, make_engine, make_index
@@ -337,4 +337,75 @@ def test_the_opening_prompt_gets_both_texts(tmp_path) -> None:
     assert prompt.count("What it says:") == 1 and prompt.count("Why it matters:") == 2
     stories = {s["headline"] or s["id"]: s for sec in doc["sections"] for s in sec["stories"]}
     assert {s["what"] for s in stories.values()} == {"The lab released a model with 12 languages.", ""}
+    engine.dispose()
+
+
+def _skim_day(engine, count: int) -> list[int]:
+    """`count` judged skim items with headlines, best first; returns their ids in that order."""
+    return [add_item(engine, f"Story {i}", score=60 - i, tier="skim", headline=f"Headline {i}",
+                     what=f"What {i}", age_hours=2 + i * 0.01)
+            for i in range(count)]
+
+
+def test_the_brief_keeps_the_unpicked_stories_under_each_section(tmp_path) -> None:
+    engine = make_engine(tmp_path)
+    ids = _skim_day(engine, 9)
+    doc = compose_brief(engine, SETTINGS, None, llm=lambda m, s: {"opening": "x"}, now=NOW)
+    skim = doc["sections"][0]
+    assert skim["key"] == "skim" and skim["pool"] == 9
+    assert [s["item_id"] for s in skim["stories"]] == ids[:6]
+    assert [s["item_id"] for s in skim["more"]] == ids[6:]
+    assert skim["more"][0]["what"] == "What 6"  # the same shape as a picked story
+    engine.dispose()
+
+
+def test_unpicked_stories_do_not_count_as_shown(tmp_path) -> None:
+    engine = make_engine(tmp_path)
+    ids = _skim_day(engine, 9)
+    doc = compose_brief(engine, SETTINGS, None, llm=lambda m, s: {"opening": "x"}, now=NOW)
+    assert story_item_ids(doc) == set(ids[:6])
+    assert doc["filtered_out"] == 3  # the three unpicked ones are still counted as left out
+    with Session(engine) as session:
+        assert briefed_item_ids(session, "2026-11-13") == set(ids[:6])
+    engine.dispose()
+
+
+def test_refresh_states_covers_more(tmp_path) -> None:
+    engine = make_engine(tmp_path)
+    ids = _skim_day(engine, 8)
+    doc = compose_brief(engine, SETTINGS, None, llm=lambda m, s: {"opening": "x"}, now=NOW)
+    doc["sections"][0]["more"][0]["section_label"] = "A stale label"
+    assert doc["sections"][0]["more"][0]["state"]["saved"] is False
+    with Session(engine) as session:
+        session.add(ItemState(item_id=ids[6], saved_at=NOW))
+        session.commit()
+        fresh = refresh_states(session, doc)
+    more = fresh["sections"][0]["more"]
+    assert more[0]["state"]["saved"] is True and more[1]["state"]["saved"] is False
+    assert more[0]["section_label"] != "A stale label"
+    assert doc["sections"][0]["more"][0]["state"]["saved"] is False  # input is not mutated
+    engine.dispose()
+
+
+def test_a_stored_document_without_more_still_loads(tmp_path) -> None:
+    engine = make_engine(tmp_path)
+    item_id = add_item(engine, "News", score=85)
+    old = {"day": "2026-11-01", "sections": [{"key": "top", "title": "Top stories", "note": None, "stories": [
+        {"id": f"s-{item_id}", "item_id": item_id, "section": "health", "section_label": "x"}]}]}
+    with Session(engine) as session:
+        fresh = refresh_states(session, old)
+    assert fresh["sections"][0]["stories"][0]["state"]["saved"] is False
+    assert "more" not in fresh["sections"][0]
+    assert story_item_ids(old) == {item_id}
+    engine.dispose()
+
+
+def test_an_item_that_was_only_triaged_is_not_offered_among_the_unpicked(tmp_path) -> None:
+    engine = make_engine(tmp_path)
+    ids = _skim_day(engine, 8)
+    triaged = add_item(engine, "Only triaged", score=40, tier="skim", headline=None, age_hours=2.5)
+    doc = compose_brief(engine, SETTINGS, None, llm=lambda m, s: {"opening": "x"}, now=NOW)
+    skim = doc["sections"][0]
+    assert [s["item_id"] for s in skim["more"]] == ids[6:] and skim["pool"] == 8
+    assert triaged not in {s["item_id"] for s in skim["more"]}
     engine.dispose()

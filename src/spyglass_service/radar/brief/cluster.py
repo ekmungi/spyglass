@@ -56,6 +56,9 @@ class Candidate:
     upvotes: int = 0
     # The item's address; two items with the same normalised address are one source.
     url: str = ""
+    # False for an item that was only triaged: it has no rewritten headline yet, so the brief
+    # does not offer it among the unpicked stories.
+    has_headline: bool = True
 
 
 def source_key(c: Candidate) -> str:
