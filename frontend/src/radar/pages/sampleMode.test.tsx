@@ -58,6 +58,9 @@ describe('Sources page in sample mode', () => {
     timing.pollMs = 300
     try {
       render(<SourcesPage />)
+      // The sample's failing search marks the Searches tab, as a failing feed marks the Feeds tab.
+      const searches = await screen.findByRole('tab', { name: /^Searches/ }, { timeout: 4000 })
+      expect(within(searches).getByRole('img', { name: '1 search is failing' })).toBeInTheDocument()
       // The feeds have their own tab: the sample's failing feed is listed at once, the working ones behind a button.
       fireEvent.click(await screen.findByRole('tab', { name: /^Feeds/ }, { timeout: 4000 }))
       expect(await screen.findByText('Policy & Compute')).toBeInTheDocument()

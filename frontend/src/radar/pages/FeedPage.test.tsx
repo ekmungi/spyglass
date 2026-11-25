@@ -87,6 +87,20 @@ describe('FeedPage toolbar', () => {
     }
   })
 
+  it('shows a filter that is on: the Filters button carries the accent and a visible count, and neither without one', async () => {
+    window.history.replaceState(null, '', '/#/feed?filed=true')
+    const first = render(<FeedPage params={{ filed: 'true' }} />)
+    const on = await screen.findByRole('button', { name: 'Filters (1)' })
+    expect(on).toHaveClass('is-active')
+    expect(on.textContent).toBe('1')
+    first.unmount()
+    window.history.replaceState(null, '', '/#/feed')
+    render(<FeedPage params={{}} />)
+    const off = await screen.findByRole('button', { name: 'Filters' })
+    expect(off).not.toHaveClass('is-active')
+    expect(off.textContent).toBe('')
+  })
+
   it('has a views strip with Everything, Missed, Saved and From you, and To file only where filing is set up', async () => {
     render(<FeedPage params={{}} />)
     const views = await screen.findByRole('tablist', { name: 'Views' })

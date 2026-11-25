@@ -141,10 +141,38 @@ describe('SourcesPage', () => {
     await openTab('Feeds')
     const failing = screen.getByText('Policy Notes').closest('li') as HTMLElement
     expect(within(failing).getByRole('img', { name: 'This feed is failing' })).toBeInTheDocument()
+    // The row says why in a sentence, never the raw error.
+    expect(within(failing).getByText('The address no longer exists; the site answered "not found".')).toBeInTheDocument()
+    expect(within(failing).queryByText(/HTTPError/)).not.toBeInTheDocument()
     const off = screen.getByText('Old Blog').closest('li') as HTMLElement
     expect(within(off).queryByRole('img', { name: 'This feed is failing' })).not.toBeInTheDocument()
     expect(within(off).getByText('Switched off')).toBeInTheDocument()
     expect(screen.getAllByRole('img', { name: 'This feed is failing' })).toHaveLength(1)
+  })
+
+  it('puts an alert on the Searches tab for a failing search and on the FDA decisions tab for a failing FDA check', async () => {
+    api.loadSources.mockResolvedValue({
+      ...view(),
+      collectors: [...view().collectors, collector({ key: 'fda', label: 'FDA', status: 'error', detail: 'ReadTimeout: timed out' })],
+    })
+    render(<SourcesPage />)
+    const searches = await screen.findByRole('tab', { name: /^Searches/ })
+    expect(within(searches).getByRole('img', { name: '1 search is failing' })).toBeInTheDocument()
+    expect(within(screen.getByRole('tab', { name: /^FDA decisions/ })).getByRole('img', { name: 'The FDA check is failing' })).toBeInTheDocument()
+  })
+
+  it('puts no alert on a tab whose source is only not set up', async () => {
+    api.loadSources.mockResolvedValue({
+      ...view(),
+      collectors: [
+        collector({ key: 'news', label: 'News search' }),
+        collector({ key: 'hn', label: 'Hacker News', status: 'skipped', detail: 'not configured: switched off' }),
+        collector({ key: 'fda', label: 'FDA', status: 'skipped', detail: 'not configured' }),
+      ],
+    })
+    render(<SourcesPage />)
+    expect(within(await screen.findByRole('tab', { name: /^Searches/ })).queryByRole('img')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('tab', { name: /^FDA decisions/ })).queryByRole('img')).not.toBeInTheDocument()
   })
 
   it('says how many feeds fail when there are several, and has no alert when none does', async () => {

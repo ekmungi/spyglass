@@ -6,6 +6,7 @@ import { useState, type ReactNode } from 'react'
 import { Button, Skeleton, Tabs, type TabItem } from '../ui'
 import { loadSources, loadStatus, type FeedRow, type SourcesView, type StatusView } from './sources/api'
 import { CollectBar } from './sources/CollectBar'
+import { failingSearchesAlert, fdaAlert } from './sources/collectorHealth'
 import { FdaSection } from './sources/FdaSection'
 import { failingAlert } from './sources/feedHealth'
 import { FeedsSection } from './sources/FeedsSection'
@@ -38,8 +39,8 @@ export default function SourcesPage() {
     ? [
         { key: 'from-you', label: 'From you' },
         { key: 'feeds', label: 'Feeds', alert: failingAlert(view.feeds) },
-        ...(hasSignals ? [{ key: 'signals', label: 'Searches' }] : []),
-        { key: 'fda', label: 'FDA decisions' },
+        ...(hasSignals ? [{ key: 'signals', label: 'Searches', alert: failingSearchesAlert(view.collectors) }] : []),
+        { key: 'fda', label: 'FDA decisions', alert: fdaAlert(view.collectors) },
       ]
     : []
   const tab = tabs.some((entry) => entry.key === selected) ? selected : 'from-you'

@@ -173,7 +173,8 @@ export const SOURCES: SourcesResponse = {
     { key: 'rss', label: 'RSS feeds', status: 'ok', detail: '34 new of 61 fetched', last_run: hoursAgo(1), new_items: 34 },
     { key: 'news', label: 'News search for watched names', status: 'ok', detail: '11 new', last_run: hoursAgo(2), new_items: 11 },
     { key: 'hn', label: 'Hacker News front page', status: 'ok', detail: '9 new', last_run: hoursAgo(1), new_items: 9 },
-    { key: 'hf_papers', label: 'Community paper picks', status: 'ok', detail: '14 new', last_run: hoursAgo(5), new_items: 14 },
+    // One failing search, so the sample shows the alert mark on the Searches tab and the reason on its row.
+    { key: 'hf_papers', label: 'Community paper picks', status: 'error', detail: 'ReadTimeout: the paper site timed out', last_run: hoursAgo(5), new_items: null },
     { key: 'gmail', label: 'Email newsletters and links', status: 'skipped', detail: 'not configured: Gmail address or app password is not set', last_run: hoursAgo(1), new_items: null },
     { key: 'capture', label: 'Links you send in', status: 'ok', detail: '2 new', last_run: hoursAgo(3), new_items: 2 },
     { key: 'fda', label: 'FDA device decisions', status: 'ok', detail: '3 new of 8 found', last_run: hoursAgo(4), new_items: 3 },

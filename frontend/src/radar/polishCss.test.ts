@@ -156,6 +156,15 @@ describe('thumbs', () => {
   })
 })
 
+describe('the Filters button of the Feed', () => {
+  it('turns to the accent colour while a filter is on, with room for the count beside the icon', () => {
+    const active = ruleFor(feedCss, '.r-feed-filter.is-active')
+    expect(valueOf(active, 'color')).toBe('var(--accent)')
+    expect(valueOf(active, 'width')).toBe('auto')
+    expect(valueOf(ruleFor(feedCss, '.r-feed-filter__count'), 'font-size')).toBe('var(--text-xs)')
+  })
+})
+
 describe('section headings', () => {
   it('sets the title in normal letters at the heading size, semi-bold', () => {
     const title = ruleFor(primitivesCss, '.r-section-heading__title')

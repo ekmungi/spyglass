@@ -60,10 +60,27 @@ export const FeedToolbar = forwardRef<HTMLDivElement, FeedToolbarProps>(function
             focusComposer('feed')
           }}
         />
+        {/* A filter that is on shortens the list, so the button shows it: the accent and the count beside the icon. */}
         <Menu
           label="More filters"
           items={filterItems}
-          trigger={<IconButton label={filterCount ? `Filters (${filterCount})` : 'Filters'} icon={<IconFilter size={18} />} tooltipSide="bottom" />}
+          trigger={
+            <IconButton
+              label={filterCount ? `Filters (${filterCount})` : 'Filters'}
+              className={filterCount ? 'r-feed-filter is-active' : 'r-feed-filter'}
+              icon={
+                <>
+                  <IconFilter size={18} />
+                  {filterCount > 0 && (
+                    <span className="r-feed-filter__count" aria-hidden="true">
+                      {filterCount}
+                    </span>
+                  )}
+                </>
+              }
+              tooltipSide="bottom"
+            />
+          }
         />
       </div>
       <Tabs label="Views" tabs={views} value={view} onChange={(key) => onView(key as FeedView)} />
