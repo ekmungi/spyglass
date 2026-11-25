@@ -54,8 +54,9 @@ button {
   padding: var(--space-12) var(--space-8) var(--space-16);
 }
 
+/* Pages that hold one part at a time under a strip of tabs (Settings, Profile, Sources), and tables. */
 .r-page--wide {
-  max-width: 960px;
+  max-width: 920px;
 }
 
 .r-page-title {

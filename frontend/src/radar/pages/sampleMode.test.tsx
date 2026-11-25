@@ -1,9 +1,11 @@
 // The secondary pages against the sample-mode fixtures (the same shapes the real service sends):
-// they must load, and accepting or dismissing a watch suggestion must change the list.
+// they must load, and accepting or dismissing a watch suggestion must change the list. The sample
+// data must also hold every piece the page design shows: "what it says" texts, unpicked stories and votes.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { setFetchForTesting } from '../api/transport'
 import { parseProfileReply } from '../api/client'
+import type { ItemState, RadarItem, TodayResponse } from '../api/types'
 import { clearResourceCache } from '../hooks/useResource'
 import { mockFetch, resetMockState } from '../mock'
 import ProfilePage from './ProfilePage'
@@ -84,6 +86,52 @@ describe('Settings and Find papers in sample mode', () => {
     render(<PapersPage />)
     expect(await screen.findByRole('group', { name: 'Topics from your profile' }, { timeout: 4000 })).toBeInTheDocument()
   })
+})
+
+describe('Sample data for the page design', () => {
+  /** Call the sample service like the client does and read the JSON reply. */
+  async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const response = await mockFetch(`/api/radar${path}`, init)
+    expect(response.ok).toBe(true)
+    return (await response.json()) as T
+  }
+
+  it('gives every item a "what it says" text but one, so both looks of a row can be seen', async () => {
+    const { items } = await call<{ items: RadarItem[] }>('/feed?tier=all&limit=200')
+    const without = items.filter((item) => !item.what)
+    expect(without).toHaveLength(1)
+    expect(items.length).toBeGreaterThan(1)
+  }, 10000)
+
+  it('gives the top and papers sections of the brief unpicked stories and the number judged', async () => {
+    const { brief } = await call<TodayResponse>('/today')
+    const section = (key: string) => brief?.sections.find((entry) => entry.key === key)
+    for (const key of ['top', 'papers']) {
+      const found = section(key)
+      expect(found?.more?.length ?? 0).toBeGreaterThan(0)
+      expect(found?.pool ?? 0).toBeGreaterThanOrEqual((found?.stories.length ?? 0) + (found?.more?.length ?? 0))
+    }
+    // Enough stories for the top section to need a second page (five on its first page).
+    const top = section('top')
+    expect((top?.stories.length ?? 0) + (top?.more?.length ?? 0)).toBeGreaterThan(5)
+    // An unpicked story is never also a picked one.
+    const picked = new Set(brief?.sections.flatMap((entry) => entry.stories.map((story) => story.item_id)))
+    for (const entry of brief?.sections ?? []) for (const story of entry.more ?? []) expect(picked.has(story.item_id)).toBe(false)
+    // Stories carry the item's "what it says" text.
+    expect(top?.stories[0].what).toBeTruthy()
+  }, 10000)
+
+  it('records a vote on an unpicked story and takes it back, through the sample vote route', async () => {
+    const { brief } = await call<TodayResponse>('/today')
+    const unpicked = brief?.sections.find((entry) => entry.key === 'top')?.more?.[0]
+    expect(unpicked).toBeDefined()
+    const id = unpicked?.item_id ?? 0
+    const vote = (value: string | null) => call<ItemState>(`/items/${id}/vote`, { method: 'POST', body: JSON.stringify({ vote: value }) })
+    expect((await vote('more')).vote).toBe('more')
+    const after = await call<TodayResponse>('/today')
+    expect(after.brief?.sections.find((entry) => entry.key === 'top')?.more?.[0].state.vote).toBe('more')
+    expect((await vote(null)).vote).toBeNull()
+  }, 10000)
 })
 
 describe('parseProfileReply', () => {

@@ -32,6 +32,7 @@
   --text-base: calc(15px * var(--type-scale, 1));   /* interface body */
   --text-read: calc(18.5px * var(--type-scale, 1)); /* reading text in the serif */
   --text-lede: calc(21px * var(--type-scale, 1));   /* the brief's opening, summary lead */
+  --text-heading: calc(17px * var(--type-scale, 1)); /* section headings and the Feed's day headings */
   --text-h3: calc(18px * var(--type-scale, 1));     /* compact row headline */
   --text-h2: calc(23px * var(--type-scale, 1));     /* top-story headline */
   --text-h1: calc(34px * var(--type-scale, 1));     /* reader title */

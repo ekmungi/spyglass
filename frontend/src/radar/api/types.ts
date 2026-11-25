@@ -73,6 +73,8 @@ export interface RadarItem {
   tier: Tier
   score: number | null
   why: string | null
+  /** "What it says": a plain account of the item, beside `why` ("why it matters"); absent on items judged before it existed. */
+  what?: string
   key_points: string[]
   entities: string[]
   signal: string | null
@@ -191,6 +193,8 @@ export interface Story {
   item_id: number
   headline: string
   why: string | null
+  /** "What it says" of the lead item; absent when that item has none. */
+  what?: string
   section: SectionKey
   section_label: string
   kind: ItemKind
@@ -204,6 +208,8 @@ export interface Story {
   state: ItemState
   /** Present on watch-list stories: the watched organisation(s) the story is about. */
   watch?: StoryWatch[]
+  /** The ids of every item the story groups, lead item included. */
+  member_ids?: number[]
 }
 
 export interface BriefSection {
@@ -211,6 +217,10 @@ export interface BriefSection {
   title: string
   note: string | null
   stories: Story[]
+  /** Unpicked stories: judged for this section that day and left out, best first. Absent on older briefs. */
+  more?: Story[]
+  /** How many stories were judged for this section that day. */
+  pool?: number
 }
 
 export interface BriefDoc {

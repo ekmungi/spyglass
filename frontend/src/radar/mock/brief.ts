@@ -38,6 +38,7 @@ export function storyFor(item: RadarItem): Story {
     item_id: item.id,
     headline: item.headline,
     why: item.why,
+    ...(item.what ? { what: item.what } : {}),
     section: item.section,
     section_label: item.section_label,
     kind: item.kind,
@@ -53,27 +54,39 @@ export function storyFor(item: RadarItem): Story {
   }
 }
 
-const LAYOUT: { key: BriefSectionKey; title: string; note: string | null; ids: number[] }[] = [
-  { key: 'top', title: 'Top stories', note: '3 picked from 96', ids: [101, 104, 103] },
+// Each section's picked stories (`ids`) and, for today's brief, its unpicked ones (`more`: judged
+// for the section and left out, best first) with the number judged (`pool`). The top section holds
+// six stories, so it needs a second page; papers and Worth knowing show the ring of an unpicked story.
+const LAYOUT: { key: BriefSectionKey; title: string; note: string | null; ids: number[]; more?: number[]; pool?: number }[] = [
+  { key: 'top', title: 'Top stories', note: '3 picked from 96', ids: [101, 104, 103], more: [141, 142, 143], pool: 96 },
   { key: 'watch', title: 'On your watch list', note: null, ids: [102, 117] },
-  { key: 'notable', title: 'Worth knowing', note: null, ids: [140, 106, 105, 107, 108, 109, 112, 120] },
-  { key: 'papers', title: 'Papers', note: '4 of 31 new papers', ids: [113, 114, 115, 116] },
+  { key: 'notable', title: 'Worth knowing', note: null, ids: [140, 106, 105, 107, 108, 109, 112, 120], more: [110, 111], pool: 18 },
+  { key: 'papers', title: 'Papers', note: '4 of 31 new papers', ids: [113, 114, 115, 116], more: [144, 145], pool: 31 },
   { key: 'from_you', title: 'From you', note: null, ids: [131, 132] },
   { key: 'skim', title: 'Skim', note: null, ids: [119, 118, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 133, 139] },
 ]
 
-/** Build today's full brief from the current sample items (so read and saved state carry over). */
+/** The stories for `ids`, skipping any id with no sample item. */
+function storiesFor(ids: number[], byId: Map<number, RadarItem>): Story[] {
+  return ids
+    .map((id) => byId.get(id))
+    .filter((item): item is RadarItem => Boolean(item))
+    .map(storyFor)
+}
+
+/**
+ * Build today's full brief from the current sample items (so read, saved and vote state carry over).
+ * An earlier day's brief (`short`) has two stories per section and no unpicked stories, like a brief
+ * composed before they were stored.
+ */
 export function buildBrief(items: RadarItem[], day: string, short = false): BriefDoc {
   const byId = new Map(items.map((item) => [item.id, item]))
   const sections: BriefSection[] = LAYOUT.map((section) => ({
     key: section.key,
     title: section.title,
     note: section.note,
-    stories: section.ids
-      .slice(0, short ? 2 : undefined)
-      .map((id) => byId.get(id))
-      .filter((item): item is RadarItem => Boolean(item))
-      .map(storyFor),
+    stories: storiesFor(section.ids.slice(0, short ? 2 : undefined), byId),
+    ...(!short && section.more ? { more: storiesFor(section.more, byId), pool: section.pool } : {}),
   }))
     // Earlier days drop two sections, which also exercises "empty sections are omitted".
     .filter((section) => !short || (section.key !== 'watch' && section.key !== 'from_you'))

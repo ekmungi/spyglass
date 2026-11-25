@@ -1,4 +1,4 @@
-// SectionHeading: the small-caps heading that opens each section, set over a hairline.
+// SectionHeading: the heading that opens each section, set on a bar with a subtle tint.
 import type { ReactNode } from 'react'
 
 export interface SectionHeadingProps {
@@ -8,7 +8,7 @@ export interface SectionHeadingProps {
   as?: 'h2' | 'h3'
 }
 
-/** A small-caps section title with an optional quiet note on the right ("3 picked from 96"). */
+/** A section title with an optional quiet note on the right ("3 picked from 96"). */
 export function SectionHeading({ children, note, id, as = 'h2' }: SectionHeadingProps) {
   const Tag = as
   return (

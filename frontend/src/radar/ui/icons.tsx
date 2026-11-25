@@ -45,11 +45,17 @@ export const IconFiled =(props: IconProps) => <Icon glyph={ICON_GLYPHS.filed} {.
 export const IconFollow = (props: IconProps) => <Icon glyph={ICON_GLYPHS.follow} {...props} />
 export const IconOpenOriginal = (props: IconProps) => <Icon glyph={ICON_GLYPHS.openOriginal} {...props} />
 export const IconExternal = (props: IconProps) => <Icon glyph={ICON_GLYPHS.external} {...props} />
+export const IconMoreLikeThis = (props: IconProps) => <Icon glyph={ICON_GLYPHS.moreLikeThis} {...props} />
+export const IconLessLikeThis = (props: IconProps) => <Icon glyph={ICON_GLYPHS.lessLikeThis} {...props} />
+export const IconCopyLink = (props: IconProps) => <Icon glyph={ICON_GLYPHS.copyLink} {...props} />
+export const IconOtherSources = (props: IconProps) => <Icon glyph={ICON_GLYPHS.otherSources} {...props} />
 export const IconMore = (props: IconProps) => <Icon glyph={ICON_GLYPHS.more} {...props} />
 export const IconClose = (props: IconProps) => <Icon glyph={ICON_GLYPHS.close} {...props} />
 export const IconClosePanel = (props: IconProps) => <Icon glyph={ICON_GLYPHS.closePanel} {...props} />
 export const IconBack = (props: IconProps) => <Icon glyph={ICON_GLYPHS.back} {...props} />
 export const IconExpand = (props: IconProps) => <Icon glyph={ICON_GLYPHS.expand} {...props} />
+export const IconPrevious = (props: IconProps) => <Icon glyph={ICON_GLYPHS.previous} {...props} />
+export const IconNext = (props: IconProps) => <Icon glyph={ICON_GLYPHS.next} {...props} />
 export const IconSelected = (props: IconProps) => <Icon glyph={ICON_GLYPHS.selected} {...props} />
 export const IconSearch = (props: IconProps) => <Icon glyph={ICON_GLYPHS.search} {...props} />
 export const IconFilter = (props: IconProps) => <Icon glyph={ICON_GLYPHS.filter} {...props} />
@@ -69,4 +75,5 @@ export const IconCode = (props: IconProps) => <Icon glyph={ICON_GLYPHS.code} {..
 export const IconRegulator = (props: IconProps) => <Icon glyph={ICON_GLYPHS.regulator} {...props} />
 export const IconFromYou = (props: IconProps) => <Icon glyph={ICON_GLYPHS.fromYou} {...props} />
 export const IconWarning = (props: IconProps) => <Icon glyph={ICON_GLYPHS.warning} {...props} />
+export const IconAlert = (props: IconProps) => <Icon glyph={ICON_GLYPHS.alert} {...props} />
 export const IconPartial = (props: IconProps) => <Icon glyph={ICON_GLYPHS.partial} {...props} />

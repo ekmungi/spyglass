@@ -154,7 +154,8 @@
   font-weight: 500;
   color: var(--accent);
 }
-/* Controls sit above the stretched link. */
+/* Controls sit above the stretched link. A pointed-at or focused tooltip rises further, above the
+   pinned bars, through the rule beside .r-tip in primitives.css, which outranks this one. */
 .r-story .r-iconbtn,
 .r-story .r-tip {
   position: relative;

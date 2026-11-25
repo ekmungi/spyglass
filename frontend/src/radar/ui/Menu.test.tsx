@@ -1,4 +1,5 @@
-// Tests for the Menu popover: it opens, and it is kept inside the window when it would run off an edge.
+// Tests for the Menu popover: it opens, it is kept inside the window when it would run off an edge,
+// and Escape closes it wherever the focus is.
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Menu } from './Menu'
@@ -34,5 +35,23 @@ describe('Menu', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: -30, right: 230, top: 0, bottom: 0, width: 260, height: 0, x: -30, y: 0, toJSON: () => ({}) })
     const list = renderMenu()
     expect(list.style.transform).toBe('translateX(38px)')
+  })
+
+  it('escape closes an open menu with the focus outside', () => {
+    render(
+      <>
+        <button type="button">Elsewhere</button>
+        <Menu label="Engines" items={[{ id: 'a', label: 'Claude Code', onSelect: () => undefined }]} trigger={<button type="button">Engine</button>} />
+      </>,
+    )
+    const trigger = screen.getByRole('button', { name: 'Engine' })
+    fireEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    // The focus leaves the menu without a mousedown outside it (for example with Tab), and then the
+    // reader presses Escape.
+    const elsewhere = screen.getByRole('button', { name: 'Elsewhere' })
+    elsewhere.focus()
+    fireEvent.keyDown(elsewhere, { key: 'Escape' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
   })
 })

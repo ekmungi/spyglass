@@ -10,6 +10,9 @@ import {
   BookmarkCheck,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
   CircleDashed,
   CircleHelp,
   CodeXml,
@@ -24,6 +27,8 @@ import {
   Hourglass,
   Inbox,
   Landmark,
+  Layers,
+  Link,
   ListFilter,
   MessageSquare,
   Minus,
@@ -42,6 +47,8 @@ import {
   Square,
   SquarePlay,
   Sun,
+  ThumbsDown,
+  ThumbsUp,
   TriangleAlert,
   Undo2,
   UserRound,
@@ -72,12 +79,18 @@ export const ICON_GLYPHS = {
   follow: Radar, // keep scanning for more like this
   openOriginal: ExternalLink, // open the original page in the browser
   external: ArrowUpRight, // a plain link that leaves Spyglass
+  moreLikeThis: ThumbsUp, // the vote "More like this"
+  lessLikeThis: ThumbsDown, // the vote "Less like this"
+  copyLink: Link, // copy the item's address
+  otherSources: Layers, // the other outlets that reported the same story
   // Controls.
   more: Ellipsis,
   close: X, // close a dialog, dismiss a chip
   closePanel: PanelRightClose, // fold the assistant panel away
   back: ArrowLeft,
   expand: ChevronDown, // disclosure: open a menu or a collapsed row
+  previous: ChevronLeft, // the previous page of a list (a section's stories)
+  next: ChevronRight, // the next page of a list
   selected: Check, // the chosen entry in a menu
   search: Search,
   filter: ListFilter,
@@ -97,6 +110,7 @@ export const ICON_GLYPHS = {
   regulator: Landmark,
   fromYou: Inbox, // something you sent in yourself
   warning: TriangleAlert,
+  alert: CircleAlert, // something is failing (a feed): drawn red, with its text as the label
   partial: CircleDashed, // only part of the text could be read
 } as const satisfies Record<string, LucideIcon>
 

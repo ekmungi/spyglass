@@ -70,33 +70,43 @@
  * filter bar (--feed-bar-h is the bar's measured height); the next day's heading takes its place
  * when it arrives, because later headings paint over earlier ones at the same offset.
  */
+/* The day heading is the section heading's tinted bar (primitives.css) across the full width: 41
+   pixels of bar with 3 pixels of page above and below it, the height of a section heading on Today. */
 .r-page--feed {
-  --feed-day-h: 36px;
+  --feed-day-h: 47px;
 }
 .r-feed-day {
   position: sticky;
   top: var(--feed-bar-h, 0px);
   z-index: 5;
   display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
+  align-items: stretch;
   box-sizing: border-box;
   height: var(--feed-day-h);
-  padding-top: var(--space-3);
+  padding: 3px 0;
   background: var(--paper);
   /* Cover the side bleed a selected row has, so a row passing under the heading never peeks out. */
   box-shadow: -14px 0 0 var(--paper), 14px 0 0 var(--paper);
 }
 .r-feed-day__title {
+  flex: 1;
+  display: flex;
+  align-items: center;
   margin: 0;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 6%, var(--paper));
   font-family: var(--font-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-heading);
   font-weight: 600;
-  font-variant-caps: all-small-caps;
-  letter-spacing: 0.07em;
-  color: var(--ink-2);
+  color: var(--ink);
 }
+/* The count sits inside the bar at its right end, where a section heading keeps its note. */
 .r-feed-day__count {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  transform: translateY(-50%);
   font-size: var(--text-xs);
   color: var(--muted);
 }
@@ -171,6 +181,8 @@
   font-size: var(--text-xs);
   color: var(--muted);
 }
+/* Controls sit above the stretched link. A pointed-at or focused tooltip rises further, above the
+   filter bar and the day heading, through the rule beside .r-tip in primitives.css. */
 .r-feedrow .r-iconbtn,
 .r-feedrow .r-tip {
   position: relative;

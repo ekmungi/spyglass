@@ -61,10 +61,19 @@ export function Menu({ label, trigger, items, align = 'end' }: MenuProps) {
     const onDown = (event: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) close()
     }
+    // Escape closes the menu wherever the focus is. With the focus inside, the root's own key
+    // handler runs first, returns the focus to the trigger and stops the event before it gets here.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
     document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
     // Focus the first enabled item so the keyboard can take over at once.
     listRef.current?.querySelector<HTMLButtonElement>('button:not([aria-disabled="true"])')?.focus()
-    return () => document.removeEventListener('mousedown', onDown)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [open, close])
 
   const onKeyDown = (event: React.KeyboardEvent) => {

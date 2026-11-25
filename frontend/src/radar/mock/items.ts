@@ -1,4 +1,4 @@
-// Sample-mode feed: 40 invented items across every section, kind and tier. All company and
+// Sample-mode feed: 45 invented items across every section, kind and tier. All company and
 // publication names are fictional; the content is generic sample text.
 import type { ItemKind, RadarItem, Tier } from '../api/types'
 
@@ -106,7 +106,67 @@ const ROWS: Row[] = [
     'A short tour.', 38],
   ['Regulators propose guidance on change control for learning devices', 'Medtech Dispatch', 'health', 'regulatory', 'notable', 83,
     'Draft rules for updating cleared models without a full re-review; the comment period is open.', 26],
+  // Judged today but left out of the brief: the unpicked stories its sections page through.
+  ['Corvid Systems halves the price of its hosted models', 'Open Weights Weekly', 'models', 'release', 'top', 89,
+    'The cheaper tier puts document-scale processing within reach of small teams, which changes your pipeline cost plans.', 31],
+  ['Kestrel ships a sandbox that lets agents run code without network access', 'The Agent Notebook', 'agents', 'tool', 'top', 85,
+    'A safe default you could adopt for agents that run code on your own machine.', 33, '241 points on Hacker News'],
+  ['Detection gains from an endoscopy AI aid hold across six countries', 'Clinical AI Review', 'health', 'research', 'top', 84,
+    'Evidence that a detection aid keeps its benefit outside the sites that trained it, which reviewers ask about.', 35],
+  ['Few-shot adaptation of detection models to a new hospital’s images', 'arXiv', 'health', 'paper', 'notable', 72,
+    'A cheap way to adapt a detector to a new site, which matters when a device moves between hospitals.', 34, '27 community upvotes'],
+  ['Measuring how often language models invent citations in medical answers', 'arXiv', 'labs', 'paper', 'notable', 70,
+    'A benchmark you could use to check a model before trusting the references it gives.', 36, '64 community upvotes'],
 ]
+
+// "What it says" for each item, by id: a plain account of the item, shown beside `why` ("why it
+// matters"). Item 108 has none on purpose, so the older one-paragraph look can be seen too.
+const WHAT: Record<number, string> = {
+  101: 'Aster AI released Aster 4, which reads up to a million tokens in one request. Input costs drop by about a third against Aster 3, and the older model stays available for six months.',
+  102: 'Endovista received clearance for the second version of its polyp detector. It reports fewer false alarms per procedure in its validation study and will update installed systems remotely.',
+  103: 'Kestrel released the harness behind its coding agent as open source. Every tool call passes a permission check set per project, and plugins declare the permissions they need.',
+  104: 'Four hospital groups compared clinician time before and after a year of ambient note-taking. Documentation time fell in three of them, and one paused the rollout after a poor fit with its record system.',
+  105: 'Lumen Labs describes a method that checks each step of a model’s reasoning against the evidence it cites, and reports how often an unsupported step led to a wrong answer.',
+  106: 'Halcyon Surgical reported a trial in which its robot placed sutures on its own while a surgeon watched and could stop it. The surgeon stepped in on a small share of cases, mostly on curved tissue.',
+  107: 'Corvid Systems released an open-weight vision model trained on scanned documents. It reads forms, tables and handwriting, and runs on a single server inside a hospital network.',
+  109: 'Orrin Therapeutics says AI-designed molecules brought it to a preclinical candidate in fourteen months instead of the usual three years, and it published the cost of each stage.',
+  110: 'The essay argues that the price of compute will fall more slowly than many forecasts assume, because chip supply, power and the building of data centres all set limits.',
+  111: 'Northgate Logistics let an agent place routine reorders across its warehouses. Stock-outs fell by about a fifth in six months, and staff review every order above a set value.',
+  112: 'Meridian Imaging released a dataset of colonoscopy videos annotated by specialists, with patient consent for research. The licence allows benchmarking but not commercial training.',
+  113: 'The paper compares self-supervised pretraining recipes on surgical video across seven tasks, from phase recognition to tool detection. Pretraining on whole videos did best on most tasks.',
+  114: 'The paper shows how a detection model can report its own uncertainty at little extra cost, and tests those reports on clinical images collected after deployment.',
+  115: 'The authors train small models to plan tool use by copying the traces of a larger agent. The small models finish most of the same tasks at a fraction of the cost.',
+  116: 'The paper measures how medical foundation models improve with more paired image and text data, and finds that the gains flatten at a different amount of data for each type of image.',
+  117: 'Lucent Scope raised a growth round to expand production of its AI-guided endoscopes. It plans a European launch next year and is hiring a regulatory team in Germany.',
+  118: 'Tessellate launched a hosted directory of MCP servers, searchable by the kind of tool, with install steps for each.',
+  119: 'Aster AI rewrote the part of its usage policy on medical advice: decision support with a clinician in the loop is allowed, and diagnosis given straight to patients is not.',
+  120: 'A surgical robotics team walks through how it tests, approves and releases each software update for a system that keeps learning.',
+  121: 'Brightline Health started a pilot of AI triage in three emergency departments. No outcomes have been published yet.',
+  122: 'A short checklist of what to settle before launching a feature built on a language model, from failure modes to monitoring.',
+  123: 'A new open benchmark measures how often agents finish tasks that take several hours, and where they fail.',
+  124: 'Lumen Labs hired a former hospital chief information officer to lead its partnerships with health systems.',
+  125: 'A chip maker announced a low-power processor for running detection models inside medical devices.',
+  126: 'Corvid Systems described how it filters its training data, including how it removes personal information and duplicated pages.',
+  127: 'Larger companies bought three AI coding tools within a month; the essay asks what that means for the tools still independent.',
+  128: 'A group of hospital procurement teams published the questionnaire they will send to every vendor of AI products.',
+  129: 'Kestrel added voice commands to its terminal agent.',
+  130: 'A retailer describes how an agent drafts answers to supplier email and how staff approve them before they go out.',
+  131: 'Notes from a talk on post-market surveillance list the monitoring duties that apply once an AI-enabled device is on the market.',
+  132: 'A team describes shipping an internal agent to 400 staff: the rollout, the permissions, and the support it needed in the first month.',
+  133: 'A long interview on the economics of serving models, with a section on which companies have pricing power.',
+  134: 'A list of ten desk gadgets on sale this winter.',
+  135: 'A celebrity chef launched a recipe app that suggests meals through a chatbot.',
+  136: 'A list of the year’s best puzzle games.',
+  137: 'A chatbot that gives tips for fantasy sports leagues.',
+  138: 'Discounts on smart speakers ahead of the holidays.',
+  139: 'A short video tour of a new robotics research centre.',
+  140: 'Regulators published draft guidance on updating a cleared model without a full new review. The draft asks for a plan of the expected changes, and comments are open for ninety days.',
+  141: 'Corvid Systems cut the price of its hosted models by half and added a batch mode that answers within a day. The open-weight versions are unchanged.',
+  142: 'Kestrel released a sandbox that runs an agent’s code with no network access and a read-only view of the project. Changes go to a copy that the user reviews before they are applied.',
+  143: 'A study across six countries found that an AI detection aid raised the adenoma detection rate at every site. The size of the gain depended on how experienced the endoscopists were.',
+  144: 'The paper adapts a trained detection model to a new hospital’s images with a few dozen labelled examples, and compares the result with retraining from scratch.',
+  145: 'The authors asked several language models medical questions and checked every reference in the answers. A sizeable share of the references did not exist or did not support the claim.',
+}
 
 /** Build an ISO timestamp `hours` before now. */
 export function hoursAgo(hours: number): string {
@@ -118,7 +178,7 @@ function slug(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
 }
 
-/** Build the 40 sample RadarItems (ids 101–140), newest first by row order. */
+/** Build the 45 sample RadarItems (ids 101–145), newest first by row order. */
 export function buildItems(): RadarItem[] {
   return ROWS.map(([headline, origin, section, kind, tier, score, why, hours, signal, capturedVia], index) => {
     const id = 101 + index
@@ -137,6 +197,7 @@ export function buildItems(): RadarItem[] {
       tier,
       score,
       why,
+      ...(WHAT[id] ? { what: WHAT[id] } : {}),
       key_points: [],
       entities: [],
       signal: signal ?? null,

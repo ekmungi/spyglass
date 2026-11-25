@@ -99,7 +99,8 @@
   padding: 8px var(--space-3);
   border: 1px solid var(--rule-strong);
   border-radius: var(--radius-md);
-  background: var(--paper);
+  /* Every text box, text area and menu has one shade, slightly off the page colour. */
+  background: color-mix(in srgb, var(--ink) 6%, var(--paper));
   color: var(--ink);
   font: inherit;
   font-size: var(--text-base);

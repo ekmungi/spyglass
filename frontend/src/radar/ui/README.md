@@ -50,13 +50,14 @@ Theme: `<html data-theme="light|dark">` forces a theme; no attribute follows the
 | `Pill` | `<Pill tone="accent">Top</Pill>`; a small static label; tones `neutral`, `accent`, `muted`. |
 | `Rule` | `<Rule spacing="lg" />`; a hairline `<hr>`; `strong` for a darker line. |
 | `Skeleton` | `<Skeleton lines={3} />` or `<Skeleton width="40%" height={28} />`; loading placeholder. |
-| `Tooltip` | `<Tooltip label="Save for later"><button>…</button></Tooltip>`; shows on hover and focus. |
-| `Menu` | `<Menu label="More actions" trigger={<IconButton … />} items={[{ id: 'less', label: 'Less like this', onSelect }]} />`; keyboard navigable; items may be `disabled`, `checked`, or carry a `hint`. |
+| `Tooltip` | `<Tooltip label="Save for later"><button>…</button></Tooltip>`; shows on hover and focus, above the pinned bars. |
+| `Menu` | `<Menu label="More actions" trigger={<IconButton … />} items={[{ id: 'less', label: 'Less like this', onSelect }]} />`; keyboard navigable; Escape closes it wherever the focus is; items may be `disabled`, `checked`, or carry a `hint`. |
+| `Tabs` | `<Tabs label="Views" tabs={[{ key: 'missed', label: 'Missed', count: 12 }]} value={v} onChange={setV} />`; a strip of text tabs that never wraps and scrolls sideways; the arrow keys move the selection; a tab may carry `count` and `alert` (a red mark read out as its text); `quiet` is the lighter second strip. |
 | `Select` | `<Select label="Kind" value={v} onChange={setV} options={[{ value: '', label: 'All kinds' }]} />`; styled native select; supports `groups`; `hideLabel` keeps the label for screen readers only. |
 | `Dialog` | `<Dialog open={open} onClose={close} title="Add a link" footer={<Button …/>}>…</Dialog>`; modal, Esc closes, focus returns to the opener. |
 | `Toast` | `toast('Saved for later')` or `toast('Could not save', { tone: 'error', action: { label: 'Retry', onClick } })`; `<ToastViewport />` is mounted once by the app shell. |
 | `EmptyState` | `<EmptyState title="No sources yet" body="…" action={<Button …/>} />`; every empty screen gets one, and it says what to do next. |
-| `SectionHeading` | `<SectionHeading note="3 picked from 96">Top stories</SectionHeading>`; small-caps heading over a hairline; `as="h3"` for nested. |
+| `SectionHeading` | `<SectionHeading note="3 picked from 96">Top stories</SectionHeading>`; a semi-bold heading on a tinted bar; `as="h3"` for nested. |
 
 ## Motion
 
@@ -102,11 +103,15 @@ default, 18 in bars and the rail, 20 for emphasis. Icons take `currentColor`. Ne
 | Follow more like this | `IconFollow` | `Radar` |
 | Open the original | `IconOpenOriginal` | `ExternalLink` |
 | A link that leaves Spyglass | `IconExternal` | `ArrowUpRight` |
+| More like this / less like this | `IconMoreLikeThis` / `IconLessLikeThis` | `ThumbsUp` / `ThumbsDown` |
+| Copy the link | `IconCopyLink` | `Link` |
+| The other sources of a story | `IconOtherSources` | `Layers` |
 | More actions | `IconMore` | `Ellipsis` |
 | Close, dismiss | `IconClose` | `X` |
 | Fold the assistant away | `IconClosePanel` | `PanelRightClose` |
 | Back | `IconBack` | `ArrowLeft` |
 | Open a menu or row | `IconExpand` | `ChevronDown` |
+| Previous / next page of a list | `IconPrevious` / `IconNext` | `ChevronLeft` / `ChevronRight` |
 | Chosen menu entry | `IconSelected` | `Check` |
 | Search / filter | `IconSearch` / `IconFilter` | `Search` / `ListFilter` |
 | Add | `IconAdd` | `Plus` |
@@ -118,6 +123,7 @@ default, 18 in bars and the rail, 20 for emphasis. Icons take `currentColor`. Ne
 | Paper, video, code, regulator | `IconPaper`, `IconVideo`, `IconCode`, `IconRegulator` | `FileText`, `SquarePlay`, `CodeXml`, `Landmark` |
 | From you | `IconFromYou` | `Inbox` |
 | Warning / partial text | `IconWarning` / `IconPartial` | `TriangleAlert` / `CircleDashed` |
+| Something is failing (red, labelled) | `IconAlert` | `CircleAlert` |
 
 Rules:
 

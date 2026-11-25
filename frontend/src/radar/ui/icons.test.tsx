@@ -4,7 +4,20 @@ import { render, screen } from '@testing-library/react'
 import { Bookmark } from 'lucide-react'
 import { describe, expect, it } from 'vitest'
 import { ICON_GLYPHS, ICON_STROKE } from './iconGlyphs'
-import { Icon, IconFiled, IconFileInVault, IconSaveForLater, IconToday } from './icons'
+import {
+  Icon,
+  IconAlert,
+  IconCopyLink,
+  IconFiled,
+  IconFileInVault,
+  IconLessLikeThis,
+  IconMoreLikeThis,
+  IconNext,
+  IconOtherSources,
+  IconPrevious,
+  IconSaveForLater,
+  IconToday,
+} from './icons'
 
 function svgOf(container: HTMLElement): SVGSVGElement {
   const svg = container.querySelector('svg')
@@ -48,6 +61,19 @@ describe('icon vocabulary', () => {
   it('gives every meaning its own glyph', () => {
     const glyphs = Object.values(ICON_GLYPHS)
     expect(new Set(glyphs).size).toBe(glyphs.length)
+  })
+
+  it('has the thumbs, the link, the alert mark, paging arrows and the other sources', () => {
+    const drawn = [
+      [IconMoreLikeThis, 'lucide-thumbs-up'],
+      [IconLessLikeThis, 'lucide-thumbs-down'],
+      [IconCopyLink, 'lucide-link'],
+      [IconAlert, 'lucide-circle-alert'],
+      [IconPrevious, 'lucide-chevron-left'],
+      [IconNext, 'lucide-chevron-right'],
+      [IconOtherSources, 'lucide-layers'],
+    ] as const
+    for (const [Component, glyph] of drawn) expect(svgOf(render(<Component />).container)).toHaveClass(glyph)
   })
 
   it('draws filing into the vault differently from saving for later', () => {

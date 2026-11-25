@@ -58,7 +58,8 @@ describe('RadarApp', () => {
     render(<RadarApp />)
     await screen.findByText('Top stories', {}, { timeout: 4000 })
     act(() => navigate({ name: 'feed', params: {} }))
-    await screen.findByText(/^35 items$/, {}, { timeout: 4000 })
+    // The sample feed's 45 items less the 5 that were filtered out.
+    await screen.findByText(/^40 items$/, {}, { timeout: 4000 })
     const rail = within(screen.getByRole('navigation', { name: 'Main' }))
     expect(rail.getByRole('link', { name: 'Feed' })).toHaveAttribute('aria-current', 'page')
 
@@ -102,7 +103,7 @@ describe('RadarApp', () => {
     await screen.findByText('Top stories', {}, { timeout: 4000 })
     act(() => navigate({ name: 'feed', params: {} }))
     await screen.findByRole('heading', { level: 1, name: 'Feed' })
-    await screen.findByText(/^35 items$/, {}, { timeout: 4000 })
+    await screen.findByText(/^40 items$/, {}, { timeout: 4000 })
     fireEvent.click(screen.getByRole('button', { name: 'Saved' }))
     await waitFor(() => expect(window.location.hash).toBe('#/feed?saved=true'))
     // The day heading above the rows also reads "2 items" when all saved items fall on one day, so the page total is matched by its own class.
