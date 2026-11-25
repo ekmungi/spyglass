@@ -124,7 +124,8 @@ def test_unknown_mentions_threshold_register_and_window(tmp_path) -> None:
         registry.create_entity(s, "Known Co")
         registry.create_entity(s, "Hidden Co", status="rejected")
     for i in range(3):
-        add_item(engine, f"n{i}", entities=["Newco", "Known Co", "Hidden Co"])
+        add_item(engine, f"n{i}", entities=["Newco", "Known Co", "Hidden Co", "AI"])  # "AI" is too short
+    add_item(engine, "bad", entities={"Newco": "not a list"})  # an unreadable entity list counts nothing
     add_item(engine, "rare1", entities=["Rareco"])
     add_item(engine, "rare2", entities=["Rareco"])
     for i in range(3):

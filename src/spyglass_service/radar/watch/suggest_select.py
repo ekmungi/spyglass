@@ -1,26 +1,18 @@
-"""Choose the watch suggestions from the news: count, shortlist, fold and select.
+"""Choose the watch suggestions from the counted names: shortlist, fold and select.
 
-The steps `suggest.refresh_suggestions` runs between reading the register and writing it. They
-change nothing in the database; the numbers (shortlist size, suggestions per section, the item
-minimum, the tiers that count) belong to the caller and are passed in. A model's answers come in
-as `classes`: per normalised name, the `type`, `organisation`, `same_as` and `group` that
-`suggest.classify` returns.
+The steps `suggest.refresh_suggestions` runs on the counts of `mentions.count_mentions`, between
+reading the register and writing it. They touch no database; the numbers (shortlist size,
+suggestions per section, the item minimum) belong to the caller and are passed in. A model's
+answers come in as `classes`: per normalised name, the `type`, `organisation`, `same_as` and
+`group` that `suggest.classify` returns.
 """
 
-from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
 
-from sqlmodel import Session, select
-
-from spyglass_service.models import Item
-from spyglass_service.radar.models import Assessment, loads
 from spyglass_service.radar.watch.registry import norm_name
 
 Classes = Mapping[str, Mapping[str, str]]
-# Shorter normalised names are initials or noise; the review's count of new names skips them too.
-MIN_KEY = 3
 
 
 @dataclass
@@ -41,32 +33,6 @@ class Choice:
     group: str
     section: str
     count: int
-
-
-def mention_counts(session: Session, sections: list[str], cutoff: datetime,
-                   tiers: tuple[str, ...]) -> tuple[dict[str, dict[str, set[int]]], dict[str, str]]:
-    """Who the news names: `{name: {section: item ids}}` and each name as most often written.
-
-    Counts the items of the given tiers in the given sections that were published (else fetched)
-    at or after `cutoff` (naive UTC); names are keyed by `norm_name`.
-    """
-    rows = session.exec(
-        select(Assessment.item_id, Assessment.entities, Assessment.section, Item.published_at, Item.fetched_at)
-        .join(Item, Item.id == Assessment.item_id)
-        .where(Assessment.entities.is_not(None), Assessment.tier.in_(tiers), Assessment.section.in_(sections))
-    ).all()
-    items: dict[str, dict[str, set[int]]] = {}
-    forms: dict[str, Counter] = {}
-    for item_id, raw, section, published, fetched in rows:
-        names = loads(raw, [])
-        if (published or fetched) < cutoff or not isinstance(names, list):
-            continue
-        for name in names:
-            key = norm_name(str(name))
-            if len(key) >= MIN_KEY:
-                items.setdefault(key, {}).setdefault(section, set()).add(item_id)
-                forms.setdefault(key, Counter())[str(name).strip()] += 1
-    return items, {key: counter.most_common(1)[0][0] for key, counter in forms.items()}
 
 
 def shortlist(items: dict[str, dict[str, set[int]]], sections: list[str], excluded: set[str],

@@ -404,17 +404,23 @@ def test_without_a_model_only_cached_names_are_selected_and_the_rest_wait(engine
 
 def test_a_click_made_while_the_model_is_asked_is_respected(engine) -> None:
     brand = add(engine, "Brand Corp")
+    removed_watch = add(engine, "Removed Watch Co")
     clicked = add_suggestion(engine, "Clicked Co", category="Discovered")
+    removed_find = add_suggestion(engine, "Removed Find", topic="RSNA", days_old=1)
     named(engine, ["Brand"], 4)
     named(engine, ["Racing Org"], 4)
-    answer = FakeLlm([row("Brand", same_as="Brand Corp"), row("Racing Org")])
+    named(engine, ["Removed Watch"], 4)
+    answer = FakeLlm([row("Brand", same_as="Brand Corp"), row("Racing Org"), row("Removed Find"),
+                      row("Removed Watch", same_as="Removed Watch Co")])
 
     def reader_clicks_meanwhile(messages: list[dict], schema: dict) -> dict:
-        """The reader watches a suggestion, rejects a name and adds another while the model answers."""
+        """While the model answers, the reader watches a suggestion, rejects a name, adds one and removes two."""
         with Session(engine) as s:
             registry.update_entity(s, clicked, {"status": "active"})
             registry.update_entity(s, brand, {"status": "rejected"})
             registry.create_entity(s, "Racing Org")
+            registry.delete_entity(s, removed_watch)
+            registry.delete_entity(s, removed_find)
         return answer(messages, schema)
 
     result = refresh(engine, reader_clicks_meanwhile)
@@ -424,3 +430,5 @@ def test_a_click_made_while_the_model_is_asked_is_respected(engine) -> None:
     assert (after[brand]["status"], after[brand]["aliases"]) == ("rejected", [])
     assert after[clicked]["status"] == "active"
     assert suggested(engine) == {}
+    with Session(engine) as s:  # the removals stay removed
+        assert s.get(WatchEntity, removed_watch) is None and s.get(WatchEntity, removed_find) is None

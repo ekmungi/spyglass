@@ -12,8 +12,9 @@ including a cached one, so a change to either never leaves a stale link. A value
 hold is emptied; the rest of the answer stays.
 
 `refresh_suggestions` runs once per collection cycle and rebuilds the suggestions from the news:
-up to five organisations per profile section, so a busy section cannot crowd out a quiet one. Its
-counting, folding and selecting steps are in `suggest_select`; this module reads and writes.
+up to five organisations per profile section, so a busy section cannot crowd out a quiet one. The
+names are counted by `mentions.count_mentions` (the watch review counts with it too), the folding
+and selecting steps are in `suggest_select`, and this module reads and writes the register.
 """
 
 import json
@@ -33,6 +34,7 @@ from spyglass_service.radar.profile_defaults import load_profile
 from spyglass_service.radar.watch import suggest_select
 from spyglass_service.radar.watch.group_order import group_order, ordered
 from spyglass_service.radar.watch.groups import delete_with_links
+from spyglass_service.radar.watch.mentions import count_mentions
 from spyglass_service.radar.watch.registry import FOLLOWED, entity_names, norm_name
 
 logger = logging.getLogger(__name__)
@@ -217,27 +219,29 @@ def _plan(session: Session, now: datetime, llm: LlmFn | None) -> _Plan:
 
     Watched, paused and rejected names (and their aliases) are never shortlisted, and neither are the
     topic-search suggestions, which keep their own row; the earlier mention-based suggestions are.
+    Everything needed from the rows is read before `classify`, whose commit expires them: a row the
+    reader removes while the model answers must not be read again.
     """
     entities = session.exec(select(WatchEntity)).all()
     followed = [e for e in entities if e.status in FOLLOWED]
     known = [*followed, *(e for e in entities if e.status == "rejected")]
     topics = [e for e in entities if _is_topic_suggestion(e)]
-    young = [e for e in topics if not _expired(e, now)]
+    young_names = [e.name for e in topics if not _expired(e, now)]
     excluded = {norm_name(name) for e in [*known, *topics] for name in entity_names(e)}
+    followed_ids = {norm_name(e.name): e.id for e in followed}
+    register = [e.name for e in known]
+    groups = ordered({e.category for e in followed if e.category}, group_order(session))
     profile_sections = load_profile(session).get("sections", [])
     sections = list(dict.fromkeys(str(s["key"]) for s in profile_sections if s.get("key")))
-    items, forms = suggest_select.mention_counts(session, sections, now - WINDOW, TIERS)
+    items, forms = count_mentions(session, now - WINDOW, tiers=TIERS, sections=sections)
     names = suggest_select.shortlist(items, sections, excluded, SHORTLIST)
-    classes = classify(
-        session, [forms[key] for key in names] + [e.name for e in young],
-        groups=ordered({e.category for e in followed if e.category}, group_order(session)),
-        register=[e.name for e in known], llm=llm,
-    )
+    classes = classify(session, [forms[key] for key in names] + young_names, groups=groups,
+                       register=register, llm=llm)
     found = suggest_select.candidates(names, classes, items, forms, excluded)
-    topic_keys = (norm_name(e.name) for e in young)
+    topic_keys = (norm_name(name) for name in young_names)
     return _Plan(
         chosen=suggest_select.choose(found, sections, per_section=PER_SECTION, min_items=MIN_ITEMS),
-        spellings=suggest_select.spellings(names, classes, forms, {norm_name(e.name): e.id for e in followed}),
+        spellings=suggest_select.spellings(names, classes, forms, followed_ids),
         topic_drop={key for key in topic_keys if key in classes
                     and (classes[key]["type"] != "organisation" or classes[key]["same_as"])},
     )

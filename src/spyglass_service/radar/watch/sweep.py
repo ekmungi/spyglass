@@ -10,7 +10,6 @@ The suggestions on the watch page are chosen by `watch.suggest.refresh_suggestio
 import dataclasses
 import logging
 import time
-from collections import Counter
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
@@ -21,6 +20,7 @@ from spyglass_service.collectors.base import CollectedItem
 from spyglass_service.models import Item
 from spyglass_service.radar.models import Assessment, ItemEntity, WatchEntity, loads, utcnow
 from spyglass_service.radar.watch._news_fallback import SearchFn, default_search
+from spyglass_service.radar.watch.mentions import count_mentions
 from spyglass_service.radar.watch.registry import entity_names, known_names, norm_name
 
 logger = logging.getLogger(__name__)
@@ -167,31 +167,14 @@ def unknown_mentions(
 ) -> list[tuple[str, int]]:
     """Organisations named in at least `min_count` relevant recent items and not in the register.
 
-    Counts distinct non-"out" items from the last 30 days (`SUGGEST_WINDOW`), whatever the
-    register's status for a name, so a suggestion or a muted entry is never named again. Returns
-    `(name as most often written, item count)`, most-mentioned first, at most `max_new`.
-    `now` (naive UTC) is only for tests.
+    Counts distinct non-"out" items from the last 30 days (`SUGGEST_WINDOW`) with `count_mentions`,
+    the count the suggestions use too, whatever the register's status for a name, so a suggestion
+    or a muted entry is never named again. Returns `(name as most often written, item count)`,
+    most-mentioned first, at most `max_new`. `now` (naive UTC) is only for tests.
     """
     cutoff = (now or utcnow().replace(tzinfo=None)) - SUGGEST_WINDOW
-    rows = session.exec(
-        select(Assessment.item_id, Assessment.entities, Item.published_at, Item.fetched_at)
-        .join(Item, Item.id == Assessment.item_id)
-        .where(Assessment.entities.is_not(None), Assessment.tier != "out")
-    ).all()
-    items_by_name: dict[str, set[int]] = {}
-    forms: dict[str, Counter] = {}
-    for item_id, raw, published, fetched in rows:
-        if (published or fetched) < cutoff:
-            continue
-        for name in loads(raw, []) or []:
-            key = norm_name(str(name))
-            if len(key) < 3:
-                continue
-            items_by_name.setdefault(key, set()).add(item_id)
-            forms.setdefault(key, Counter())[str(name).strip()] += 1
+    by_section, forms = count_mentions(session, cutoff)
     taken = known_names(session)
-    ranked = sorted(
-        ((len(ids), key) for key, ids in items_by_name.items() if len(ids) >= min_count and key not in taken),
-        reverse=True,
-    )[:max_new]
-    return [(forms[key].most_common(1)[0][0], count) for count, key in ranked]
+    counts = ((len(set().union(*sections.values())), key) for key, sections in by_section.items())
+    ranked = sorted(((n, key) for n, key in counts if n >= min_count and key not in taken), reverse=True)
+    return [(forms[key], n) for n, key in ranked[:max_new]]
