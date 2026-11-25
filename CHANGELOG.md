@@ -13,6 +13,10 @@ The Watch page becomes short enough to read in one screen. Your watched names ar
 and the suggestions shrink from hundreds of rows to at most five organisations per section of your
 profile.
 
+The same release rebuilds the other pages around one design. Today, the Feed, the reader, Settings,
+Profile and Sources share section headings, tabs, text boxes and menus, and each story now carries
+two short texts, one about what the piece says and one about why it matters in general.
+
 ### Added
 - **Watched names as chips.** Each group shows its names as green chips. One click pauses a name:
   the chip turns grey where it is, and a message offers Undo. One more click watches it again. The
@@ -48,14 +52,69 @@ profile.
 - **Names from a topic search** keep their own row, "From your search", for 30 days.
 - **Topics you follow** moved to the bottom of the page. With no topic followed, it is one line
   with a "Follow a topic" link.
+- **Two-part story text.** Each story in the brief, and each item's summary, now has two texts.
+  "What it says" is a plain account of what the piece reports. "Why it matters" says in general
+  terms why the piece is important. No text is written to tie a piece to your own work. On Today
+  the two parts are labelled; a Feed row shows one line of what the piece says; the reader's summary
+  shows the key points and then "Why it matters". An item judged before this version has no first
+  text, so Today shows its one older text without labels.
+- **Today as a lead story and two columns.** The top section opens with one lead story across the
+  page, and its other stories sit in two columns.
+- **A slider for each section.** Under each section heading, a count such as "4-6 of 15" with two
+  small arrows pages through the stories that were judged for that section and not picked, after
+  the picked ones. A grey ring before a headline marks a story that was not picked. A section keeps
+  at most twelve of them, and the count says when more were judged. A brief composed earlier has no
+  such stories and shows no arrows.
+- **Thumbs on every row.** A thumbs-up and a thumbs-down sit at the end of every story on Today and
+  every row of the Feed, as well as in the reader's bar. They appear when you point at a row, tab to
+  it or select it, and a vote that is set stays visible. They replace "More like this" and "Less
+  like this" in the reader's More menu, and keep the same two names as their tooltips. A thumbs-up
+  on a story with a grey ring says it should have been picked.
+- **Votes shape the next briefs.** A news story you voted down is left out of the next briefs. An
+  item you sent in yourself stays in them. The Feed still lists the story.
+- **A reader bar with a reading list.** The bar of icons at the top of the reader has Back, the
+  buttons for the previous and the next story, a count such as "3 of 12 in Today", and the thumbs.
+  They walk the list you came from, which is Today (picked stories, then the unpicked ones, section
+  by section) or the rows loaded in the Feed. The J and K keys do the same. The bar stays while the
+  next story loads, Back leaves the reader in one step, and a story counts as opened once it has
+  been drawn, so a story you step past while it loads is not counted.
+- **A Feed with one search box and two strips of tabs.** The search box is alone on the first row,
+  with the chat icon "Ask your feed" apart from it. The views (Everything, Missed, Saved, From you
+  and To file) and the sections are two strips of tabs. One **Filters** icon holds the kind of item,
+  "Show filtered-out items" and "Filed", and shows how many of them are on. The heading of the day
+  you are reading stays pinned under the bars as a tinted bar.
+- **Tabs on Settings, Profile and Sources.** The parts of each page are tabs on one strip, and the
+  three pages have one page width. Profile has one **Save profile** bar for all its tabs, and it
+  saves the project lines too. The count of shared projects on the Your projects tab comes from
+  what is saved. A tab of Sources shows a red mark only when a source on it is set up and failing.
+  A row you have just changed on Sources, Settings or Profile stays in view until you fold or
+  unfold its list.
 
 ### Changed
 - The page order is Watching with Paused, Suggested this month, Not of interest, then Topics you
   follow.
 - The old single-name actions on a row (accept, dismiss, resume) are gone, because a chip click does
   them. The one-line reason and the latest items of a name moved into its Details.
+- The line on why a story matters is no longer written for you. It says why the piece matters in
+  general, and the judging prompt tells the model not to address you and not to mention your work,
+  profile or projects. The assistant's "How is this relevant to me?" action still relates an item
+  to you.
+- The "Related" control is gone from the Feed's toolbar. **Show related in the Feed** in the
+  reader's More menu still lists the items close in meaning to the one you are reading, under a
+  "Related to" line with **Clear**.
+- Section headings are larger, on a subtle tint, on every page. The Feed's day heading uses the same
+  bar.
+- Text boxes and menus have one text size and one shade on every page.
 
 ### Technical
+- Each assessment stores a `what` text beside `why`, in a new column that existing databases gain
+  when the service starts. The story and item objects the interface reads carry both texts, and the
+  assistant is given both.
+- Each section of a brief document holds `more`, at most twelve stories that were judged for the
+  section and not picked, best first, and `pool`, the number of stories judged for it. A brief
+  composed earlier has neither, and its sections show no arrows.
+- Choosing the candidates for a brief leaves out news items with a "less like this" vote. Items you
+  sent in are kept even when you voted them down.
 - The register has a fourth status, "rejected", for the lasting "not of interest". Suggestions
   remain rows in the register, so watching one is the existing `PATCH /watch/{id}` with
   `status: active`.

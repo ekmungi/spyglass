@@ -20,35 +20,65 @@ If you installed Spyglass with its Windows installer, open it from the Start men
 first time, it asks where to keep its data and which Obsidian vault to use. Setup also asked which
 parts to install, such as PDF reading, the local AI model and YouTube transcripts. To add or remove
 one later, choose Spyglass in **Settings > Apps > Installed apps** in Windows, then **Modify**.
-Spyglass's own **Settings** page lists the parts that are not installed and what each one changes.
+The **General** tab of Spyglass's own **Settings** page lists the parts that are not installed and
+what each one changes.
 
 ## 2. The daily routine
 
 1. Open Spyglass. You land on **Today**.
 2. Read the opening lines, then go down the sections: top stories, the companies and labs you
    watch, other items worth knowing, papers, anything you sent in yourself, and a list of headlines
-   to skim.
-3. Click an item to open it in the reader. The summary is at the top: a few key points and a line
-   on why it matters to you. The article follows, and an assistant panel sits on the right.
-4. In the assistant panel, press a quick action (Explain, How is this relevant to me, Draft a
+   to skim. Each story has two labelled parts: **What it says** is a plain account of the piece,
+   and **Why it matters** says in general terms why the piece is important. Neither part tries to
+   tie the piece to your own work. The top section opens with one lead story, and its other
+   stories sit in two columns.
+3. To see more of a section, look beside its heading. A count such as "4-6 of 15" with two small
+   arrows pages through the stories that Spyglass judged for that section and did not pick, after
+   the ones it did pick. A grey ring before a headline marks a story that was not picked; point at
+   the ring to read what it means. A section keeps at most twelve such stories. When more were
+   judged, point at the count to read how many, and look in the Feed for the rest. A brief that
+   was composed before this version has no such stories, so its sections show no arrows.
+4. Click a story to open it in the reader. The summary is at the top: a few key points, then **Why
+   it matters**. The article follows, and an assistant panel sits on the right. The bar of icons at
+   the top has **Back**, the buttons for the previous and the next story, and the thumbs. Next to
+   the buttons, a count such as "3 of 12 in Today" gives your place in the list you came from,
+   which is Today or the Feed. The **J** key opens the next story and the **K** key the previous
+   one, unless you are typing. The bar stays in place while the next story loads, and a story
+   counts as opened once it has been drawn, so a story you step past while it is still loading is
+   not counted. **Back** leaves the reader in one step, however many stories you read.
+5. In the assistant panel, press a quick action (Explain, How is this relevant to me, Draft a
    message for colleagues, Draft a LinkedIn post, Outline a blog post) or type your own question.
    To ask about one passage only, select the text in the article first.
-5. Tell Spyglass what you think of an item: open the **More actions** menu (the three dots at the
-   top of the reader) and choose **More like this** or **Less like this**. It learns from this,
-   together with what you open, read, save and ask about.
-6. Save what you want to keep (section 5), then go back to Today.
+6. Tell Spyglass what you think of a story: press the thumbs-up (**More like this**) or the
+   thumbs-down (**Less like this**) at the end of its row, or in the reader's bar. On a row the
+   thumbs appear when you point at it, tab to it or select it with the keyboard, and a thumb that
+   is set stays visible. Press the same thumb again to take the vote back. A thumbs-up on a story
+   with a grey ring says that it should have been picked. Spyglass learns from your votes,
+   together with what you open, read, save and ask about. A story you vote down is left out of the
+   next briefs, but an item you sent in yourself stays, and the Feed still lists the story.
+7. Save what you want to keep (section 5), then go back to Today.
 
 When you want something older or something that was filtered out of the brief, open **Feed**. It
-lists everything that was collected and can be filtered by section, kind, saved items and items you
-sent in, and searched by words. Newest first, the list is split by day: a quiet heading reads
-"Today", "Yesterday", then the weekday and date ("Tuesday 10 November"), with how many items that
-day holds. The heading of the day you are reading stays under the filter bar as you scroll. The
-headings are left out of the lists that are ordered by something other than time: items close in
-meaning ("Related"), the items an assistant answer cited, and **Missed**.
+lists everything that was collected. At the top is one search box, which looks in titles,
+summaries and full text. Beside it are the chat icon **Ask your feed**, which opens the assistant
+about the whole Feed, and the **Filters** icon, whose menu holds the kinds of item (News, Papers
+and so on), **Show filtered-out items** and **Filed**. When one of these is on, the icon shows how
+many are on. Under the search box are two strips of tabs. The first strip chooses the view:
+**Everything**, **Missed**, **Saved**, **From you** and, where filing is set up, **To file**. The
+second strip chooses the section: **All sections**, or one section of your profile. Each row shows
+the headline, one line of what the piece says, and then the source, the time and the section, with
+the thumbs and the save button at its end.
+
+Newest first, the list is split by day: a heading reads "Today", "Yesterday", then the weekday and
+date ("Tuesday 10 November"), with how many items that day holds. The heading of the day you are
+reading stays pinned under the bars as a tinted bar as you scroll. The headings are left out of the
+lists that are ordered by something other than time: items close in meaning, which you reach with
+**Show related in the Feed** in the reader's **More** menu, the items an assistant answer cited, and
+**Missed**. A line above such a list says what it is, and **Clear** returns to the whole Feed.
 
 **Missed.** If you were away for a few days, press **Missed** in the Feed. It lists the top and
 notable items of the last 7 days that you have never opened, saved or filed, and that you did not
-send in yourself, best first. The number on the chip is how many there are. An item you open from
+send in yourself, best first. The number on the tab is how many there are. An item you open from
 this list stays in it, shown as read, until you open the list again.
 
 ## 3. Following subjects
@@ -64,9 +94,25 @@ it judges items.
   the page, under **Topics you follow**, and each one has a menu with **Edit**, **Pause** and
   **Stop following**. When you follow none, the page shows one line with a **Follow a topic** link.
 
-The **Profile** page holds your interests in six sections (models, labs, agents, health, industry
-and direction) in your own words. Changing the profile changes how everything is judged from the
-next collection onward. Edit it whenever your focus changes.
+The **Profile** page holds your interests in your own words, on six tabs: **About you**,
+**Sections**, **Topics**, **Your projects**, **Leave out** and **Learned**. The sections start as
+models, labs, agents, health, industry and direction. You can rename each one and say what belongs
+in it. The **Topics** tab shows how many topics you have, and **Your projects** shows how many
+projects have a line the assistant may see ("2 shared"). That count comes from what is saved, so it
+changes only after you save. One **Save profile** bar at the bottom serves every tab. It saves the project lines together
+with the rest, and **Discard changes** undoes everything you have not saved. If a tab holds
+something that cannot be saved, the page opens that tab and says what to fix. **Learned** only
+lists the titles that your saves, votes and links taught Spyglass. Changing the profile changes
+how everything is judged from the next collection onward. Edit it whenever your focus changes.
+
+The **Sources** page shows where your material comes from and whether each source works. Its parts
+are tabs on one strip: **From you** (Slack, Raindrop and Gmail), **Feeds**, **Searches** and **FDA
+decisions**. A tab shows a red mark only when a source on it is set up and failing, and a screen
+reader reads out how many ("1 feed is failing"). A source that is only not set up gets no mark, and
+neither does a feed you switched off. Under **Feeds**, the feeds that need a look are listed first, and one
+line of counts stands in for the feeds that work; press **Show the working feeds** to list them. A
+feed you have just switched on or off stays where it was, with the focus, until you fold or unfold
+that list, so it does not move under your pointer.
 
 ## 4. The watch list
 
@@ -139,7 +185,7 @@ company on your watch list has had a device decision in the last 30 days: a 510(
 Novo grant, a PMA approval or a recall. Each decision becomes one item from the regulator, linked
 to the official FDA record and shown under that company on **Watch**. A name must match the FDA's
 firm name exactly or start with it as whole words, so "Olympus" finds "Olympus Medical Systems" but
-never an unrelated firm. On **Sources**, in **FDA device decisions**, you can switch this off and
+never an unrelated firm. On the **FDA decisions** tab of **Sources**, you can switch this off and
 list FDA product codes or device keywords to follow whoever makes them. At most 120 requests are
 made a day, so a very long watch list is covered over several days.
 
@@ -169,7 +215,7 @@ There are three steps, and each needs your click.
    request** shows the exact text sent to Claude Code first.
 
 Spyglass never writes into your notes vault itself. To choose the vault, open **Settings**, then
-the vault group, and set **Vault folder**: Claude Code is opened in it. If you do not use a notes
+the **Vault and filing** tab, and set **Vault folder**: Claude Code is opened in it. If you do not use a notes
 folder, ignore this step; Saved is enough.
 
 **If Claude Code says it cannot find the item.** Claude Code finds Spyglass through the file
@@ -195,8 +241,12 @@ and update its notes. Restart Spyglass after you change them.
 
 ## 6. Appearance
 
-Open **Settings** and scroll to **Appearance**. Every change applies at once and is remembered on
-the device you made it on.
+Open **Settings** and choose the **Appearance** tab. The page has six tabs on one strip, at the
+same width as **Profile** and **Sources**: **General**, **AI engines**, **Appearance**, **Bringing
+things in**, **Vault and filing** and **Privacy and usage**. Text boxes and menus on these pages
+share one text size and one shade. On **Appearance**, every change applies at once and is remembered
+on the device you made it on. Other parts save with their own button, and report success or failure
+beside it.
 
 - **Theme:** light, dark, or follow your system. The sun or moon button at the bottom of the left
   rail switches between light and dark.
@@ -208,7 +258,8 @@ the device you made it on.
 
 ## 7. Choosing the AI
 
-Open **Settings**. The first group lists the AI engines. Each one says whether it is ready. For an
+Open **Settings** and choose the **AI engines** tab. It lists the AI engines. Each one says whether
+it is ready, and the engines that are not set up are folded away behind one button. For an
 engine that needs a key (OpenRouter, Anthropic, OpenAI, Google Gemini), paste the key into its box
 and save; it is kept in the Windows credential store. For a program running on your own computer
 (Ollama or LM Studio) nothing is needed except that it is running. Then choose which engine and
@@ -233,8 +284,9 @@ those calls are counted as calls only. The notes are kept on your computer and t
   "sonnet · Read 12,400 tokens, 91% from cache · wrote 380". "Read" is everything the model was
   given for that answer: the instructions, the article and the conversation so far. "Wrote" is the
   length of the answer.
-- **In Settings, under Usage.** A table of the last 7 days by job: how many calls, how much the
-  models read, how much of that came from the cache, and how much they wrote.
+- **In Settings, on the Privacy and usage tab, under Usage.** A table of the last 7 days by job:
+  how many calls, how much the models read, how much of that came from the cache, and how much
+  they wrote.
 - **What "from cache" means.** When the beginning of a request is the same as a recent one, the
   provider re-reads it from a cache at a fraction of the cost. So the same article, asked about
   again within the hour, is cheap the second time. Spyglass keeps the beginning of every request
@@ -294,8 +346,8 @@ your Slack workspace.
    SPYGLASS_SLACK_CAPTURE_CHANNEL=C0123456789
    ```
 
-9. **Restart Spyglass** (section 9 explains how), then open **Sources**. The Slack row should say
-   "Configured". Post a link in the channel to test it.
+9. **Restart Spyglass** (section 9 explains how), then open **Sources**. On the **From you** tab,
+   the Slack row should say "Configured". Post a link in the channel to test it.
 
 Keep the two tokens private. They are as sensitive as a password, and `.env` is excluded from git.
 If you leave out the app token (step 3), Spyglass still works, but it checks the channel once a
@@ -320,8 +372,8 @@ instead of a broken image.
 ## 9. Starting with Windows
 
 Spyglass has to be running to collect and to compose the brief. In the installed app, tick **Start
-with Windows** in setup, or switch it on in **Settings** under **Spyglass on this computer**. The
-steps below are for a copy run from the Spyglass folder. To start that copy automatically every
+with Windows** in setup, or switch it on in **Settings**, on the **General** tab, under **Spyglass
+on this computer**. The steps below are for a copy run from the Spyglass folder. To start that copy automatically every
 time you sign in to Windows:
 
 1. Open the Spyglass folder in File Explorer, click the address bar, type `powershell`, and press
@@ -371,7 +423,8 @@ your normal password is never used.
 
    If you chose other label names, also add `SPYGLASS_GMAIL_NEWSLETTER_LABEL=...` and
    `SPYGLASS_GMAIL_CAPTURE_LABEL=...`.
-5. **Restart Spyglass** and look at **Sources**. The Gmail row should say "Configured".
+5. **Restart Spyglass** and look at the **From you** tab of **Sources**. The Gmail row should say
+   "Configured".
 
 Spyglass only reads the two labels. It never marks a message as read and never moves, deletes or
 sends anything. Each newsletter becomes one item that you can open in the reader. For a message in
@@ -432,7 +485,8 @@ as the database. When the disk has less free space than twice the newest copy, S
 copy and the **Activity** list says so.
 
 **Slack or Gmail says "Set up, but failing".**
-The row on **Sources** shows the reason. For Slack the usual cause is that the app was not invited
+The row on the **From you** tab of **Sources** shows the reason, and the tab carries a red mark
+while a channel on it fails. For Slack the usual cause is that the app was not invited
 to the channel (step 7) or a permission is missing (step 4 or 5). For Gmail it is usually a wrong
 app password, or a label name that does not match the one in `.env`.
 

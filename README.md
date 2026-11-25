@@ -23,13 +23,22 @@ listed in [Privacy and safety](#privacy-and-safety).
 2. **Spyglass collects on a schedule.** It collects every two hours while it runs.
 3. **An AI model judges each item in two passes.** A low-cost first pass reads the title and the
    snippet. Items that score high enough get a second pass, which reads the full text and writes a
-   headline, key points and a line on why the item matters to you.
+   headline, two short texts and key points. The first text says what the piece reports. The second
+   says why it matters in general, and it makes no attempt to tie the piece to your own work.
 4. **You read the result.** **Today** is a daily brief composed each morning: top stories, news
    about the organisations you watch, other items worth knowing, papers, everything you sent in,
-   and a list of headlines to skim. It ends with "You are caught up". The **Feed** lists every
-   collected item with filters, search and date headings.
+   and a list of headlines to skim. It ends with "You are caught up". Each story has two labelled
+   parts, "What it says" and "Why it matters". The top section opens with one lead story and sets
+   the others in two columns. Under each section, a slider with small arrows beside its count pages
+   through the stories that were judged for that section and not picked; a grey ring marks each of
+   them. A thumbs-up and a thumbs-down on every row tell Spyglass what you want more or less of. A
+   story you vote down is left out of the next briefs, while an item you sent in yourself stays. The
+   **Feed** lists every collected item. It has one search box, two strips of tabs (the views and
+   the sections), one **Filters** icon and a date heading for each day.
 5. **You open an item in the reader.** The reader shows a clean copy of the page with its headings,
-   images and tables, and the summary on top.
+   images and tables, and the summary on top. A bar of icons at the top holds Back, the buttons for
+   the previous and the next story with the position in the list you came from (for example "3 of
+   12 in Today"), and the thumbs. The J and K keys do the same as the next and previous buttons.
 6. **You ask the assistant.** The assistant beside the reader answers about the whole item or about
    a passage you select, with the AI engine you choose. Quick actions explain the item, say how it
    relates to you, or draft a message, a LinkedIn post or a blog outline.
@@ -49,13 +58,18 @@ listed in [Privacy and safety](#privacy-and-safety).
   line on how it relates to your field.
 - **Ask about the whole Feed.** The assistant also answers questions across the Feed, with numbered
   citations that link to the items it used.
-- **Missed** shows the top and notable items of the last seven days that you have not opened,
-  saved or filed. **Related** shows items close to the one you are reading.
+- **Missed** is a tab of the Feed. It shows the top and notable items of the last seven days that
+  you have not opened, saved or filed. In the reader, **More** has **Show related in the Feed**,
+  which lists the items close in meaning to the one you are reading.
+- **Settings, Profile and Sources** each keep their parts on one strip of tabs, at one page width.
+  The Profile has one **Save profile** bar for all its tabs. A tab of Sources carries a red mark
+  only when a source on it is set up and failing.
 - **A browser extension** sends the page you are reading to Spyglass. See
   [Sending things in](#sending-things-in).
 - **Capture** from Raindrop bookmarks, a Slack channel and a Gmail label.
 - **A usage record** of every model call (tokens read, tokens written, cost reported by the
-  provider), shown as a table for the last seven days under Settings.
+  provider), shown as a table for the last seven days on the **Privacy and usage** tab of
+  **Settings**.
 - **A Help page** inside the app.
 
 The [user guide](docs/user-guide.md) describes the daily routine in plain language.
@@ -145,7 +159,7 @@ work, but no item is judged. See [Choosing an AI engine](#choosing-an-ai-engine)
 
 To change what is installed, choose Spyglass in **Settings > Apps > Installed apps** in Windows, then
 **Modify**, or open the `.msi` again. Setup closes a running Spyglass first; open it again
-afterwards. **Settings** in Spyglass lists the parts that are not installed.
+afterwards. The **General** tab of **Settings** in Spyglass lists the parts that are not installed.
 
 To upgrade, open the newer `.msi`; it keeps your data folder, your settings and your choices. An
 upgrade from Spyglass 0.41.1 or older, which used another installer, removes the old install first
@@ -216,7 +230,8 @@ powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1
 
 ### Set up Spyglass in the app
 
-- Open **Settings** and add an AI engine (the next section explains the choices).
+- Open **Settings**, choose the **AI engines** tab and add an AI engine (the next section explains
+  the choices).
 - Open **Profile** and replace the example profile with your own interests. The profile is what
   every item is judged against.
 - Open **Sources** and add or remove feeds. Open **Watch** and add the organisations you follow.
@@ -263,7 +278,7 @@ provider. For Claude, read Anthropic's
 Chrome, Edge, Brave, Vivaldi and other Chromium browsers. It sends the open page, or only the text
 you selected, to Spyglass with one click or with Alt+Shift+S. Because it hands over the page your
 browser already shows, it also works for pages behind a paywall that you can read. Spyglass itself
-never signs in anywhere. To install it, follow **Settings > Bring in**: choose your browser, press
+never signs in anywhere. To install it, follow **Settings**, **Bringing things in**: choose your browser, press
 **Open extensions page**, switch on Developer mode and load the folder that the panel shows with
 **Load unpacked**. That copy of the extension already knows the address and the key, so nothing
 needs to be typed. With Spyglass closed, the extension says so and asks you to open it and send
