@@ -3,6 +3,7 @@
 // no line stays private, so the list shows only the projects that have a line until the reader asks for
 // the others. The page holds the lines (useProjectsDraft) and its one Save bar saves them.
 import { useState } from 'react'
+import { useStayListed } from '../../hooks/useStayListed'
 import { Button, SectionHeading, Skeleton } from '../../ui'
 import { MAX_DESCRIPTION } from './projectsDraft'
 import { isShared, type ProjectsDraft } from './useProjectsDraft'
@@ -16,10 +17,10 @@ export interface ProjectsSectionProps {
 export function ProjectsSection({ projects }: ProjectsSectionProps) {
   const { load, saved, current, sharedCount, edit } = projects
   const [showAll, setShowAll] = useState(false)
-  // Names of the projects the reader typed into during this visit. They stay listed while the list is
-  // folded, so a row does not vanish under the cursor when its line is emptied or just written.
-  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set())
-  const listedWhenFolded = current.filter((row) => isShared(row) || touched.has(row.name))
+  // The projects the reader typed into during this visit. They stay listed while the list is folded, so a
+  // row does not vanish under the cursor when its line is emptied, until the reader folds or unfolds the list.
+  const touched = useStayListed<string>()
+  const listedWhenFolded = current.filter((row) => isShared(row) || touched.pinned.has(row.name))
   const others = current.length - listedWhenFolded.length
 
   let body
@@ -63,7 +64,7 @@ export function ProjectsSection({ projects }: ProjectsSectionProps) {
                       placeholder="One line the AI may see. Leave empty to keep this project private."
                       onChange={(event) => {
                         const value = event.target.value
-                        setTouched((names) => new Set(names).add(row.name))
+                        touched.pin(row.name, true)
                         edit((rows) => rows.map((entry, i) => (i === index ? { ...entry, description: value } : entry)))
                       }}
                     />
@@ -80,7 +81,15 @@ export function ProjectsSection({ projects }: ProjectsSectionProps) {
           )}
         </ul>
         {others > 0 && (
-          <Button variant="quiet" size="sm" className="rpr-more" onClick={() => setShowAll((all) => !all)}>
+          <Button
+            variant="quiet"
+            size="sm"
+            className="rpr-more"
+            onClick={() => {
+              setShowAll((all) => !all)
+              touched.release()
+            }}
+          >
             {showAll ? 'Show only the shared projects' : others === 1 ? 'Show the other project' : `Show the other ${others} projects`}
           </Button>
         )}

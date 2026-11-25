@@ -2,7 +2,7 @@
 // count that stands in for the working feeds.
 import { describe, expect, it } from 'vitest'
 import type { FeedRow } from './api'
-import { failingAlert, otherFeedsSummary, splitFeeds } from './feedHealth'
+import { failingAlert, otherFeedsSummary, placeFeeds, splitFeeds } from './feedHealth'
 
 let next = 1
 const feed = (over: Partial<FeedRow> = {}): FeedRow => ({
@@ -26,6 +26,19 @@ describe('splitFeeds', () => {
     const { working, others } = splitFeeds([a, ok, b, c])
     expect(working).toEqual([ok])
     expect(others).toEqual([a, b, c])
+  })
+})
+
+describe('placeFeeds', () => {
+  it('keeps a feed the reader changed in the list it was in, and places the rest by their state', () => {
+    const [ok, nowOn, nowOff] = [feed(), feed(), off()]
+    const kept = new Map([
+      [nowOn.id, 'others' as const],
+      [nowOff.id, 'working' as const],
+    ])
+    const { working, others } = placeFeeds([ok, nowOn, nowOff], kept)
+    expect(working).toEqual([ok, nowOff])
+    expect(others).toEqual([nowOn])
   })
 })
 

@@ -177,6 +177,18 @@ describe('ProjectsSection folding', () => {
     expect(line('Agent harness')).toHaveValue('')
   })
 
+  it('lets a row emptied during this visit fold away once the reader folds the list', async () => {
+    api.loadProjects.mockResolvedValue([...rows(), { name: 'Garden', description: '', in_vault: true }])
+    render(<Page />)
+    await screen.findByText('Imaging AI')
+    showOthers()
+    fireEvent.change(line('Agent harness'), { target: { value: 'x' } })
+    fireEvent.change(line('Agent harness'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Show only the shared projects' }))
+    expect(screen.queryByText('Agent harness')).not.toBeInTheDocument()
+    expect(screen.queryByText('Garden')).not.toBeInTheDocument()
+  })
+
   it('says the AI sees none of them when no project has a line, and still offers them all', async () => {
     api.loadProjects.mockResolvedValue(rows().map((row) => ({ ...row, description: '' })))
     render(<Page />)

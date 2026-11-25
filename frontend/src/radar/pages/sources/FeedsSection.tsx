@@ -1,12 +1,15 @@
 // FeedsSection: the feeds that need a look, one line of counts that stands in for the feeds that work (with
 // a button to list them), and the add form. Each feed has its health in words, an on/off switch and removal.
+// A feed the reader switches during this visit stays in the list it was in, with the focus, until the
+// reader folds or unfolds the working feeds.
 import { useCallback, useState } from 'react'
 import { errorMessage } from '../../api/errors'
+import { useStayListed } from '../../hooks/useStayListed'
 import { Button, Dialog, EmptyState, SectionHeading, toast } from '../../ui'
 import { removeFeed, setFeedEnabled, type FeedRow } from './api'
 import { AddFeed } from './AddFeed'
 import { FeedRowItem } from './FeedRowItem'
-import { otherFeedsSummary, splitFeeds } from './feedHealth'
+import { feedGroup, otherFeedsSummary, placeFeeds, splitFeeds, type FeedGroup } from './feedHealth'
 
 export interface FeedsSectionProps {
   feeds: readonly FeedRow[]
@@ -19,13 +22,17 @@ export function FeedsSection({ feeds, onChange }: FeedsSectionProps) {
   const [busyId, setBusyId] = useState<number | null>(null)
   const [removing, setRemoving] = useState<FeedRow | null>(null)
   const [showWorking, setShowWorking] = useState(false)
-  const { working, others } = splitFeeds(feeds)
+  const changed = useStayListed<number, FeedGroup>()
+  // The counts describe each feed's state now; the lists keep a feed switched during this visit in place.
+  const counted = splitFeeds(feeds)
+  const { working, others } = placeFeeds(feeds, changed.pinned)
 
   // A stable handler: the dialog refocuses its first control whenever this function changes.
   const closeRemove = useCallback(() => setRemoving(null), [])
 
   const toggle = async (feed: FeedRow, enabled: boolean) => {
     setBusyId(feed.id)
+    changed.pin(feed.id, feedGroup(feed))
     try {
       await setFeedEnabled(feed.id, enabled)
       onChange(feeds.map((row) => (row.id === feed.id ? { ...row, enabled } : row)))
@@ -71,9 +78,19 @@ export function FeedsSection({ feeds, onChange }: FeedsSectionProps) {
             </ul>
           )}
           <div className="rs-feedline">
-            <span className="r-meta">{[otherFeedsSummary(others), working.length > 0 ? `${working.length} working` : ''].filter(Boolean).join('. ')}.</span>
+            <span className="r-meta">
+              {[otherFeedsSummary(counted.others), counted.working.length > 0 ? `${counted.working.length} working` : ''].filter(Boolean).join('. ')}.
+            </span>
             {working.length > 0 && (
-              <Button variant="quiet" size="sm" aria-expanded={showWorking} onClick={() => setShowWorking((shown) => !shown)}>
+              <Button
+                variant="quiet"
+                size="sm"
+                aria-expanded={showWorking}
+                onClick={() => {
+                  setShowWorking((shown) => !shown)
+                  changed.release()
+                }}
+              >
                 {showWorking ? 'Hide the working feeds' : 'Show the working feeds'}
               </Button>
             )}

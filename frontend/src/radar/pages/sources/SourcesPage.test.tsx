@@ -216,6 +216,38 @@ describe('SourcesPage', () => {
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Signal Ledger on or off' })).toHaveAttribute('aria-checked', 'false'))
   })
 
+  it('keeps a switched-off feed in view, with the focus, when the reader switches it on', async () => {
+    api.loadSources.mockResolvedValue({ ...view(), feeds: [feed({ id: 1, name: 'Good One' }), feed({ id: 4, name: 'Quiet A', enabled: false })] })
+    render(<SourcesPage />)
+    await openTab('Feeds')
+    expect(screen.getByText('1 switched off. 1 working.')).toBeInTheDocument()
+    const toggle = await screen.findByRole('switch', { name: 'Quiet A on or off' })
+    toggle.focus()
+    fireEvent.click(toggle)
+    await waitFor(() => expect(api.setFeedEnabled).toHaveBeenCalledWith(4, true))
+    // Now working, it would belong to the folded working feeds; it stays where the reader is.
+    await waitFor(() => expect(screen.getByText('2 working.')).toBeInTheDocument())
+    expect(screen.getByRole('switch', { name: 'Quiet A on or off' })).toBe(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    expect(document.activeElement).toBe(toggle)
+    expect(screen.queryByText('Good One')).not.toBeInTheDocument()
+  })
+
+  it('keeps a working feed in its place, with the focus, when the reader switches it off', async () => {
+    render(<SourcesPage />)
+    await openTab('Feeds')
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the working feeds' }))
+    const toggle = await screen.findByRole('switch', { name: 'Signal Ledger on or off' })
+    toggle.focus()
+    fireEvent.click(toggle)
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Signal Ledger on or off' })).toHaveAttribute('aria-checked', 'false'))
+    expect(screen.getByRole('switch', { name: 'Signal Ledger on or off' })).toBe(toggle)
+    expect(document.activeElement).toBe(toggle)
+    // Folding the working feeds lets the list sort it again: it is now with the feeds that need a look.
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the working feeds' }))
+    expect(screen.getByRole('switch', { name: 'Signal Ledger on or off' })).toBeInTheDocument()
+  })
+
   it('leaves the switch alone and reports the problem when the change fails', async () => {
     api.setFeedEnabled.mockRejectedValue(new ApiError('feed not found', { status: 404, kind: 'http', path: '/api/feeds/1' }))
     render(<SourcesPage />)

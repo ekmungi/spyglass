@@ -1,5 +1,6 @@
 // EnginesSection: the "AI engines" group: the default engine and model, then one row per engine.
 import { useState } from 'react'
+import { useStayListed } from '../../hooks/useStayListed'
 import { Button, SectionHeading, Skeleton } from '../../ui'
 import type { EngineRow, SettingsValues } from './api'
 import { CustomServer } from './CustomServer'
@@ -32,10 +33,16 @@ function foldable(engines: readonly EngineRow[]): ReadonlySet<string> {
   return off.length > 0 && off.length < engines.length ? new Set(off.map((engine) => engine.id)) : new Set()
 }
 
-/** Lists the engines that are set up (every engine on request); each row saves on its own. */
+/**
+ * Lists the engines that are set up (every engine on request); each row saves on its own. An engine the
+ * reader changed during this visit stays listed even when the change leaves it not set up (switched off,
+ * key removed), so its note and the focus stay in view until the reader folds or unfolds the list.
+ */
 export function EnginesSection({ engines, loading, error, onRetry, onEngines, savedDefault, onDefaultSaved, settings, onSettingsSaved }: EnginesSectionProps) {
   const [showAll, setShowAll] = useState(false)
+  const changed = useStayListed<string>()
   const folded = engines ? foldable(engines) : null
+  const hiddenCount = folded ? [...folded].filter((id) => !changed.pinned.has(id)).length : 0
   return (
     <section aria-labelledby="settings-engines" className="rst-section">
       <SectionHeading id="settings-engines" note="Used by the assistant in the reader">
@@ -61,15 +68,25 @@ export function EnginesSection({ engines, loading, error, onRetry, onEngines, sa
               <EngineItem
                 key={engine.id}
                 engine={engine}
-                hidden={folded.has(engine.id) && !showAll}
-                onChange={(updated) => onEngines(engines.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)))}
+                hidden={folded.has(engine.id) && !showAll && !changed.pinned.has(engine.id)}
+                onChange={(updated) => {
+                  changed.pin(engine.id, true)
+                  onEngines(engines.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)))
+                }}
                 onRemoved={(id) => onEngines(engines.filter((entry) => entry.id !== id))}
               />
             ))}
           </ul>
-          {folded.size > 0 && (
-            <Button variant="quiet" size="sm" onClick={() => setShowAll((current) => !current)}>
-              {showAll ? 'Show only the engines that are set up' : `Show the ${folded.size} ${folded.size === 1 ? 'engine that is' : 'engines that are'} not set up`}
+          {hiddenCount > 0 && (
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={() => {
+                setShowAll((current) => !current)
+                changed.release()
+              }}
+            >
+              {showAll ? 'Show only the engines that are set up' : `Show the ${hiddenCount} ${hiddenCount === 1 ? 'engine that is' : 'engines that are'} not set up`}
             </Button>
           )}
           <CustomServer existingIds={engines.map((engine) => engine.id)} onAdded={(added) => onEngines([...engines, added])} />

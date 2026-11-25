@@ -496,6 +496,34 @@ describe('The list of AI engines', () => {
     expect(screen.queryByRole('button', { name: /not set up|set up$/ })).not.toBeInTheDocument()
   })
 
+  it('keeps an engine the reader switches off in view, with its note and the focus, until the list is folded', async () => {
+    api.loadEngines.mockResolvedValue([
+      engine({ id: 'e1', label: 'Engine One' }),
+      engine({ id: 'claude_code', label: 'Claude Code', kind: 'cli', available: true, enabled: true, models: [] }),
+      engine({ id: 'e3', label: 'Engine 3', available: false, models: [] }),
+    ])
+    // Switched off, the command-line engine is no longer available, which would fold it away.
+    api.configureEngine.mockImplementation(async (id: string, change: { enabled?: boolean }) => ({
+      ...engine({ id, label: 'Claude Code', kind: 'cli', models: [] }),
+      enabled: change.enabled,
+      available: change.enabled === true,
+    }))
+    render(<SettingsPage />)
+    openTab('AI engines')
+    const toggle = await screen.findByRole('switch', { name: 'Use Claude Code' })
+    toggle.focus()
+    fireEvent.click(toggle)
+    expect(await screen.findByText('Switched off.')).toBeVisible()
+    expect(toggle).toBeVisible()
+    expect(document.activeElement).toBe(toggle)
+    expect(visibleEngines()).toHaveLength(2)
+    // The button counts only the engines it hides.
+    fireEvent.click(screen.getByRole('button', { name: 'Show the 1 engine that is not set up' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show only the engines that are set up' }))
+    expect(toggle).not.toBeVisible()
+    expect(visibleEngines()).toHaveLength(1)
+  })
+
   it('counts a custom server the reader added as set up, so it does not vanish when its server is down', async () => {
     api.loadEngines.mockResolvedValue([
       engine({ id: 'e1', label: 'Engine One' }),
