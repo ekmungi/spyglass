@@ -165,6 +165,6 @@ describe('FeedPage reading list', () => {
     const { result } = renderHook(() => useReadingList())
     expect(result.current).toBeNull()
     fireEvent.click(links[1])
-    expect(result.current).toEqual({ label: 'the Feed', ids })
+    expect(result.current).toEqual({ label: 'the Feed', ids, origin: 'feed' })
   })
 })

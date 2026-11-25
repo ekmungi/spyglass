@@ -7,7 +7,7 @@ import { getAppearance, initAppearance, setAppearance } from '../appearance/appe
 import type { ItemDetail } from '../api/types'
 import { getAssistState, setAssistOpen } from '../assistant/assistStore'
 import { closeClaudeDialog, getClaudeDialog } from '../claude/claudeStore'
-import { navigate, useRoute } from '../router'
+import { navigate, readerOrigin, useRoute } from '../router'
 import { resetFilingConfigured, setFilingConfigured } from '../state/filingConfigured'
 import { resetReadingList, setReadingList } from '../state/readingList'
 import { readingLabel } from './readingLabel'
@@ -89,10 +89,15 @@ describe('reading label', () => {
   })
 })
 
+/** Put the reader for `id` in the address, as the router does when it is opened from the page `from`. */
+function openedFrom(from: string, id: number) {
+  window.history.replaceState({ radarIndex: 1, radarFrom: from }, '', `/#/item/${id}`)
+}
+
 describe('previous and next story', () => {
   it('shows Previous story, Next story and "2 of 27 in Today", and Next replaces the entry with the third story', () => {
-    window.history.replaceState(null, '', `/#/item/${IDS[1]}`)
-    setReadingList('Today', IDS)
+    openedFrom('#/today', IDS[1])
+    setReadingList('Today', IDS, 'today')
     renderBar({ ...detail, id: IDS[1] })
     expect(screen.getByRole('button', { name: 'Previous story' })).toBeInTheDocument()
     expect(screen.getByText('2 of 27 in Today')).toBeInTheDocument()
@@ -104,8 +109,8 @@ describe('previous and next story', () => {
   })
 
   it('names the Feed by its label, and Previous goes to the first story', () => {
-    window.history.replaceState(null, '', `/#/item/${IDS[1]}`)
-    setReadingList('the Feed', IDS)
+    openedFrom('#/feed?section=health', IDS[1])
+    setReadingList('the Feed', IDS, 'feed')
     renderBar({ ...detail, id: IDS[1] })
     expect(screen.getByText('2 of 27 in the Feed')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Previous story' }))
@@ -113,7 +118,8 @@ describe('previous and next story', () => {
   })
 
   it('shows the key in each tooltip and disables a step past either end of the list', () => {
-    setReadingList('Today', IDS)
+    openedFrom('#/today', IDS[0])
+    setReadingList('Today', IDS, 'today')
     renderBar({ ...detail, id: IDS[0] })
     expect(tipOf(screen.getByRole('button', { name: 'Previous story' }))).toBe('Previous story (K)')
     expect(tipOf(screen.getByRole('button', { name: 'Next story' }))).toBe('Next story (J)')
@@ -127,8 +133,24 @@ describe('previous and next story', () => {
     expect(screen.queryByRole('button', { name: 'Next story' })).not.toBeInTheDocument()
     expect(screen.queryByText(/ of \d+ in /)).not.toBeInTheDocument()
     cleanup()
-    setReadingList('Today', IDS)
+    openedFrom('#/today', 42)
+    setReadingList('Today', IDS, 'today')
     renderBar()
+    expect(screen.queryByRole('button', { name: 'Next story' })).not.toBeInTheDocument()
+  })
+
+  it('shows none of the three controls for a reader opened from another page than the list', () => {
+    // Today set the list; the reader went to Watch and opened an item that is also in Today's list.
+    setReadingList('Today', IDS, 'today')
+    openedFrom('#/watch', IDS[3])
+    renderBar({ ...detail, id: IDS[3] })
+    expect(screen.queryByRole('button', { name: 'Previous story' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next story' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/ of 27 in /)).not.toBeInTheDocument()
+    cleanup()
+    // A reader opened cold (no page to come back to) shows none either.
+    window.history.replaceState(null, '', `/#/item/${IDS[3]}`)
+    renderBar({ ...detail, id: IDS[3] })
     expect(screen.queryByRole('button', { name: 'Next story' })).not.toBeInTheDocument()
   })
 
@@ -139,7 +161,7 @@ describe('previous and next story', () => {
       return route.name === 'item' ? <ReaderTopBar detail={{ ...detail, id: route.id }} showPdf={false} onTogglePdf={noop} /> : <p>The list</p>
     }
     window.history.replaceState(null, '', '/#/today')
-    setReadingList('Today', IDS)
+    setReadingList('Today', IDS, 'today')
     render(<Harness />)
     act(() => navigate({ name: 'item', id: IDS[1] }))
     fireEvent.click(screen.getByRole('button', { name: 'Next story' }))
@@ -147,6 +169,7 @@ describe('previous and next story', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next story' }))
     expect(window.location.hash).toBe(`#/item/${IDS[4]}`)
     expect(screen.getByText('5 of 27 in Today')).toBeInTheDocument()
+    expect(readerOrigin()).toEqual({ name: 'today' })
     const popped = new Promise((resolve) => window.addEventListener('popstate', resolve, { once: true }))
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     await popped
@@ -166,7 +189,8 @@ describe('the icon bar', () => {
 
   it('opens every tooltip in the bar downwards', () => {
     // The bar sits at the top of the window, so a tooltip above a button would be cut off.
-    setReadingList('Today', IDS)
+    openedFrom('#/today', IDS[1])
+    setReadingList('Today', IDS, 'today')
     const { container } = renderBar({
       ...detail,
       id: IDS[1],

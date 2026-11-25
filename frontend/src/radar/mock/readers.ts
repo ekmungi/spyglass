@@ -81,7 +81,7 @@ function genericHtml(item: RadarItem): string {
 <p>Reports like this one usually include the announcement itself, a few lines of context from people involved, and the open questions that remain. The reader keeps the original structure so that you can scan headings first and read closely where it matters.</p>
 <h2>What to watch</h2>
 <ul><li>Whether independent groups replicate the numbers.</li><li>How quickly other companies respond.</li><li>What regulators or customers say in the coming weeks.</li></ul>
-<p>Use <em>Open original</em> above to read the article on its own site.</p>
+<p>Use <em>Open the original page</em> above to read the article on its own site.</p>
 `
 }
 

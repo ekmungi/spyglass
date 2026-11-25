@@ -182,6 +182,11 @@ const TODAY = {
   status: {},
 } as unknown as TodayResponse
 
+/** Put the reader for `id` in the address, as the router does when it is opened from the page `from`. */
+function openedFrom(from: string, id = 5) {
+  window.history.replaceState({ radarIndex: 1, radarFrom: from }, '', `/#/item/${id}`)
+}
+
 /** Load Today's answer into the cache the way the Today page does, then leave. */
 async function visitToday() {
   function TodayVisit() {
@@ -196,8 +201,8 @@ async function visitToday() {
 describe('the next story at the end', () => {
   it('offers "Next in Today · 3 of 27" with the headline Today holds, and opens it in place of this one', async () => {
     await visitToday()
-    window.history.replaceState(null, '', '/#/item/5')
-    setReadingList('Today', LIST)
+    openedFrom('#/today')
+    setReadingList('Today', LIST, 'today')
     api.getItem.mockResolvedValue(detail('ok'))
     render(<ReaderPage id={5} />)
     const next = await screen.findByRole('link', { name: /^Next in Today · 3 of 27/ })
@@ -213,7 +218,8 @@ describe('the next story at the end', () => {
     render(<ReaderPage id={6} />)
     await screen.findByText('The article body.')
     cleanup()
-    setReadingList('the Feed', LIST)
+    openedFrom('#/feed')
+    setReadingList('the Feed', LIST, 'feed')
     api.getItem.mockResolvedValue(detail('ok'))
     render(<ReaderPage id={5} />)
     expect(await screen.findByRole('link', { name: /^Next in the Feed · 3 of 27/ })).toHaveTextContent(NEXT_HEADLINE)
@@ -227,15 +233,16 @@ describe('the next story at the end', () => {
     render(<DayVisit />)
     await screen.findByText('Day loaded')
     cleanup()
-    window.history.replaceState({ radarIndex: 1, radarFrom: '#/today/2026-11-20' }, '', '/#/item/5')
-    setReadingList('Today', LIST)
+    openedFrom('#/today/2026-11-20')
+    setReadingList('Today', LIST, 'today')
     api.getItem.mockResolvedValue(detail('ok'))
     render(<ReaderPage id={5} />)
     expect(await screen.findByRole('link', { name: /^Next in Today · 3 of 27/ })).toHaveTextContent(NEXT_HEADLINE)
   })
 
   it('shows the position alone as the link when nothing holds the next headline', async () => {
-    setReadingList('the Feed', LIST)
+    openedFrom('#/feed')
+    setReadingList('the Feed', LIST, 'feed')
     api.getItem.mockResolvedValue(detail('ok'))
     render(<ReaderPage id={5} />)
     const next = await screen.findByRole('link', { name: 'Next in the Feed · 3 of 27' })
@@ -243,7 +250,8 @@ describe('the next story at the end', () => {
   })
 
   it('shows nothing after the last story of the list, or without a list', async () => {
-    setReadingList('Today', [4, 5])
+    openedFrom('#/today')
+    setReadingList('Today', [4, 5], 'today')
     api.getItem.mockResolvedValue(detail('ok'))
     render(<ReaderPage id={5} />)
     await screen.findByText('The article body.')
@@ -258,8 +266,8 @@ describe('the next story at the end', () => {
 
 describe('the J and K keys', () => {
   it('J opens the next story and K the previous one, each in place of this one', async () => {
-    window.history.replaceState(null, '', '/#/item/5')
-    setReadingList('Today', LIST)
+    openedFrom('#/today')
+    setReadingList('Today', LIST, 'today')
     api.getItem.mockResolvedValue(detail('ok'))
     render(<ReaderPage id={5} />)
     await screen.findByText('The article body.')
@@ -271,21 +279,58 @@ describe('the J and K keys', () => {
     expect(window.history.length).toBe(entries)
   })
 
-  it('does nothing while the focus is in a text field or a text area, or without a list', async () => {
-    window.history.replaceState(null, '', '/#/item/5')
-    setReadingList('Today', LIST)
+  it('does nothing while the focus is in a text field, a text area or an editable element, or without a list', async () => {
+    openedFrom('#/today')
+    setReadingList('Today', LIST, 'today')
     api.getItem.mockResolvedValue(detail('ok'))
     render(<ReaderPage id={5} />)
     await screen.findByText('The article body.')
     const field = document.body.appendChild(document.createElement('input'))
     const area = document.body.appendChild(document.createElement('textarea'))
+    const editable = document.body.appendChild(document.createElement('div'))
+    editable.setAttribute('contenteditable', 'true')
+    const inside = editable.appendChild(document.createElement('span'))
     fireEvent.keyDown(field, { key: 'j' })
     fireEvent.keyDown(area, { key: 'k' })
+    fireEvent.keyDown(editable, { key: 'j' })
+    fireEvent.keyDown(inside, { key: 'k' })
     expect(window.location.hash).toBe('#/item/5')
     field.remove()
     area.remove()
+    editable.remove()
     act(() => resetReadingList())
     fireEvent.keyDown(window, { key: 'j' })
+    expect(window.location.hash).toBe('#/item/5')
+  })
+
+  it('does nothing with a modifier key held, Shift included', async () => {
+    openedFrom('#/today')
+    setReadingList('Today', LIST, 'today')
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    await screen.findByText('The article body.')
+    fireEvent.keyDown(window, { key: 'J', shiftKey: true })
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'j', altKey: true })
+    fireEvent.keyDown(window, { key: 'k', metaKey: true })
+    expect(window.location.hash).toBe('#/item/5')
+  })
+})
+
+describe('a reader opened from another page than the reading list', () => {
+  it('has no previous and next, no J and K, and no next-story block', async () => {
+    // Today set the list; the reader then went to Watch and opened an item that is also in Today's list.
+    setReadingList('Today', LIST, 'today')
+    openedFrom('#/watch')
+    api.getItem.mockResolvedValue(detail('ok'))
+    render(<ReaderPage id={5} />)
+    await screen.findByText('The article body.')
+    expect(screen.queryByRole('button', { name: 'Previous story' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next story' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/ of 27 in /)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Next in /)).not.toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'j' })
+    fireEvent.keyDown(window, { key: 'k' })
     expect(window.location.hash).toBe('#/item/5')
   })
 })

@@ -214,6 +214,7 @@ describe('TodayPage', () => {
     const list = JSON.parse(screen.getByTestId('reading-list').textContent ?? 'null')
     const expected = orderedSections(brief).flatMap((section) => [...section.stories, ...(section.more ?? [])]).map((story) => story.item_id)
     expect(list.label).toBe('Today')
+    expect(list.origin).toBe('today')
     expect(list.ids).toEqual(expected)
     // The top section's three picked stories, its three unpicked ones, then the watch list.
     expect(list.ids.slice(0, 8)).toEqual([101, 104, 103, 141, 142, 143, 102, 117])

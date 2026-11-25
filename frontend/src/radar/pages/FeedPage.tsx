@@ -166,7 +166,7 @@ export function FeedPage({ params, active = true }: { params: Record<string, str
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const items = useMemo(() => (toFile && !focused ? listed.filter((item) => effectiveFiling(item.id, item.filing) === 'waiting') : listed), [listed, toFile, focused, filingVersion])
   // The reader moves between the rows loaded here, so opening any of them records the list in order.
-  const rememberList = useCallback(() => setReadingList('the Feed', items.map((item) => item.id)), [items])
+  const rememberList = useCallback(() => setReadingList('the Feed', items.map((item) => item.id), 'feed'), [items])
   const onOpen = useCallback(
     (index: number) => {
       if (!items[index]) return

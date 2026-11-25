@@ -1,11 +1,12 @@
-// Tests for the reading list: the list the reader last opened an item from, and where an item sits in it.
+// Tests for the reading list: the list the reader last opened an item from, the page it belongs to,
+// and where an item sits in it.
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { neighbours, resetReadingList, setReadingList, useReadingList } from './readingList'
 
 afterEach(() => resetReadingList())
 
-const LIST = { label: 'Today', ids: [11, 12, 13, 14] }
+const LIST = { label: 'Today', ids: [11, 12, 13, 14], origin: 'today' as const }
 
 describe('neighbours', () => {
   it('has no previous item at the start of the list', () => {
@@ -27,18 +28,18 @@ describe('neighbours', () => {
 })
 
 describe('setReadingList and useReadingList', () => {
-  it('starts empty and hands every reader the list that was set last', () => {
+  it('starts empty and hands every reader the list that was set last, with the page it belongs to', () => {
     const { result } = renderHook(() => useReadingList())
     expect(result.current).toBeNull()
-    act(() => setReadingList('the Feed', [5, 6]))
-    expect(result.current).toEqual({ label: 'the Feed', ids: [5, 6] })
-    act(() => setReadingList('Today', [7]))
-    expect(result.current).toEqual({ label: 'Today', ids: [7] })
+    act(() => setReadingList('the Feed', [5, 6], 'feed'))
+    expect(result.current).toEqual({ label: 'the Feed', ids: [5, 6], origin: 'feed' })
+    act(() => setReadingList('Today', [7], 'today'))
+    expect(result.current).toEqual({ label: 'Today', ids: [7], origin: 'today' })
   })
 
   it('keeps its own copy of the ids, so a later change to the caller array does not move it', () => {
     const ids = [1, 2, 3]
-    setReadingList('Today', ids)
+    setReadingList('Today', ids, 'today')
     ids.push(4)
     const { result } = renderHook(() => useReadingList())
     expect(result.current?.ids).toEqual([1, 2, 3])

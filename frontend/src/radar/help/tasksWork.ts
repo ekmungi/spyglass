@@ -118,7 +118,7 @@ export const ASKING_GROUP: HelpGroup = {
       title: 'Ask about an article or a passage',
       purpose: 'Get an explanation or an answer about what you are reading.',
       steps: [
-        'Open an item in the reader. If the assistant is closed, press {{Ask the assistant}}.',
+        'Open an item in the reader. If the assistant is closed, press {{Ask the assistant about this story}}.',
         'Press a starter such as {{Explain}} or {{How is this relevant to me?}}, or type a question in the box and press {{Send}}.',
         'To ask about one passage, select the text in the article and choose {{Ask}}, {{Explain}} or {{Why is this so?}} on the small bar.',
       ],

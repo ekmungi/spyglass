@@ -62,7 +62,7 @@ function BriefBody({ brief, days, latestDay, active, unopenedDays, filingLine, a
   }, [active, brief.day])
 
   useEffect(() => {
-    if (active) setReadingList('Today', flat.map((story) => story.item_id))
+    if (active) setReadingList('Today', flat.map((story) => story.item_id), 'today')
   }, [active, flat])
 
   return (

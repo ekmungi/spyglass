@@ -79,6 +79,21 @@ describe('opening an item', () => {
   })
 })
 
+describe('steps in the reader', () => {
+  const steps = (id: string) => findTask(id)?.steps.join(' ') ?? ''
+
+  it('name the controls of the reader bar as they are now', () => {
+    // Width, thumbs and the chat icon are buttons in the bar; Follow moved into More.
+    expect(steps('reading-width-and-font')).toContain('{{Narrower text}} or {{Wider text}}')
+    expect(steps('reading-width-and-font')).not.toContain('{{More actions}}')
+    expect(steps('more-or-less-like-this')).toContain('{{More like this}} or {{Less like this}}')
+    expect(steps('more-or-less-like-this')).not.toContain('{{More actions}}')
+    expect(steps('follow-from-an-article')).toContain('{{More}} and choose {{Follow topics from this article}}')
+    expect(steps('follow-from-an-article')).not.toContain('{{Follow}}')
+    expect(steps('ask-about-an-article')).toContain('{{Ask the assistant about this story}}')
+  })
+})
+
 describe('tasks that need filing', () => {
   const FILING_TASKS = ['file-in-vault', 'file-now-and-approve-the-plan']
 

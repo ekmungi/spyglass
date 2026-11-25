@@ -72,7 +72,8 @@ describe('the reader top bar', () => {
   it('has no File in vault control when filing is not set up', () => {
     setFilingConfigured(false)
     render(<ReaderTopBar detail={detail} showPdf={false} onTogglePdf={() => undefined} />)
-    expect(screen.getByRole('button', { name: /Follow/ })).toBeInTheDocument()
+    // The bar has rendered (its Open the original page button is there), without File in vault.
+    expect(screen.getByRole('button', { name: 'Open the original page' })).toBeInTheDocument()
     expect(screen.queryByText('File in vault')).not.toBeInTheDocument()
   })
 

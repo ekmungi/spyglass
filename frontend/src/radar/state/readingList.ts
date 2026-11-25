@@ -1,12 +1,20 @@
-// The reading list: the label and the ordered item ids of the list the reader last opened an item
-// from (Today, the Feed), so the reader can move to the previous and next story. It lives in memory
-// for the session only.
+// The reading list: the label, the ordered item ids and the page of the list the reader last opened
+// an item from (Today, the Feed), so the reader can move to the previous and next story. It lives in
+// memory for the session only.
 import { useSyncExternalStore } from 'react'
+
+/** The page a reading list belongs to, named as its route is ("today", "feed"). */
+export type ReadingOrigin = 'today' | 'feed'
 
 export interface ReadingList {
   /** How the list is named in the reader, such as "Today" or "the Feed". */
   label: string
   ids: number[]
+  /**
+   * The page that set the list. The reader uses the list only when it was opened from this page, so
+   * a list left over from Today does not drive a reader opened from Watch.
+   */
+  origin: ReadingOrigin
 }
 
 /** Where one item sits in a reading list. */
@@ -32,9 +40,12 @@ function subscribe(listener: () => void): () => void {
   }
 }
 
-/** Replace the reading list. The ids are copied, so later changes to the caller's array do not move it. */
-export function setReadingList(label: string, ids: number[]): void {
-  current = { label, ids: [...ids] }
+/**
+ * Replace the reading list with `ids`, named `label`, as set by the page `origin`. The ids are
+ * copied, so later changes to the caller's array do not move it.
+ */
+export function setReadingList(label: string, ids: number[], origin: ReadingOrigin): void {
+  current = { label, ids: [...ids], origin }
   emit()
 }
 
