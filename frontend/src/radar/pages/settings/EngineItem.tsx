@@ -13,10 +13,12 @@ export interface EngineItemProps {
   onChange: (engine: EngineRow) => void
   /** A custom server was removed. */
   onRemoved: (id: string) => void
+  /** Folded away: the row stays mounted but out of sight, so anything typed into it is kept. */
+  hidden?: boolean
 }
 
 /** A row in the AI engines list. */
-export function EngineItem({ engine, onChange, onRemoved }: EngineItemProps) {
+export function EngineItem({ engine, onChange, onRemoved, hidden = false }: EngineItemProps) {
   const keyId = useId()
   const urlId = useId()
   const [key, setKey] = useState('')
@@ -86,7 +88,7 @@ export function EngineItem({ engine, onChange, onRemoved }: EngineItemProps) {
   }
 
   return (
-    <li className="rst-engine">
+    <li className="rst-engine" hidden={hidden}>
       <div className="rst-engine__head">
         <span className="rst-name">{engine.label}</span>
         <span className={engine.available ? 'rst-ok' : 'r-meta'}>{engine.available ? 'Available' : 'Not configured'}</span>

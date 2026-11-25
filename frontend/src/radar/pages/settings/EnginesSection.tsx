@@ -22,21 +22,20 @@ export interface EnginesSectionProps {
 }
 
 /**
- * Splits the engines into the rows to list and the number of engines that are not set up, which the
- * button offers to show. A custom server counts as set up whatever its status, because the reader
- * added it on purpose and it would otherwise disappear from the list the moment it was added.
- * With none set up, or all set up, there is nothing to fold away: every row is listed, no button shows.
+ * The engines that are not set up, when the list can fold them away: the ones to hide. A custom server
+ * counts as set up whatever its status, because the reader added it on purpose and it would otherwise
+ * disappear from the list the moment it was added. With none set up, or all set up, there is nothing to
+ * fold away: no row is hidden and no button shows.
  */
-function foldEngines(engines: readonly EngineRow[], showAll: boolean): { rows: EngineRow[]; notSetUp: number } {
+function foldable(engines: readonly EngineRow[]): ReadonlySet<string> {
   const off = engines.filter((engine) => !engine.available && !engine.custom)
-  const foldable = off.length > 0 && off.length < engines.length
-  return { rows: foldable && !showAll ? engines.filter((engine) => !off.includes(engine)) : [...engines], notSetUp: foldable ? off.length : 0 }
+  return off.length > 0 && off.length < engines.length ? new Set(off.map((engine) => engine.id)) : new Set()
 }
 
 /** Lists the engines that are set up (every engine on request); each row saves on its own. */
 export function EnginesSection({ engines, loading, error, onRetry, onEngines, savedDefault, onDefaultSaved, settings, onSettingsSaved }: EnginesSectionProps) {
   const [showAll, setShowAll] = useState(false)
-  const folded = engines ? foldEngines(engines, showAll) : null
+  const folded = engines ? foldable(engines) : null
   return (
     <section aria-labelledby="settings-engines" className="rst-section">
       <SectionHeading id="settings-engines" note="Used by the assistant in the reader">
@@ -57,18 +56,20 @@ export function EnginesSection({ engines, loading, error, onRetry, onEngines, sa
         <>
           <DefaultEngine key={engines.map((engine) => `${engine.id}${engine.available}`).join(',')} engines={engines} saved={savedDefault} onSaved={onDefaultSaved} />
           <ul className="r-rows rst-engines">
-            {folded.rows.map((engine) => (
+            {/* Folded rows stay mounted, hidden, so a key or address typed into one is not lost. */}
+            {engines.map((engine) => (
               <EngineItem
                 key={engine.id}
                 engine={engine}
+                hidden={folded.has(engine.id) && !showAll}
                 onChange={(updated) => onEngines(engines.map((entry) => (entry.id === updated.id ? { ...entry, ...updated } : entry)))}
                 onRemoved={(id) => onEngines(engines.filter((entry) => entry.id !== id))}
               />
             ))}
           </ul>
-          {folded.notSetUp > 0 && (
+          {folded.size > 0 && (
             <Button variant="quiet" size="sm" onClick={() => setShowAll((current) => !current)}>
-              {showAll ? 'Show only the engines that are set up' : `Show the ${folded.notSetUp} ${folded.notSetUp === 1 ? 'engine that is' : 'engines that are'} not set up`}
+              {showAll ? 'Show only the engines that are set up' : `Show the ${folded.size} ${folded.size === 1 ? 'engine that is' : 'engines that are'} not set up`}
             </Button>
           )}
           <CustomServer existingIds={engines.map((engine) => engine.id)} onAdded={(added) => onEngines([...engines, added])} />

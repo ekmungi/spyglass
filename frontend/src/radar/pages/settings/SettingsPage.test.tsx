@@ -434,6 +434,9 @@ describe('Settings tabs', () => {
   })
 })
 
+/** The engine rows the reader can see (rows folded away stay in the document, hidden). */
+const visibleEngines = () => Array.from(document.querySelectorAll('.rst-engine')).filter((row) => !row.closest('[hidden]'))
+
 describe('The list of AI engines', () => {
   /** Nine engines, the first two set up. */
   function nine(): EngineRow[] {
@@ -449,11 +452,24 @@ describe('The list of AI engines', () => {
     render(<SettingsPage />)
     openTab('AI engines')
     expect(await screen.findByText('Engine One', { selector: '.rst-name' })).toBeInTheDocument()
-    expect(document.querySelectorAll('.rst-engine')).toHaveLength(2)
+    expect(visibleEngines()).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: 'Show the 7 engines that are not set up' }))
-    expect(document.querySelectorAll('.rst-engine')).toHaveLength(9)
+    expect(visibleEngines()).toHaveLength(9)
     fireEvent.click(screen.getByRole('button', { name: 'Show only the engines that are set up' }))
-    expect(document.querySelectorAll('.rst-engine')).toHaveLength(2)
+    expect(visibleEngines()).toHaveLength(2)
+  })
+
+  it('keeps a key typed into an engine that is not set up when the list is folded and unfolded', async () => {
+    api.loadEngines.mockResolvedValue([engine({ id: 'e1', label: 'Engine One' }), engine({ id: 'e2', label: 'Engine Two', available: false, needs_key: true, models: [] })])
+    render(<SettingsPage />)
+    openTab('AI engines')
+    await showEveryEngine()
+    fireEvent.change(await screen.findByLabelText('API key for Engine Two'), { target: { value: SECRET } })
+    fireEvent.click(screen.getByRole('button', { name: 'Show only the engines that are set up' }))
+    // Folded: the row is out of sight, not in the list the reader sees.
+    expect(visibleEngines()).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Show the 1 engine that is not set up' }))
+    expect(screen.getByLabelText('API key for Engine Two')).toHaveValue(SECRET)
   })
 
   it('says "engine that is" for one engine that is not set up', async () => {
@@ -468,7 +484,7 @@ describe('The list of AI engines', () => {
     const none = render(<SettingsPage />)
     openTab('AI engines')
     expect(await screen.findByText('Engine One', { selector: '.rst-name' })).toBeInTheDocument()
-    expect(document.querySelectorAll('.rst-engine')).toHaveLength(9)
+    expect(visibleEngines()).toHaveLength(9)
     expect(screen.queryByRole('button', { name: /not set up|set up$/ })).not.toBeInTheDocument()
     none.unmount()
 
@@ -476,7 +492,7 @@ describe('The list of AI engines', () => {
     render(<SettingsPage />)
     openTab('AI engines')
     expect(await screen.findByText('Engine One', { selector: '.rst-name' })).toBeInTheDocument()
-    expect(document.querySelectorAll('.rst-engine')).toHaveLength(9)
+    expect(visibleEngines()).toHaveLength(9)
     expect(screen.queryByRole('button', { name: /not set up|set up$/ })).not.toBeInTheDocument()
   })
 
