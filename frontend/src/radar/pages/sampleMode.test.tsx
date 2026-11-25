@@ -58,7 +58,11 @@ describe('Sources page in sample mode', () => {
     timing.pollMs = 300
     try {
       render(<SourcesPage />)
-      expect(await screen.findByText('Signal Ledger', {}, { timeout: 4000 })).toBeInTheDocument()
+      // The feeds have their own tab: the sample's failing feed is listed at once, the working ones behind a button.
+      fireEvent.click(await screen.findByRole('tab', { name: /^Feeds/ }, { timeout: 4000 }))
+      expect(await screen.findByText('Policy & Compute')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Show the working feeds' }))
+      expect(screen.getByText('Signal Ledger')).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'Collect now' }))
       expect(await screen.findByText(/Collecting now/, {}, { timeout: 4000 })).toBeInTheDocument()
       await waitFor(() => expect(screen.getByRole('button', { name: 'Collect now' })).toBeEnabled(), { timeout: 9000 })

@@ -1,12 +1,12 @@
-// FeedsSection: every subscribed feed with its health in words, an on/off switch, removal, and the add form.
+// FeedsSection: the feeds that need a look, one line of counts that stands in for the feeds that work (with
+// a button to list them), and the add form. Each feed has its health in words, an on/off switch and removal.
 import { useCallback, useState } from 'react'
 import { errorMessage } from '../../api/errors'
-import { Button, Dialog, EmptyState, IconButton, IconMore, Menu, SectionHeading, toast } from '../../ui'
+import { Button, Dialog, EmptyState, SectionHeading, toast } from '../../ui'
 import { removeFeed, setFeedEnabled, type FeedRow } from './api'
 import { AddFeed } from './AddFeed'
-import { feedStatus } from './describe'
-import { formatWhen } from './format'
-import { Switch } from './Switch'
+import { FeedRowItem } from './FeedRowItem'
+import { otherFeedsSummary, splitFeeds } from './feedHealth'
 
 export interface FeedsSectionProps {
   feeds: readonly FeedRow[]
@@ -18,6 +18,8 @@ export interface FeedsSectionProps {
 export function FeedsSection({ feeds, onChange }: FeedsSectionProps) {
   const [busyId, setBusyId] = useState<number | null>(null)
   const [removing, setRemoving] = useState<FeedRow | null>(null)
+  const [showWorking, setShowWorking] = useState(false)
+  const { working, others } = splitFeeds(feeds)
 
   // A stable handler: the dialog refocuses its first control whenever this function changes.
   const closeRemove = useCallback(() => setRemoving(null), [])
@@ -60,37 +62,30 @@ export function FeedsSection({ feeds, onChange }: FeedsSectionProps) {
       {feeds.length === 0 ? (
         <EmptyState title="No feeds yet" body="Add the address of a blog, newsletter or journal feed below and Spyglass checks it for new items." />
       ) : (
-        <ul className="r-rows">
-          {feeds.map((feed) => {
-            const status = feedStatus(feed)
-            return (
-              <li key={feed.id} className="rs-row" aria-busy={busyId === feed.id || undefined}>
-                <div className="rs-main">
-                  <div className="rs-line">
-                    <span className="rs-name">{feed.name}</span>
-                    <span className={status.tone === 'problem' ? 'rs-problem' : status.tone === 'ok' ? 'rs-ok' : 'r-meta'}>
-                      {status.tone === 'problem' ? 'Failing' : status.text}
-                    </span>
-                  </div>
-                  {status.tone === 'problem' && <p className="rs-problem">{status.text}</p>}
-                  <p className="r-meta">
-                    {[feed.lastFetchAt ? `Fetched ${formatWhen(feed.lastFetchAt)}` : null, feed.items !== null ? `${feed.items} items` : null]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </p>
-                </div>
-                <div className="rs-actions">
-                  <Switch label={`${feed.name} on or off`} checked={feed.enabled} disabled={busyId === feed.id} onChange={(next) => void toggle(feed, next)} />
-                  <Menu
-                    label={`Actions for ${feed.name}`}
-                    items={[{ id: 'remove', label: 'Remove…', onSelect: () => setRemoving(feed) }]}
-                    trigger={<IconButton label={`Actions for ${feed.name}`} icon={<IconMore size={16} />} size="sm" />}
-                  />
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <>
+          {others.length > 0 && (
+            <ul className="r-rows">
+              {others.map((feed) => (
+                <FeedRowItem key={feed.id} feed={feed} busy={busyId === feed.id} onToggle={(row, enabled) => void toggle(row, enabled)} onRemove={setRemoving} />
+              ))}
+            </ul>
+          )}
+          <div className="rs-feedline">
+            <span className="r-meta">{[otherFeedsSummary(others), working.length > 0 ? `${working.length} working` : ''].filter(Boolean).join('. ')}.</span>
+            {working.length > 0 && (
+              <Button variant="quiet" size="sm" aria-expanded={showWorking} onClick={() => setShowWorking((shown) => !shown)}>
+                {showWorking ? 'Hide the working feeds' : 'Show the working feeds'}
+              </Button>
+            )}
+          </div>
+          {showWorking && working.length > 0 && (
+            <ul className="r-rows">
+              {working.map((feed) => (
+                <FeedRowItem key={feed.id} feed={feed} busy={busyId === feed.id} onToggle={(row, enabled) => void toggle(row, enabled)} onRemove={setRemoving} />
+              ))}
+            </ul>
+          )}
+        </>
       )}
       <AddFeed onAdded={add} />
       <Dialog

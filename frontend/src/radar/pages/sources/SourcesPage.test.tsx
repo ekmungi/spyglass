@@ -63,30 +63,132 @@ beforeEach(() => {
   api.removeFeed.mockResolvedValue({})
 })
 
-describe('SourcesPage', () => {
-  it('shows the header line, the three groups and plain-language health', async () => {
-    render(<SourcesPage />)
-    expect(await screen.findByText(/Last collected/)).toHaveTextContent(/Next brief/)
-    expect(screen.getByRole('heading', { name: 'From you' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Feeds' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Searches and signals' })).toBeInTheDocument()
+/** Open a tab of the strip by the start of its name (a count or an alert may follow the label). */
+const openTab = async (name: string) => fireEvent.click(await screen.findByRole('tab', { name: new RegExp(`^${name}`) }))
 
-    const fromYou = screen.getByRole('region', { name: 'From you' })
+describe('SourcesPage', () => {
+  it('shows the collecting line above one strip of tabs, and one group at a time', async () => {
+    render(<SourcesPage />)
+    const line = await screen.findByText(/Last collected/)
+    expect(line).toHaveTextContent(/Next brief/)
+    const strip = await screen.findByRole('tablist', { name: 'Sources' })
+    expect(line.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(strip).getAllByRole('tab').map((entry) => entry.textContent)).toEqual(['From you', 'Feeds', 'Searches', 'FDA decisions'])
+    expect(screen.getByRole('heading', { name: 'From you' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Feeds' })).not.toBeInTheDocument()
+    await openTab('Searches')
+    expect(screen.getByRole('heading', { name: 'Searches and signals' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'From you' })).not.toBeInTheDocument()
+    await openTab('FDA decisions')
+    expect(screen.getByRole('heading', { name: 'FDA device decisions' })).toBeInTheDocument()
+  })
+
+  it('gives each source its name and state, and keeps the explanation behind Details', async () => {
+    render(<SourcesPage />)
+    const fromYou = await screen.findByRole('region', { name: 'From you' })
     expect(within(fromYou).getByText('Not configured')).toBeInTheDocument() // Slack
-    expect(within(fromYou).getByText(/Slack needs a bot token/)).toBeInTheDocument()
-    expect(within(fromYou).getByText(/set once in Spyglass.s settings file/)).toBeInTheDocument()
-    expect(within(fromYou).getAllByRole('link', { name: 'setup guide' })[0]).toHaveAttribute('href', '#/settings')
-    expect(fromYou).not.toHaveTextContent('.env')
     expect(within(fromYou).getByText('Configured')).toBeInTheDocument() // Gmail
     expect(within(fromYou).getByText('Waiting for its first run')).toBeInTheDocument() // Raindrop
+    expect(within(fromYou).queryByText(/Slack needs a bot token/)).not.toBeInTheDocument()
+    expect(within(fromYou).queryByText(/Post a link in your Spyglass channel/)).not.toBeInTheDocument()
+    expect(within(fromYou).queryByRole('link', { name: 'setup guide' })).not.toBeInTheDocument()
+    expect(within(fromYou).queryByRole('button', { name: 'How to set it up' })).not.toBeInTheDocument()
 
-    expect(screen.getByText('The address no longer exists; the site answered "not found".')).toBeInTheDocument()
-    expect(screen.getByText('The site did not answer in time.')).toBeInTheDocument()
+    fireEvent.click(within(fromYou).getAllByRole('button', { name: 'Details' })[0])
+    expect(within(fromYou).getByText(/Post a link in your Spyglass channel/)).toBeInTheDocument()
+    expect(within(fromYou).getByText(/Slack needs a bot token/)).toBeInTheDocument()
+    expect(within(fromYou).getByText(/set once in Spyglass.s settings file/)).toBeInTheDocument()
+    expect(within(fromYou).getByRole('link', { name: 'setup guide' })).toHaveAttribute('href', '#/settings')
+    expect(fromYou).not.toHaveTextContent('.env')
+    fireEvent.click(within(fromYou).getByRole('button', { name: 'Hide details' }))
+    expect(within(fromYou).queryByText(/Slack needs a bot token/)).not.toBeInTheDocument()
+  })
+
+  it('shows a search with its name and state, its last run behind Details, and a failure in words', async () => {
+    render(<SourcesPage />)
+    await openTab('Searches')
+    const signals = screen.getByRole('region', { name: 'Searches and signals' })
+    expect(within(signals).getByText('News search')).toBeInTheDocument()
+    expect(within(signals).getByText('Working')).toBeInTheDocument()
+    expect(within(signals).getByText('Failing')).toBeInTheDocument()
+    expect(within(signals).getByText('The site did not answer in time.')).toBeInTheDocument()
+    expect(within(signals).queryByText(/Last run/)).not.toBeInTheDocument()
+    fireEvent.click(within(signals).getAllByRole('button', { name: 'Details' })[0])
+    expect(within(signals).getByText(/Last run .* 11 new items/)).toBeInTheDocument()
     expect(screen.queryByText(/HTTPError/)).not.toBeInTheDocument()
+  })
+
+  it('offers no Searches tab when the service reports no search', async () => {
+    api.loadSources.mockResolvedValue({ ...view(), collectors: view().collectors.filter((row) => !['news', 'hn'].includes(row.key)) })
+    render(<SourcesPage />)
+    await screen.findByRole('tab', { name: /^Feeds/ })
+    expect(screen.queryByRole('tab', { name: /^Searches/ })).not.toBeInTheDocument()
+  })
+
+  it('puts an alert on the Feeds tab and a mark on the failing feed, and none on a switched-off feed', async () => {
+    api.loadSources.mockResolvedValue({
+      ...view(),
+      feeds: [
+        feed({ id: 1, name: 'Signal Ledger' }),
+        feed({ id: 2, name: 'Policy Notes', status: 'error', error: 'HTTPError: 404' }),
+        feed({ id: 3, name: 'Old Blog', enabled: false, status: 'error', error: 'x' }),
+      ],
+    })
+    render(<SourcesPage />)
+    expect(await screen.findByRole('img', { name: '1 feed is failing' })).toBeInTheDocument()
+    await openTab('Feeds')
+    const failing = screen.getByText('Policy Notes').closest('li') as HTMLElement
+    expect(within(failing).getByRole('img', { name: 'This feed is failing' })).toBeInTheDocument()
+    const off = screen.getByText('Old Blog').closest('li') as HTMLElement
+    expect(within(off).queryByRole('img', { name: 'This feed is failing' })).not.toBeInTheDocument()
+    expect(within(off).getByText('Switched off')).toBeInTheDocument()
+    expect(screen.getAllByRole('img', { name: 'This feed is failing' })).toHaveLength(1)
+  })
+
+  it('says how many feeds fail when there are several, and has no alert when none does', async () => {
+    api.loadSources.mockResolvedValue({
+      ...view(),
+      feeds: [feed({ id: 1, name: 'A', status: 'error' }), feed({ id: 2, name: 'B', status: 'error' })],
+    })
+    const first = render(<SourcesPage />)
+    expect(await screen.findByRole('img', { name: '2 feeds are failing' })).toBeInTheDocument()
+    first.unmount()
+    clearLoadCache()
+    api.loadSources.mockResolvedValue({ ...view(), feeds: [feed({ id: 1, name: 'A' }), feed({ id: 2, name: 'B', enabled: false })] })
+    render(<SourcesPage />)
+    await screen.findByRole('tab', { name: /^Feeds/ })
+    expect(screen.queryByRole('img', { name: /failing/ })).not.toBeInTheDocument()
+  })
+
+  it('replaces the working feeds by one line of counts and lists them on request', async () => {
+    api.loadSources.mockResolvedValue({
+      ...view(),
+      feeds: [
+        feed({ id: 1, name: 'Good One' }),
+        feed({ id: 2, name: 'Good Two' }),
+        feed({ id: 3, name: 'Good Three' }),
+        feed({ id: 4, name: 'Quiet A', enabled: false }),
+        feed({ id: 5, name: 'Quiet B', enabled: false }),
+        feed({ id: 6, name: 'Broken', status: 'error', error: 'HTTPError: 404' }),
+      ],
+    })
+    render(<SourcesPage />)
+    await openTab('Feeds')
+    expect(screen.getByText('2 switched off, 1 failing. 3 working.')).toBeInTheDocument()
+    expect(screen.getByText('Broken')).toBeInTheDocument()
+    expect(screen.getByText('Quiet A')).toBeInTheDocument()
+    expect(screen.queryByText('Good One')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show the working feeds' }))
+    expect(screen.getByText('Good One')).toBeInTheDocument()
+    expect(screen.getByText('Good Three')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the working feeds' }))
+    expect(screen.queryByText('Good One')).not.toBeInTheDocument()
   })
 
   it('switches a feed off once the server has confirmed it', async () => {
     render(<SourcesPage />)
+    await openTab('Feeds')
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the working feeds' }))
     const toggle = await screen.findByRole('switch', { name: 'Signal Ledger on or off' })
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(toggle)
@@ -97,6 +199,8 @@ describe('SourcesPage', () => {
   it('leaves the switch alone and reports the problem when the change fails', async () => {
     api.setFeedEnabled.mockRejectedValue(new ApiError('feed not found', { status: 404, kind: 'http', path: '/api/feeds/1' }))
     render(<SourcesPage />)
+    await openTab('Feeds')
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the working feeds' }))
     fireEvent.click(await screen.findByRole('switch', { name: 'Signal Ledger on or off' }))
     await waitFor(() => expect(api.setFeedEnabled).toHaveBeenCalled())
     expect(screen.getByRole('switch', { name: 'Signal Ledger on or off' })).toHaveAttribute('aria-checked', 'true')
@@ -104,6 +208,7 @@ describe('SourcesPage', () => {
 
   it('removes a feed after confirmation', async () => {
     render(<SourcesPage />)
+    await openTab('Feeds')
     fireEvent.click(await screen.findByRole('button', { name: 'Actions for Policy Notes' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Remove…' }))
     expect(api.removeFeed).not.toHaveBeenCalled()
@@ -115,6 +220,7 @@ describe('SourcesPage', () => {
   it('adds a feed from its address', async () => {
     api.addFeed.mockResolvedValue({ id: 9, name: 'New Blog', feed_url: 'https://new.example/feed', enabled: true })
     render(<SourcesPage />)
+    await openTab('Feeds')
     fireEvent.change(await screen.findByLabelText('Add a feed'), { target: { value: 'https://new.example/feed' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add feed' }))
     expect(await screen.findByText('Added New Blog.')).toBeInTheDocument()
@@ -130,6 +236,7 @@ describe('SourcesPage', () => {
     })
     api.addFeed.mockResolvedValueOnce({ id: 10, name: 'Site RSS', feed_url: 'https://site.example/rss', enabled: true })
     render(<SourcesPage />)
+    await openTab('Feeds')
     fireEvent.change(await screen.findByLabelText('Add a feed'), { target: { value: 'https://site.example/' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add feed' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Follow Site RSS' }))
@@ -141,6 +248,7 @@ describe('SourcesPage', () => {
     api.addFeed.mockRejectedValue(new ApiError('Nothing at that address looks like a feed.', { status: 422, kind: 'http', path: '/api/feeds' }))
     api.discoverFeeds.mockResolvedValue({ candidates: [], reason: 'No feeds were found on that page.' })
     render(<SourcesPage />)
+    await openTab('Feeds')
     fireEvent.change(await screen.findByLabelText('Add a feed'), { target: { value: 'https://nofeed.example/' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add feed' }))
     expect(await screen.findByText('No feeds were found on that page.')).toBeInTheDocument()
@@ -148,6 +256,7 @@ describe('SourcesPage', () => {
 
   it('rejects an address that is not a web address before asking the server', async () => {
     render(<SourcesPage />)
+    await openTab('Feeds')
     fireEvent.change(await screen.findByLabelText('Add a feed'), { target: { value: 'not a url' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add feed' }))
     expect(await screen.findByText(/Enter a full web address/)).toBeInTheDocument()
@@ -193,7 +302,7 @@ describe('SourcesPage', () => {
     render(<SourcesPage />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Spyglass is not reachable')
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
-    expect(await screen.findByRole('heading', { name: 'Feeds' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /^Feeds/ })).toBeInTheDocument()
   })
 
   it('sends a link in from the Add a link box', async () => {

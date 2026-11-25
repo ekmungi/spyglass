@@ -119,3 +119,24 @@
   display: block;
   margin-top: var(--space-4);
 }
+
+/* The content of the selected tab, set apart from the strip above it. */
+.rs-panel {
+  padding-top: var(--space-6);
+}
+/* The red alert mark before a failing feed's name. */
+.rs-alert {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: var(--space-2);
+  color: var(--danger);
+}
+/* The one line that stands in for the working feeds, with its button. */
+.rs-feedline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  font-size: var(--text-sm);
+}

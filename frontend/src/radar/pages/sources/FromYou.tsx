@@ -1,10 +1,12 @@
 // FromYou: the ways a link gets into Spyglass (Slack, Raindrop, Gmail, the Add link box), each
-// shown as set up or not, with one line on what to do when it is not.
+// shown with its name and whether it is set up; what it does and what to do when it is not set up
+// are behind the row's Details button.
 import { useId, useState, type FormEvent } from 'react'
 import { errorMessage } from '../../api/errors'
 import { Button, SectionHeading } from '../../ui'
 import { captureLink, type CollectorRow } from './api'
 import { collectorStatus, isNotConfigured } from './describe'
+import { DetailsButton } from './DetailsButton'
 import { formatWhen } from './format'
 
 interface Channel {
@@ -63,6 +65,8 @@ export function FromYou({ collectors }: FromYouProps) {
 }
 
 function ChannelRow({ channel, row }: { channel: Channel; row: CollectorRow | undefined }) {
+  const [open, setOpen] = useState(false)
+  const nameId = useId()
   const notSet = isNotConfigured(row)
   const status = row && !notSet ? collectorStatus(row) : null
   const waiting = row?.status === 'never' && !notSet
@@ -71,18 +75,26 @@ function ChannelRow({ channel, row }: { channel: Channel; row: CollectorRow | un
     <li className="rs-row">
       <div className="rs-main">
         <div className="rs-line">
-          <span className="rs-name">{channel.name}</span>
+          <span className="rs-name" id={nameId}>
+            {channel.name}
+          </span>
           <span className={notSet ? 'r-meta' : status?.tone === 'problem' ? 'rs-problem' : 'rs-ok'}>{label}</span>
         </div>
-        <p className="rs-sub">{channel.how}</p>
-        {notSet && (
-          <p className="r-meta">
-            {channel.needs} This is set once in Spyglass&rsquo;s settings file; see the <a href="#/settings">setup guide</a>.
-          </p>
-        )}
+        {/* A failure stays in view: the reader has to act on it, so it is not part of the details. */}
         {status?.tone === 'problem' && <p className="rs-problem">{status.text}</p>}
-        {row?.lastRun && !notSet && <p className="r-meta">Last checked {formatWhen(row.lastRun)}</p>}
+        {open && (
+          <>
+            <p className="rs-sub">{channel.how}</p>
+            {notSet && (
+              <p className="r-meta">
+                {channel.needs} This is set once in Spyglass&rsquo;s settings file; see the <a href="#/settings">setup guide</a>.
+              </p>
+            )}
+            {row?.lastRun && !notSet && <p className="r-meta">Last checked {formatWhen(row.lastRun)}</p>}
+          </>
+        )}
       </div>
+      <DetailsButton open={open} onToggle={() => setOpen((shown) => !shown)} nameId={nameId} />
     </li>
   )
 }
