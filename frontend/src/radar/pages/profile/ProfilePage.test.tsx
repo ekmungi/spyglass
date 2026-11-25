@@ -1,5 +1,5 @@
 // Tests for the Profile page: rendering, editing, the unsaved-changes guard, validation, saving and errors.
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/errors'
 import ProfilePage from '../ProfilePage'
@@ -36,6 +36,7 @@ beforeEach(() => {
   api.loadProjects.mockResolvedValue(null)
 })
 
+const tab = (name: string | RegExp) => screen.getByRole('tab', { name })
 const statementBox = () => screen.getByLabelText('Who you are and what you need to know')
 
 describe('ProfilePage', () => {
@@ -94,6 +95,7 @@ describe('ProfilePage', () => {
   it('adds a topic and an avoid line, refuses duplicates, and removes entries', async () => {
     render(<ProfilePage />)
     await screen.findByText(/Spyglass judges/)
+    fireEvent.click(tab(/^Topics/))
     fireEvent.change(screen.getByLabelText('New topic'), { target: { value: 'Surgical robots' } })
     fireEvent.change(screen.getByLabelText('Section for the new topic'), { target: { value: 'health' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add topic' }))
@@ -103,12 +105,15 @@ describe('ProfilePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add topic' }))
     expect(screen.getByText('This topic is already in the list.')).toBeInTheDocument()
 
+    fireEvent.click(tab(/^Leave out/))
     fireEvent.change(screen.getByLabelText('New subject to leave out'), { target: { value: 'Crypto prices' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
     expect(screen.getByLabelText('Leave out 3')).toHaveValue('Crypto prices')
 
+    fireEvent.click(tab(/^Topics/))
     fireEvent.click(screen.getByRole('button', { name: 'Remove topic AI in medical imaging' }))
     expect(screen.queryByDisplayValue('AI in medical imaging')).not.toBeInTheDocument()
+    fireEvent.click(tab(/^Leave out/))
     fireEvent.click(screen.getByRole('button', { name: 'Remove Sports from the leave-out list' }))
     expect(screen.queryByDisplayValue('Sports')).not.toBeInTheDocument()
   })
@@ -148,6 +153,108 @@ describe('ProfilePage', () => {
     await screen.findByText(/Spyglass judges/)
     expect(screen.queryByText(/key:/)).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('health')).not.toBeInTheDocument()
+  })
+})
+
+const FIVE_PROJECTS = [
+  { name: 'Imaging AI', description: 'Notes on AI methods for medical imaging.', in_vault: true },
+  { name: 'Agent harness', description: 'Tools for coding agents.', in_vault: true },
+  { name: 'Garden', description: '', in_vault: true },
+  { name: 'Taxes', description: '', in_vault: true },
+  { name: 'Reading list', description: '', in_vault: true },
+]
+
+describe('ProfilePage tabs', () => {
+  it('shows one strip with a tab for each part of the profile, with counts on Topics and Your projects', async () => {
+    api.loadProjects.mockResolvedValue(FIVE_PROJECTS)
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    await waitFor(() => expect(tab(/^Your projects/)).toHaveTextContent('2 shared'))
+    const strip = screen.getByRole('tablist', { name: 'Profile' })
+    const labels = within(strip)
+      .getAllByRole('tab')
+      .map((entry) => entry.textContent)
+    expect(labels).toEqual(['About you', 'Sections', 'Topics 2', 'Your projects 2 shared', 'Leave out', 'Learned'])
+    expect(tab('About you')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('shows only the selected part, and keeps the page-wide Save bar on every tab', async () => {
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    expect(statementBox()).toBeVisible()
+    expect(screen.getByLabelText('Topic 1')).not.toBeVisible()
+    for (const name of ['About you', 'Sections', 'Topics', 'Your projects', 'Leave out', 'Learned']) {
+      fireEvent.click(tab(new RegExp(`^${name}`)))
+      expect(screen.getByRole('button', { name: 'Save profile' })).toBeVisible()
+      expect(screen.getByRole('button', { name: 'Discard changes' })).toBeVisible()
+    }
+    expect(screen.getByText('A paper about polyp detection')).toBeVisible()
+    expect(statementBox()).not.toBeVisible()
+  })
+
+  it('keeps text typed under About you when the reader visits another tab, and saves it from there', async () => {
+    api.saveProfile.mockResolvedValue(reply(4))
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    fireEvent.change(statementBox(), { target: { value: 'Typed under About you.' } })
+    fireEvent.click(tab(/^Topics/))
+    fireEvent.change(screen.getByLabelText('Topic 1'), { target: { value: 'Imaging, renamed' } })
+    fireEvent.click(tab('About you'))
+    expect(statementBox()).toHaveValue('Typed under About you.')
+    fireEvent.click(tab(/^Topics/))
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    await waitFor(() => expect(api.saveProfile).toHaveBeenCalledTimes(1))
+    expect(api.saveProfile.mock.calls[0][0].statement).toBe('Typed under About you.')
+    expect(api.saveProfile.mock.calls[0][0].topics[0].name).toBe('Imaging, renamed')
+  })
+
+  it('opens the first tab that holds a problem when a save is refused', async () => {
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    fireEvent.change(statementBox(), { target: { value: '   ' } })
+    fireEvent.click(tab(/^Leave out/))
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
+    expect(await screen.findByText(/Describe who you are/)).toBeVisible()
+    expect(tab('About you')).toHaveAttribute('aria-selected', 'true')
+    expect(api.saveProfile).not.toHaveBeenCalled()
+  })
+
+  it('keeps the unsaved projects lines when the reader moves between tabs', async () => {
+    api.loadProjects.mockResolvedValue(FIVE_PROJECTS)
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    fireEvent.click(tab(/^Your projects/))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the other 3 projects' }))
+    fireEvent.change(screen.getByLabelText('One line about Garden'), { target: { value: 'My vegetable beds.' } })
+    fireEvent.click(tab(/^Topics/))
+    fireEvent.click(tab(/^Your projects/))
+    expect(screen.getByLabelText('One line about Garden')).toHaveValue('My vegetable beds.')
+    expect(tab(/^Your projects/)).toHaveTextContent('3 shared')
+  })
+
+  it('lists only the projects that have a line, and offers the others on request', async () => {
+    api.loadProjects.mockResolvedValue(FIVE_PROJECTS)
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    fireEvent.click(tab(/^Your projects/))
+    expect(await screen.findByText('2 of 5 shared with the AI')).toBeVisible()
+    expect(screen.getByLabelText('One line about Imaging AI')).toBeVisible()
+    expect(screen.queryByLabelText('One line about Garden')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show the other 3 projects' }))
+    expect(screen.getByLabelText('One line about Garden')).toBeVisible()
+    expect(screen.getByLabelText('One line about Reading list')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Show only the shared projects' }))
+    expect(screen.queryByLabelText('One line about Garden')).not.toBeInTheDocument()
+  })
+
+  it('says so when no project has a line yet', async () => {
+    api.loadProjects.mockResolvedValue(FIVE_PROJECTS.map((row) => ({ ...row, description: '' })))
+    render(<ProfilePage />)
+    await screen.findByText(/Spyglass judges/)
+    fireEvent.click(tab(/^Your projects/))
+    expect(await screen.findByText('No project has a line yet, so the AI sees none of them.')).toBeVisible()
+    expect(screen.getByText('0 of 5 shared with the AI')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Show the other 5 projects' })).toBeVisible()
   })
 })
 

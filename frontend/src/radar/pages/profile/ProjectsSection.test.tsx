@@ -23,6 +23,7 @@ beforeEach(() => {
 })
 
 const line = (name: string) => screen.getByLabelText(`One line about ${name}`)
+const showOthers = () => fireEvent.click(screen.getByRole('button', { name: /^Show the other/ }))
 
 describe('ProjectsSection', () => {
   it('explains what the AI sees and lists each project with its name and line', async () => {
@@ -33,6 +34,7 @@ describe('ProjectsSection', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Imaging AI')).toBeInTheDocument()
     expect(line('Imaging AI')).toHaveValue('Notes on AI methods for medical imaging.')
+    showOthers()
     expect(line('Agent harness')).toHaveValue('')
     expect(line('Agent harness')).toHaveAttribute('placeholder', 'One line the AI may see. Leave empty to keep this project private.')
     expect(line('Agent harness')).toHaveAttribute('maxlength', String(MAX_DESCRIPTION))
@@ -59,6 +61,7 @@ describe('ProjectsSection', () => {
     render(<ProjectsSection />)
     await screen.findByText('Imaging AI')
     expect(screen.getByRole('button', { name: 'Save projects' })).toBeDisabled()
+    showOthers()
     fireEvent.change(line('Agent harness'), { target: { value: 'Tools for coding agents.' } })
     expect(screen.getByRole('button', { name: 'Save projects' })).toBeEnabled()
     expect(screen.getByText('You have unsaved changes to your projects.')).toBeInTheDocument()
@@ -70,6 +73,7 @@ describe('ProjectsSection', () => {
   it('warns before the tab is closed while there are unsaved edits, and not otherwise', async () => {
     render(<ProjectsSection />)
     await screen.findByText('Imaging AI')
+    showOthers()
     const clean = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(clean)
     expect(clean.defaultPrevented).toBe(false)
@@ -82,6 +86,7 @@ describe('ProjectsSection', () => {
   it('saves the whole section with one button and says so', async () => {
     render(<ProjectsSection />)
     await screen.findByText('Imaging AI')
+    showOthers()
     fireEvent.change(line('Agent harness'), { target: { value: 'Tools for coding agents.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save projects' }))
     await waitFor(() => expect(api.saveProjects).toHaveBeenCalledTimes(1))
@@ -98,6 +103,7 @@ describe('ProjectsSection', () => {
     api.saveProjects.mockRejectedValue(new ApiError('Could not read the vault.', { status: 422, kind: 'http', path: '/projects', detail: 'x' }))
     render(<ProjectsSection />)
     await screen.findByText('Imaging AI')
+    showOthers()
     fireEvent.change(line('Agent harness'), { target: { value: 'Keep me.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save projects' }))
     expect(await screen.findByText('Could not read the vault.')).toBeInTheDocument()
@@ -123,6 +129,61 @@ describe('ProjectsSection', () => {
     expect(await screen.findByText('Spyglass is not reachable.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('Imaging AI')).toBeInTheDocument()
+  })
+})
+
+describe('ProjectsSection folding', () => {
+  it('lists only the projects that have a line, and counts them in the heading', async () => {
+    render(<ProjectsSection />)
+    await screen.findByText('Imaging AI')
+    expect(screen.getByText('2 of 3 shared with the AI')).toBeInTheDocument()
+    expect(screen.getByText('Old prototype')).toBeInTheDocument()
+    expect(screen.queryByText('Agent harness')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show the other project' })).toBeInTheDocument()
+  })
+
+  it('shows every project on request and folds back to the shared ones', async () => {
+    render(<ProjectsSection />)
+    await screen.findByText('Imaging AI')
+    showOthers()
+    expect(screen.getByText('Agent harness')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show only the shared projects' }))
+    expect(screen.queryByText('Agent harness')).not.toBeInTheDocument()
+  })
+
+  it('keeps a project listed while the reader types its line, even if the line is emptied again', async () => {
+    api.loadProjects.mockResolvedValue([...rows(), { name: 'Garden', description: '', in_vault: true }])
+    render(<ProjectsSection />)
+    await screen.findByText('Imaging AI')
+    showOthers()
+    fireEvent.change(line('Agent harness'), { target: { value: 'Tools' } })
+    expect(screen.getByText('3 of 4 shared with the AI')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show only the shared projects' }))
+    expect(line('Agent harness')).toHaveValue('Tools')
+    expect(screen.queryByText('Garden')).not.toBeInTheDocument()
+    fireEvent.change(line('Agent harness'), { target: { value: '' } })
+    expect(line('Agent harness')).toHaveValue('')
+    expect(screen.getByText('2 of 4 shared with the AI')).toBeInTheDocument()
+  })
+
+  it('says the AI sees none of them when no project has a line, and still offers them all', async () => {
+    api.loadProjects.mockResolvedValue(rows().map((row) => ({ ...row, description: '' })))
+    render(<ProjectsSection />)
+    expect(await screen.findByText('No project has a line yet, so the AI sees none of them.')).toBeInTheDocument()
+    expect(screen.getByText('0 of 3 shared with the AI')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show the other 3 projects' }))
+    expect(screen.queryByText('No project has a line yet, so the AI sees none of them.')).not.toBeInTheDocument()
+    expect(line('Imaging AI')).toHaveValue('')
+  })
+
+  it('reports how many projects are shared, as the reader edits', async () => {
+    const seen: number[] = []
+    render(<ProjectsSection onSharedChange={(count) => seen.push(count)} />)
+    await screen.findByText('Imaging AI')
+    showOthers()
+    fireEvent.change(line('Agent harness'), { target: { value: 'Tools' } })
+    expect(seen[seen.length - 1]).toBe(3)
+    expect(seen).toContain(2)
   })
 })
 

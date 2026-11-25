@@ -1,4 +1,12 @@
 /* Profile page: a long form set out as hairline-separated groups. Tokens only. */
+/* The content of the selected tab, set apart from the strip above it. */
+.rpr-panel {
+  padding-top: var(--space-6);
+}
+/* "Show the other N projects" under the list. */
+.rpr-more {
+  margin-top: var(--space-2);
+}
 .rpr-section {
   margin-bottom: var(--space-10);
 }
