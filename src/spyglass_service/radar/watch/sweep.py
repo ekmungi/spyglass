@@ -1,9 +1,10 @@
 """The daily watch sweep: search news for each watched entity and link items to entities.
 
-Four steps, each independent: `watch_collect` fetches news per entity; the caller stores the
-items with `ingest.store_items`; `link_watch_items` ties stored items to the entity whose
-search found them; `link_mentions` also ties assessed items that merely name an entity; and
-`suggest_from_mentions` proposes organisations that keep appearing but are not registered.
+Independent steps: `watch_collect` fetches news per entity; the caller stores the items with
+`ingest.store_items`; `link_watch_items` ties stored items to the entity whose search found them;
+and `link_mentions` also ties assessed items that merely name an entity. `unknown_mentions` lists
+the organisations that keep appearing but are not registered, for the AI review of the watch list.
+The suggestions on the watch page are chosen by `watch.suggest.refresh_suggestions`.
 """
 
 import dataclasses
@@ -20,7 +21,7 @@ from spyglass_service.collectors.base import CollectedItem
 from spyglass_service.models import Item
 from spyglass_service.radar.models import Assessment, ItemEntity, WatchEntity, loads, utcnow
 from spyglass_service.radar.watch._news_fallback import SearchFn, default_search
-from spyglass_service.radar.watch.registry import create_entity, entity_names, known_names, norm_name
+from spyglass_service.radar.watch.registry import entity_names, known_names, norm_name
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,9 @@ SEARCH_PAUSE = 1.0
 # A daily sweep only needs the last few days of news.
 SWEEP_DAYS = 3
 TAG_PREFIX = "watch:"
-# Mentions older than this do not count towards suggesting a new entity.
+# Mentions older than this do not count towards an unregistered organisation.
 SUGGEST_WINDOW = timedelta(days=30)
-# At most this many new suggestions per run, most-mentioned first.
+# By default at most this many unregistered organisations are listed, most-mentioned first.
 SUGGEST_MAX_NEW = 10
 
 
@@ -194,21 +195,3 @@ def unknown_mentions(
         reverse=True,
     )[:max_new]
     return [(forms[key].most_common(1)[0][0], count) for count, key in ranked]
-
-
-def suggest_from_mentions(
-    engine: Engine, min_count: int = 3, max_new: int = SUGGEST_MAX_NEW, *, now: datetime | None = None
-) -> int:
-    """Propose unregistered organisations named in at least `min_count` relevant recent items.
-
-    New entries get status "suggested" for the reader to accept (see `unknown_mentions` for how
-    names are counted). `now` (naive UTC) is only for tests. Returns how many were added.
-    """
-    with Session(engine) as session:
-        found = unknown_mentions(session, min_count, max_new, now=now)
-        for name, count in found:
-            create_entity(
-                session, name, category="Discovered", status="suggested",
-                added_via="discovered", why=f"named in {count} relevant items",
-            )
-    return len(found)

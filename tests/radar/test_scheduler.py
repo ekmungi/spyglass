@@ -12,7 +12,10 @@ from spyglass_service.radar.scheduler import (
     needs_catchup,
     parse_brief_time,
 )
+from spyglass_service.radar.watch import suggest
 
+from .test_brief_seed import NOW as SEED_NOW
+from .test_brief_seed import add_item
 from .test_sources_support import make_engine, make_settings
 
 STAGES = ("legacy", "radar", "raindrop", "embed", "pipeline", "watch", "compose")
@@ -86,6 +89,28 @@ def test_a_failing_stage_is_recorded_and_the_rest_still_run(tmp_path) -> None:
         assert calls == ["legacy", "raindrop", "embed", "pipeline", "watch"]
         last = scheduler.status()["last_cycle"]
         assert last["result"] == "partial" and last["trigger"] == "test"
+    finally:
+        engine.dispose()
+
+
+def test_the_watch_stage_reports_the_refresh(tmp_path, monkeypatch) -> None:
+    engine = make_engine(tmp_path)
+    try:
+        for i in range(3):
+            add_item(engine, f"acme {i}", entities=["Acme Org"])
+        answer = {"name": "Acme Org", "type": "organisation", "organisation": "", "same_as": "", "group": ""}
+        with Session(engine) as session:  # a cached answer, because the test settings have no model
+            suggest.classify(session, ["Acme Org"], groups=[], register=[],
+                             llm=lambda messages, schema: {"classes": [answer]})
+        monkeypatch.setattr(suggest, "utcnow", lambda: SEED_NOW)  # the seeded items' clock
+
+        result = RadarScheduler(engine, make_settings(), lambda: object())._stage("watch")()
+
+        assert result == {
+            "linked_by_search": 0,
+            "linked_by_mention": 0,
+            "suggested": {"added": 1, "removed": 0, "kept": 0, "aliases": 0},
+        }
     finally:
         engine.dispose()
 

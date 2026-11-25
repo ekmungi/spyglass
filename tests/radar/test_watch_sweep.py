@@ -118,23 +118,22 @@ def test_link_mentions_without_entities_is_zero(tmp_path) -> None:
     engine.dispose()
 
 
-def test_suggest_from_mentions_threshold_register_and_window(tmp_path) -> None:
+def test_unknown_mentions_threshold_register_and_window(tmp_path) -> None:
     engine = make_engine(tmp_path)
     with Session(engine) as s:
         registry.create_entity(s, "Known Co")
+        registry.create_entity(s, "Hidden Co", status="rejected")
     for i in range(3):
-        add_item(engine, f"n{i}", entities=["Newco", "Known Co"])
+        add_item(engine, f"n{i}", entities=["Newco", "Known Co", "Hidden Co"])
     add_item(engine, "rare1", entities=["Rareco"])
     add_item(engine, "rare2", entities=["Rareco"])
     for i in range(3):
         add_item(engine, f"old{i}", entities=["Oldco"], age_hours=24 * 40)
     for i in range(3):
         add_item(engine, f"out{i}", entities=["Outco"], score=3, tier="out")
-    assert sweep.suggest_from_mentions(engine, now=NOW_NAIVE) == 1
-    assert sweep.suggest_from_mentions(engine, now=NOW_NAIVE) == 0
     with Session(engine) as s:
-        new = s.exec(select(WatchEntity).where(WatchEntity.name == "Newco")).one()
-        assert new.status == "suggested" and new.added_via == "discovered"
-        assert new.why == "named in 3 relevant items"
-    assert sweep.suggest_from_mentions(engine, min_count=2, now=NOW_NAIVE) == 1  # Rareco now qualifies
+        assert sweep.unknown_mentions(s, now=NOW_NAIVE) == [("Newco", 3)]
+        assert sweep.unknown_mentions(s, min_count=2, now=NOW_NAIVE) == [("Newco", 3), ("Rareco", 2)]
+        assert sweep.unknown_mentions(s, min_count=2, max_new=1, now=NOW_NAIVE) == [("Newco", 3)]
+    assert not hasattr(sweep, "suggest_from_mentions")  # the refresh in watch/suggest.py replaced it
     engine.dispose()

@@ -62,20 +62,18 @@ class StagesMixin:
                             should_stop=self._stop_event.is_set)
 
     def _do_watch(self) -> Any:
-        """Link items to watched organisations and propose newly prominent ones.
+        """Link items to watched organisations and rebuild the suggested ones.
 
-        Runs after the pipeline, because linking by mention reads each item's assessment.
+        Runs after the pipeline, because linking by mention and choosing suggestions read each
+        item's assessment. `suggested` holds the refresh's counts (added, removed, kept, aliases).
         """
-        from spyglass_service.radar.watch.sweep import (
-            link_mentions,
-            link_watch_items,
-            suggest_from_mentions,
-        )
+        from spyglass_service.radar.watch.suggest import refresh_suggestions
+        from spyglass_service.radar.watch.sweep import link_mentions, link_watch_items
 
         return {
             "linked_by_search": link_watch_items(self._engine),
             "linked_by_mention": link_mentions(self._engine),
-            "suggested": suggest_from_mentions(self._engine),
+            "suggested": refresh_suggestions(self._engine, self._settings),
         }
 
     def _do_compose(self) -> Any:
