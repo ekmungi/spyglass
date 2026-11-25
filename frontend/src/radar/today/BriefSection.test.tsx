@@ -3,7 +3,7 @@
 // story, a brief composed before unpicked stories were stored, the page following the keyboard, and
 // an arrow turn moving the keyboard selection onto the new page.
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BriefSection as Section, BriefSectionKey } from '../api/types'
 import { resetItemState } from '../state/itemState'
 import { BriefSection } from './BriefSection'
@@ -158,5 +158,33 @@ describe('BriefSection', () => {
     const row = document.querySelector('[data-row-index="17"]') as HTMLElement
     expect(row).toHaveClass('is-selected')
     expect(document.activeElement).toBe(row.querySelector('a'))
+  })
+})
+
+describe('BriefSection height', () => {
+  const stage = () => (document.querySelector('.r-brief__list') as HTMLElement).parentElement as HTMLElement
+
+  beforeEach(() => {
+    // jsdom does no layout: a story list is 100px tall for each story it holds.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const height = this.classList.contains('r-brief__list') ? this.children.length * 100 : 0
+      return { height, width: 0, top: 0, left: 0, right: 0, bottom: height, x: 0, y: 0, toJSON: () => ({}) }
+    })
+  })
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('keeps the height of the tallest page seen while the reader pages on to a shorter one', () => {
+    render(<BriefSection section={section('top', 6, 9, 40)} />)
+    expect(stage().style.minHeight).toBe('500px')
+    for (let turn = 0; turn < 3; turn++) fireEvent.click(next())
+    // The last page holds only two stories, yet the section keeps the height of the first.
+    expect(headlines()).toEqual(['Story 108', 'Story 109'])
+    expect(stage().style.minHeight).toBe('500px')
+  })
+
+  it('adds no minimum height to a section whose stories fit on one page', () => {
+    render(<BriefSection section={section('papers', 2, 1, 3)} />)
+    expect(stage().style.minHeight).toBe('')
   })
 })

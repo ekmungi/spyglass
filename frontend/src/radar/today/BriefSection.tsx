@@ -6,6 +6,7 @@ import type { BriefSection as Section } from '../api/types'
 import { IconButton, IconNext, IconPrevious, SectionHeading, Tooltip } from '../ui'
 import { sectionStories, sectionTitle } from './sections'
 import { StoryRow } from './StoryRow'
+import { useSteadyHeight } from './useSteadyHeight'
 
 /** Stories on the first page of the top section: one lead across the page, then four in two columns. */
 const TOP_FIRST_PAGE = 5
@@ -139,6 +140,7 @@ export function BriefSection({ section, start = 0, selected = -1, onSelect }: Br
   }
 
   const current = pages[page]
+  const { ref: listRef, minHeight } = useSteadyHeight<HTMLUListElement>(page)
   const headingId = `brief-${section.key}`
   const lead = section.key === 'top' && page === 0
   const note =
@@ -153,26 +155,32 @@ export function BriefSection({ section, start = 0, selected = -1, onSelect }: Br
       <SectionHeading id={headingId} note={note}>
         {sectionTitle(section)}
       </SectionHeading>
-      {/* A new key per page replays the slide-in of the page's stories. */}
-      <ul
-        key={page}
-        className={lead ? 'r-brief__list r-brief__list--lead' : 'r-brief__list'}
-        data-slide={view.step === 1 ? 'next' : view.step === -1 ? 'previous' : undefined}
-      >
-        {stories.slice(current.from, current.to).map((story, offset) => {
-          const position = current.from + offset
-          return (
-            <StoryRow
-              key={story.id}
-              story={story}
-              section={section.key}
-              index={start + position}
-              selected={selected === start + position}
-              unpicked={position >= section.stories.length}
-            />
-          )
-        })}
-      </ul>
+      {/* The list is measured and this container holds the height of the tallest page seen, so a shorter
+          page leaves space at the bottom and the sections below stay where they are. A section with one
+          page has nothing to hold. */}
+      <div style={pages.length > 1 ? { minHeight } : undefined}>
+        {/* A new key per page replays the slide-in of the page's stories. */}
+        <ul
+          ref={listRef}
+          key={page}
+          className={lead ? 'r-brief__list r-brief__list--lead' : 'r-brief__list'}
+          data-slide={view.step === 1 ? 'next' : view.step === -1 ? 'previous' : undefined}
+        >
+          {stories.slice(current.from, current.to).map((story, offset) => {
+            const position = current.from + offset
+            return (
+              <StoryRow
+                key={story.id}
+                story={story}
+                section={section.key}
+                index={start + position}
+                selected={selected === start + position}
+                unpicked={position >= section.stories.length}
+              />
+            )
+          })}
+        </ul>
+      </div>
     </section>
   )
 }
